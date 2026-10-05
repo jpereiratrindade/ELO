@@ -67,6 +67,16 @@ Window {
                 }
 
                 Text {
+                    text: cameraSelected
+                          ? "Camera: " + selectedCameraName + " [" + selectedCameraBackend + "]"
+                          : "Camera: não selecionada"
+                    font.pixelSize: 12
+                    color: cameraSelected ? "#34d399" : "#f59e0b"
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 260
+                }
+
+                Text {
                     text: "ID: " + kioskModel.activePerson
                     font.pixelSize: 12
                     font.bold: true

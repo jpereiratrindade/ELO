@@ -98,3 +98,31 @@ ctest --test-dir build --output-on-failure
 ```bash
 ./build/apps/elo-kiosk/elo-kiosk
 ```
+
+### Descobrir e selecionar a câmera pela CLI
+
+A descoberta somente consulta os dispositivos; ela não inicia captura nem retém frames.
+
+```bash
+# Listar câmeras sem abrir a interface gráfica
+./build/apps/elo-kiosk/elo-kiosk --list-cameras
+
+# Abrir um menu de escolha antes de iniciar o kiosk
+./build/apps/elo-kiosk/elo-kiosk --choose-camera
+
+# Seleção determinística por índice, id ou caminho exibido pela listagem
+./build/apps/elo-kiosk/elo-kiosk --camera 0
+./build/apps/elo-kiosk/elo-kiosk --camera /dev/video0
+
+# Em instalação de produção, impedir boot sem uma câmera selecionada
+./build/apps/elo-kiosk/elo-kiosk --camera 0 --require-camera
+```
+
+No Linux, o build prefere `libcamera` quando o pacote de desenvolvimento está
+disponível; caso contrário usa descoberta V4L2, adequada a webcams USB. Para câmeras
+CSI no Raspberry Pi 5, instale os headers de desenvolvimento do `libcamera` antes de
+configurar o CMake para que o backend nativo seja selecionado.
+
+Quando apenas uma câmera é encontrada, ela é selecionada automaticamente. Com duas
+ou mais câmeras, o ELO exige `--choose-camera` ou `--camera` para evitar que uma mudança
+na ordem dos dispositivos altere silenciosamente a câmera usada pelo kiosk.

@@ -14,6 +14,10 @@ set(CMAKE_AUTORCC ON)
 
 # Discover Qt 6
 find_package(Qt6 6.5 COMPONENTS Core Gui Quick Qml REQUIRED)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIBCAMERA QUIET IMPORTED_TARGET libcamera)
+endif()
 
 # Consumed components (Constitutional Invariants E2, E3)
 add_subdirectory(external/ente-kernel)
@@ -24,6 +28,7 @@ add_library(elo_core
     include/elo/ui/kiosk_presentation_model.hpp
     src/biometric/biometric_matcher.cpp
     src/experience/experience_engine.cpp
+    src/perception/camera_catalog.cpp
     src/ui/kiosk_presentation_model.cpp
 )
 
@@ -44,6 +49,16 @@ target_link_libraries(elo_core PUBLIC
 )
 
 target_compile_definitions(elo_core PUBLIC ELO_HAS_QT)
+
+if(TARGET PkgConfig::LIBCAMERA)
+    target_link_libraries(elo_core PRIVATE PkgConfig::LIBCAMERA)
+    target_compile_definitions(elo_core PRIVATE ELO_HAS_LIBCAMERA)
+    message(STATUS "ELO camera discovery backend: libcamera")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(STATUS "ELO camera discovery backend: V4L2")
+else()
+    message(STATUS "ELO camera discovery backend: unavailable")
+endif()
 
 # Applications
 add_subdirectory(apps/elo-kiosk)
