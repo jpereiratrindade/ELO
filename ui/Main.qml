@@ -205,30 +205,60 @@ Window {
 
         ColumnLayout {
             anchors.centerIn: parent
+            width: Math.min(parent.width * 0.85, 840)
             spacing: 24
             visible: kioskModel.currentState === "CONTENT_ACTIVE"
 
             Text {
-                text: "Experiência em andamento"
-                font.pixelSize: 30
+                text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Experiência do Pampa"
+                font.pixelSize: 34
                 font.bold: true
                 color: "#f8fafc"
-                Layout.alignment: Qt.AlignHCenter
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
             }
 
             Rectangle {
-                Layout.preferredWidth: 520
-                Layout.preferredHeight: 140
+                Layout.fillWidth: true
+                Layout.preferredHeight: contentDescText.implicitHeight + 48
                 color: "#1e293b"
                 radius: 12
+                border.color: "#334155"
+                border.width: 1
 
                 Text {
+                    id: contentDescText
                     anchors.centerIn: parent
-                    text: "Conteúdo apresentado:\n" + kioskModel.currentContent
-                    font.pixelSize: 19
-                    font.bold: true
+                    width: parent.width - 48
+                    text: kioskModel.contentText
+                    font.pixelSize: 20
                     color: "#38bdf8"
                     horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.3
+                }
+            }
+
+            // Interactive choice options (touch / click)
+            ColumnLayout {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.fillWidth: true
+                spacing: 12
+                visible: kioskModel.contentOptions.length > 0
+
+                Repeater {
+                    model: kioskModel.contentOptions
+
+                    Button {
+                        Layout.alignment: Qt.AlignHCenter
+                        Layout.preferredWidth: Math.min(parent.width * 0.75, 480)
+                        Layout.preferredHeight: 52
+                        text: modelData
+                        font.pixelSize: 17
+                        font.bold: true
+                        onClicked: kioskModel.chooseOption(modelData)
+                    }
                 }
             }
 
@@ -237,17 +267,24 @@ Window {
                 spacing: 20
 
                 Button {
-                    Layout.preferredWidth: 220
-                    Layout.preferredHeight: 56
-                    text: "Próximo conteúdo"
-                    onClicked: kioskModel.advanceContent()
+                    Layout.preferredWidth: 200
+                    Layout.preferredHeight: 52
+                    text: "Descobrir Som"
+                    onClicked: kioskModel.startRecipe("discover_by_sound")
                 }
 
                 Button {
-                    Layout.preferredWidth: 220
-                    Layout.preferredHeight: 56
-                    text: "Concluir sessão"
-                    onClicked: kioskModel.finishSession()
+                    Layout.preferredWidth: 200
+                    Layout.preferredHeight: 52
+                    text: "Aprofundar Relações"
+                    onClicked: kioskModel.deepenExperience()
+                }
+
+                Button {
+                    Layout.preferredWidth: 200
+                    Layout.preferredHeight: 52
+                    text: "Próximo Conteúdo"
+                    onClicked: kioskModel.advanceContent()
                 }
             }
         }

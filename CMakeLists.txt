@@ -49,6 +49,10 @@ add_library(elo_core
     include/elo/perception/vision_service.hpp
     include/elo/ui/kiosk_presentation_model.hpp
     src/biometric/biometric_matcher.cpp
+    src/content/content_catalog.cpp
+    src/content/content_validator.cpp
+    src/content/content_selector.cpp
+    src/content/recipe_executor.cpp
     src/experience/experience_engine.cpp
     src/perception/camera_catalog.cpp
     src/perception/vision_service.cpp

@@ -6,6 +6,10 @@
 #include "elo/biometric/biometric_matcher.hpp"
 #include "elo/storage/storage_interfaces.hpp"
 #include "elo/judgment/jev_adapter.hpp"
+#include "elo/judgment/jev_event.hpp"
+#include "elo/content/content_catalog.hpp"
+#include "elo/content/content_selector.hpp"
+#include "elo/content/recipe_executor.hpp"
 #include "elo/core/result.hpp"
 
 #include <memory>
@@ -15,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <unordered_set>
 
 namespace elo::experience {
 
@@ -61,6 +66,7 @@ enum class EventType {
     IDENTITY_EVIDENCE_EVALUATED,
     PERSON_ENROLLED,
     CONTENT_SELECTED,
+    RECIPE_STEP_ADVANCED,
     SURVEY_SELECTION_EVALUATED,
     SURVEY_RESPONSE_SUBMITTED,
     PERSON_FORGOTTEN,
@@ -89,8 +95,8 @@ struct ConstitutiveTransformation {
     std::string description;
 };
 
-/// @brief Central coordinator for personal experience sessions.
-/// Conforms to Invariants E1, E2 (ente::kernel consumed), E8 (person autonomy), E17 (randomization independence).
+/// @brief Central coordinator for personal and contextual experience sessions.
+/// Conforms to Invariants E1, E2, E8, E17, and ELO-EXPERIENCE-001 / ELO-CONTENT-001.
 class ExperienceEngine {
 public:
     ExperienceEngine(
@@ -99,13 +105,16 @@ public:
         std::shared_ptr<storage::IBiometricStore> biometric_store,
         std::shared_ptr<storage::IExperienceStore> experience_store,
         std::shared_ptr<storage::ISurveyStore> survey_store,
-        std::unique_ptr<judgment::JevAdapter> jev_adapter = nullptr);
+        std::unique_ptr<judgment::JevAdapter> jev_adapter = nullptr,
+        std::shared_ptr<storage::IJevEventStore> jev_event_store = nullptr,
+        std::shared_ptr<content::ContentCatalog> content_catalog = nullptr);
 
     [[nodiscard]] const identity::EloId& elo_id() const noexcept { return elo_id_; }
     [[nodiscard]] SessionState current_state() const noexcept { return state_; }
     [[nodiscard]] ente::kernel::view kernel_view() const noexcept { return kernel_.observe(); }
     [[nodiscard]] const std::optional<identity::PersonLocalId>& active_person() const noexcept { return active_person_; }
     [[nodiscard]] std::uint64_t session_revision() const noexcept { return session_revision_; }
+    [[nodiscard]] const std::string& current_session_id() const noexcept { return current_session_id_; }
     [[nodiscard]] const std::optional<Event>& last_event() const noexcept { return last_event_; }
     [[nodiscard]] const std::optional<SessionTransition>& last_session_transition() const noexcept {
         return last_session_transition_;
@@ -115,33 +124,48 @@ public:
         return last_constitutive_transformation_;
     }
 
-    // Reserved for changes to the realization of ELO itself. Operational
-    // events and session state changes must not call this API.
     core::Result<ente::kernel::view> apply_constitutive_transformation(
         const ConstitutiveTransformation& transformation);
 
-    // Session flow triggers (Section 24)
+    // Session flow triggers (ELO-EXPERIENCE-001 Section 24)
     void on_presence_detected();
     void begin_automatic_continuity();
 
-    // Biometric continuity hypothesis ingestion (Section 21, 37)
+    // Biometric continuity hypothesis ingestion
     void evaluate_biometric_evidence(const biometric::IdentityHypothesis& hypothesis);
 
-    // Persist only the derived local template; raw camera images remain transient.
     core::Result<identity::PersonLocalId> enroll_local_person(
         const std::vector<float>& embedding,
         double quality);
 
-    // Resolve a face automatically. UNKNOWN creates a new local
-    // identity; ambiguous evidence never creates a duplicate identity.
     core::Result<biometric::IdentityHypothesis> identify_or_enroll_local_face(
         const std::vector<float>& embedding,
         double quality);
 
-    // Content sequencing (Section 31, 37)
-    [[nodiscard]] std::string select_next_content();
+    // Content sequencing (ELO-CONTENT-001 & ELO-EXPERIENCE-001)
+    void set_content_catalog(std::shared_ptr<content::ContentCatalog> catalog);
+    [[nodiscard]] std::shared_ptr<content::ContentCatalog> content_catalog() const noexcept { return content_catalog_; }
+    [[nodiscard]] std::shared_ptr<storage::IJevEventStore> jev_event_store() const noexcept { return jev_event_store_; }
 
-    // Local randomization for survey eligibility (Section 33, 48, Invariant E17)
+    [[nodiscard]] std::string select_next_content();
+    core::Result<void> select_contextual_content(
+        content::ContentRole role = content::ContentRole::Attract,
+        std::string_view theme = "pampa");
+
+    [[nodiscard]] const content::ContentAtom* active_content_atom() const noexcept { return active_atom_; }
+    [[nodiscard]] const content::ContentVariant* active_content_variant() const noexcept { return active_variant_; }
+    [[nodiscard]] const content::SelectionReason& active_selection_reason() const noexcept { return active_reason_; }
+
+    core::Result<void> start_recipe(const std::string& recipe_id);
+    [[nodiscard]] std::vector<content::PresentationAction> active_presentation_actions() const;
+    void advance_recipe(std::string_view user_action);
+    [[nodiscard]] bool is_recipe_active() const noexcept { return recipe_active_; }
+    [[nodiscard]] const content::RecipeSessionState& recipe_state() const noexcept { return recipe_state_; }
+
+    // JEV Event recording (Section 15, 16)
+    void record_jev_event(std::string_view event_name, std::string_view payload = "");
+
+    // Local randomization for survey eligibility
     [[nodiscard]] bool evaluate_survey_selection(double probability = 0.5);
 
     // Submit survey response
@@ -153,19 +177,25 @@ public:
     // Right to be forgotten (Section 28, Invariant E14)
     core::Result<bool> request_forget(const identity::PersonLocalId& person_id);
 
-    // Conclude and reset session (Invariant E10, Section 47)
+    // Conclude and reset session
     void finish_session();
 
 private:
     identity::EloId elo_id_;
-    ente::kernel kernel_; // Constitution Section 14: consumed by contract, not modified
+    ente::kernel kernel_;
     std::shared_ptr<storage::IBiometricStore> biometric_store_;
     std::shared_ptr<storage::IExperienceStore> experience_store_;
     std::shared_ptr<storage::ISurveyStore> survey_store_;
     std::unique_ptr<judgment::JevAdapter> jev_adapter_;
+    std::shared_ptr<storage::IJevEventStore> jev_event_store_;
+    std::shared_ptr<content::ContentCatalog> content_catalog_;
     biometric::BiometricMatcher biometric_matcher_;
+    content::ContentSelector content_selector_{42};
+    content::RecipeExecutor recipe_executor_{};
 
     SessionState state_{SessionState::IDLE};
+    std::string current_session_id_{"sess-0"};
+    std::uint64_t session_count_{0};
     std::optional<identity::PersonLocalId> active_person_{std::nullopt};
     bool biometric_continuity_active_{false};
     std::uint64_t next_event_sequence_{1};
@@ -173,6 +203,14 @@ private:
     std::optional<Event> last_event_{std::nullopt};
     std::optional<SessionTransition> last_session_transition_{std::nullopt};
     std::optional<ConstitutiveTransformation> last_constitutive_transformation_{std::nullopt};
+
+    // Content & Recipe session state
+    const content::ContentAtom* active_atom_{nullptr};
+    const content::ContentVariant* active_variant_{nullptr};
+    content::SelectionReason active_reason_{};
+    std::unordered_set<std::string> session_seen_content_{};
+    bool recipe_active_{false};
+    content::RecipeSessionState recipe_state_{};
 
     std::mt19937_64 rng_{std::random_device{}()};
     std::uint64_t next_person_seq_{1};

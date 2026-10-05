@@ -3,6 +3,7 @@
 #include "elo/biometric/face_template.hpp"
 #include "elo/identity/identity_spaces.hpp"
 #include "elo/survey/survey_model.hpp"
+#include "elo/judgment/jev_event.hpp"
 #include "elo/core/result.hpp"
 #include <vector>
 #include <optional>
@@ -51,6 +52,17 @@ public:
     virtual core::Result<void> record_response(const survey::SurveyResponse& response) = 0;
     virtual core::Result<std::vector<survey::SurveyResponse>> get_all_responses() const = 0;
     virtual core::Result<bool> forget_person(const identity::PersonLocalId& person_id) = 0;
+    virtual core::Result<void> clear() = 0;
+};
+
+/// @brief ELO-EXPERIENCE-001 Section 15 & 16: Isolated store for JEV experience event history
+class IJevEventStore {
+public:
+    virtual ~IJevEventStore() = default;
+
+    virtual core::Result<void> record_event(const judgment::JevEvent& event) = 0;
+    virtual core::Result<std::vector<judgment::JevEvent>> get_events_for_session(const std::string& session_id) const = 0;
+    virtual core::Result<std::vector<judgment::JevEvent>> get_all_events() const = 0;
     virtual core::Result<void> clear() = 0;
 };
 

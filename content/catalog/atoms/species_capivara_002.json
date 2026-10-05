@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1",
+  "content_id": "species_capivara_002",
+  "type": "entity",
+  "subtype": "species",
+  "title": "Capivara",
+  "subject": {
+    "canonical_name": "Capivara",
+    "scientific_name": "Hydrochoerus hydrochaeris",
+    "type_label": "Maior roedor do planeta"
+  },
+  "themes": [
+    "pampa",
+    "biodiversity",
+    "wetlands"
+  ],
+  "canonical_facts": [
+    {
+      "fact_id": "fact_capivara_001",
+      "statement": "A capivara é o maior roedor vivo do mundo e vive em grupos sociais nos banhados e margens de rios do Pampa.",
+      "source_ids": ["source_ufrgs_2023"],
+      "confidence": "reviewed"
+    }
+  ],
+  "modalities": {
+    "image": ["assets/images/capivara.png"]
+  },
+  "supported_roles": [
+    "ambient",
+    "attract",
+    "engage",
+    "reveal",
+    "deepen"
+  ],
+  "audiences": ["general", "children"],
+  "relations": ["rel_capivara_inhabits_banhado"],
+  "provenance": {
+    "reviewed": true
+  }
+}

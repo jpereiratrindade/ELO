@@ -16,6 +16,7 @@ enum class ErrorCode {
     EntityRetired,
     BiometricStoreError,
     ExperienceStoreError,
+    ContentError,
     ForgottenIdentity,
     SubstrateFailure,
     InvalidOperation

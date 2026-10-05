@@ -1,0 +1,37 @@
+{
+  "schema_version": "0.1",
+  "content_id": "phenomenon_pastejo_001",
+  "type": "phenomenon",
+  "subtype": "ecological_process",
+  "title": "Pastejo Sustentável",
+  "subject": {
+    "canonical_name": "Pastejo Tradicional",
+    "scientific_name": "",
+    "type_label": "Interação ecológica e conservação"
+  },
+  "themes": [
+    "pampa",
+    "conservation",
+    "ecology"
+  ],
+  "canonical_facts": [
+    {
+      "fact_id": "fact_pastejo_001",
+      "statement": "O pastejo moderado impede que poucas espécies de gramíneas exóticas ou agressivas dominem o campo, mantendo a rica diversidade nativa.",
+      "source_ids": ["source_ufrgs_2023"],
+      "confidence": "reviewed"
+    }
+  ],
+  "modalities": {
+    "image": ["assets/images/pastejo.png"]
+  },
+  "supported_roles": [
+    "reveal",
+    "deepen"
+  ],
+  "audiences": ["general"],
+  "relations": [],
+  "provenance": {
+    "reviewed": true
+  }
+}

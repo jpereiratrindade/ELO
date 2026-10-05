@@ -135,4 +135,43 @@ private:
     std::vector<survey::SurveyResponse> responses_;
 };
 
+class InMemoryJevEventStore final : public IJevEventStore {
+public:
+    core::Result<void> record_event(const judgment::JevEvent& event) override {
+        std::lock_guard lock(mutex_);
+        auto ev = event;
+        ev.sequence = ++next_seq_;
+        events_.push_back(std::move(ev));
+        return {};
+    }
+
+    core::Result<std::vector<judgment::JevEvent>> get_events_for_session(const std::string& session_id) const override {
+        std::lock_guard lock(mutex_);
+        std::vector<judgment::JevEvent> res;
+        for (const auto& ev : events_) {
+            if (ev.session_id == session_id) {
+                res.push_back(ev);
+            }
+        }
+        return res;
+    }
+
+    core::Result<std::vector<judgment::JevEvent>> get_all_events() const override {
+        std::lock_guard lock(mutex_);
+        return events_;
+    }
+
+    core::Result<void> clear() override {
+        std::lock_guard lock(mutex_);
+        events_.clear();
+        next_seq_ = 0;
+        return {};
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::vector<judgment::JevEvent> events_{};
+    std::uint64_t next_seq_{0};
+};
+
 } // namespace elo::storage

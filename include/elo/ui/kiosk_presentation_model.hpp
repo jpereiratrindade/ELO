@@ -29,6 +29,12 @@ class KioskPresentationModel : public QObject {
     Q_PROPERTY(QString greetingTitle READ greetingTitle NOTIFY recognitionChanged)
     Q_PROPERTY(QString greetingMessage READ greetingMessage NOTIFY recognitionChanged)
     Q_PROPERTY(bool recognitionResolved READ recognitionResolved NOTIFY recognitionChanged)
+    Q_PROPERTY(QString contentTitle READ contentTitle NOTIFY contentChanged)
+    Q_PROPERTY(QString contentText READ contentText NOTIFY contentChanged)
+    Q_PROPERTY(QString contentMedia READ contentMedia NOTIFY contentChanged)
+    Q_PROPERTY(QStringList contentOptions READ contentOptions NOTIFY contentChanged)
+    Q_PROPERTY(bool isRecipeActive READ isRecipeActive NOTIFY contentChanged)
+    Q_PROPERTY(QString selectionReason READ selectionReason NOTIFY contentChanged)
 #else
 class KioskPresentationModel {
 #endif
@@ -53,8 +59,18 @@ public:
     [[nodiscard]] QString greetingTitle() const { return greeting_title_; }
     [[nodiscard]] QString greetingMessage() const { return greeting_message_; }
     [[nodiscard]] bool recognitionResolved() const noexcept { return recognition_resolved_; }
+    [[nodiscard]] QString contentTitle() const;
+    [[nodiscard]] QString contentText() const;
+    [[nodiscard]] QString contentMedia() const;
+    [[nodiscard]] QStringList contentOptions() const;
+    [[nodiscard]] bool isRecipeActive() const;
+    [[nodiscard]] QString selectionReason() const;
 
     Q_INVOKABLE void advanceContent();
+    Q_INVOKABLE void selectPampaContent(const QString& role = QStringLiteral("attract"));
+    Q_INVOKABLE void startRecipe(const QString& recipeId = QStringLiteral("discover_by_sound"));
+    Q_INVOKABLE void chooseOption(const QString& option);
+    Q_INVOKABLE void deepenExperience();
     Q_INVOKABLE void submitSurveyResponse(const QString& questionId, const QString& selectedOption, bool anonymous);
     Q_INVOKABLE void requestForgetMe();
     Q_INVOKABLE void finishSession();

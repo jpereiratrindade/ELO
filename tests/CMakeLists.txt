@@ -53,3 +53,17 @@ target_include_directories(test_kiosk_presentation PRIVATE
 )
 
 add_test(NAME KioskPresentation COMMAND test_kiosk_presentation)
+
+add_executable(test_content_system
+    test_content_system.cpp
+)
+
+target_link_libraries(test_content_system PRIVATE
+    elo_core
+)
+
+target_include_directories(test_content_system PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+add_test(NAME ContentSystem COMMAND test_content_system)

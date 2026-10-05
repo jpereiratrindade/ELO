@@ -90,6 +90,15 @@ public:
             ");"
             "CREATE INDEX IF NOT EXISTS idx_survey_person "
             " ON survey_responses(person_id);"
+            "CREATE TABLE IF NOT EXISTS jev_events ("
+            " sequence INTEGER PRIMARY KEY AUTOINCREMENT,"
+            " timestamp INTEGER NOT NULL,"
+            " session_id TEXT NOT NULL,"
+            " event_name TEXT NOT NULL,"
+            " payload TEXT NOT NULL"
+            ");"
+            "CREATE INDEX IF NOT EXISTS idx_jev_session "
+            " ON jev_events(session_id, sequence);"
         );
     }
 
@@ -423,6 +432,86 @@ private:
     std::shared_ptr<Database> database_;
 };
 
+class SqliteJevEventStore final : public IJevEventStore {
+public:
+    explicit SqliteJevEventStore(std::shared_ptr<Database> database)
+        : database_{std::move(database)} {}
+
+    core::Result<void> record_event(const judgment::JevEvent& event) override {
+        try {
+            std::lock_guard lock(database_->mutex());
+            Statement statement(database_->handle(),
+                "INSERT INTO jev_events (timestamp, session_id, event_name, payload) "
+                "VALUES (?, ?, ?, ?);");
+            sqlite3_bind_int64(statement.get(), 1, static_cast<sqlite3_int64>(event.timestamp_ms));
+            bind_text(statement.get(), 2, event.session_id);
+            bind_text(statement.get(), 3, event.event_name);
+            bind_text(statement.get(), 4, event.payload);
+            expect_done(database_->handle(), statement.get());
+            return {};
+        } catch (const std::exception& error) {
+            return std::unexpected(storage_error(
+                core::ErrorCode::SubstrateFailure, "Failed to record JEV event", error));
+        }
+    }
+
+    core::Result<std::vector<judgment::JevEvent>> get_events_for_session(
+        const std::string& session_id) const override {
+        return query_events("SELECT sequence, timestamp, session_id, event_name, payload "
+                            "FROM jev_events WHERE session_id = ? ORDER BY sequence ASC;",
+                            &session_id);
+    }
+
+    core::Result<std::vector<judgment::JevEvent>> get_all_events() const override {
+        return query_events("SELECT sequence, timestamp, session_id, event_name, payload "
+                            "FROM jev_events ORDER BY sequence ASC;",
+                            nullptr);
+    }
+
+    core::Result<void> clear() override {
+        try {
+            std::lock_guard lock(database_->mutex());
+            database_->execute("DELETE FROM jev_events;");
+            return {};
+        } catch (const std::exception& error) {
+            return std::unexpected(storage_error(
+                core::ErrorCode::SubstrateFailure, "Failed to clear JEV events", error));
+        }
+    }
+
+private:
+    std::shared_ptr<Database> database_;
+
+    core::Result<std::vector<judgment::JevEvent>> query_events(
+        const char* sql, const std::string* session_id) const {
+        try {
+            std::lock_guard lock(database_->mutex());
+            Statement statement(database_->handle(), sql);
+            if (session_id) {
+                bind_text(statement.get(), 1, *session_id);
+            }
+            std::vector<judgment::JevEvent> events;
+            int result = SQLITE_OK;
+            while ((result = sqlite3_step(statement.get())) == SQLITE_ROW) {
+                events.push_back(judgment::JevEvent{
+                    .event_name = reinterpret_cast<const char*>(sqlite3_column_text(statement.get(), 3)),
+                    .timestamp_ms = static_cast<std::uint64_t>(sqlite3_column_int64(statement.get(), 1)),
+                    .session_id = reinterpret_cast<const char*>(sqlite3_column_text(statement.get(), 2)),
+                    .payload = reinterpret_cast<const char*>(sqlite3_column_text(statement.get(), 4)),
+                    .sequence = static_cast<std::uint64_t>(sqlite3_column_int64(statement.get(), 0))
+                });
+            }
+            if (result != SQLITE_DONE) {
+                throw SqliteFailure(sqlite3_errmsg(database_->handle()));
+            }
+            return events;
+        } catch (const std::exception& error) {
+            return std::unexpected(storage_error(
+                core::ErrorCode::SubstrateFailure, "Failed to query JEV events", error));
+        }
+    }
+};
+
 } // namespace
 
 core::Result<LocalStores> open_sqlite_stores(const std::filesystem::path& database_path) {
@@ -431,7 +520,8 @@ core::Result<LocalStores> open_sqlite_stores(const std::filesystem::path& databa
         return LocalStores{
             .biometric = std::make_shared<SqliteBiometricStore>(database),
             .experience = std::make_shared<SqliteExperienceStore>(database),
-            .survey = std::make_shared<SqliteSurveyStore>(database)
+            .survey = std::make_shared<SqliteSurveyStore>(database),
+            .jev_events = std::make_shared<SqliteJevEventStore>(database)
         };
     } catch (const std::exception& error) {
         return std::unexpected(core::make_error(

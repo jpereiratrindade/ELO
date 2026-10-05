@@ -12,13 +12,17 @@ ExperienceEngine::ExperienceEngine(
     std::shared_ptr<storage::IBiometricStore> biometric_store,
     std::shared_ptr<storage::IExperienceStore> experience_store,
     std::shared_ptr<storage::ISurveyStore> survey_store,
-    std::unique_ptr<judgment::JevAdapter> jev_adapter)
+    std::unique_ptr<judgment::JevAdapter> jev_adapter,
+    std::shared_ptr<storage::IJevEventStore> jev_event_store,
+    std::shared_ptr<content::ContentCatalog> content_catalog)
     : elo_id_{std::move(elo_id)},
       kernel_{kernel_seed_id},
       biometric_store_{std::move(biometric_store)},
       experience_store_{std::move(experience_store)},
       survey_store_{std::move(survey_store)},
-      jev_adapter_{std::move(jev_adapter)} {
+      jev_adapter_{std::move(jev_adapter)},
+      jev_event_store_{std::move(jev_event_store)},
+      content_catalog_{std::move(content_catalog)} {
     const auto templates = biometric_store_->get_all_templates();
     if (!templates) {
         return;
@@ -77,8 +81,28 @@ core::Result<ente::kernel::view> ExperienceEngine::apply_constitutive_transforma
     return kernel_.observe();
 }
 
+void ExperienceEngine::record_jev_event(std::string_view event_name, std::string_view payload) {
+    if (!jev_event_store_) {
+        return;
+    }
+    auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    judgment::JevEvent ev{
+        .event_name = std::string(event_name),
+        .timestamp_ms = static_cast<std::uint64_t>(now),
+        .session_id = current_session_id_,
+        .payload = std::string(payload),
+        .sequence = next_event_sequence_++
+    };
+    (void)jev_event_store_->record_event(ev);
+}
+
 void ExperienceEngine::on_presence_detected() {
     if (state_ == SessionState::IDLE) {
+        current_session_id_ = "sess-" + std::to_string(++session_count_);
+        session_seen_content_.clear();
+        recipe_active_ = false;
+        record_jev_event("presence.enter");
         transition_to(SessionState::PRESENCE_DETECTED, EventType::PRESENCE_DETECTED);
     }
 }
@@ -88,6 +112,7 @@ void ExperienceEngine::begin_automatic_continuity() {
         return;
     }
     biometric_continuity_active_ = true;
+    record_jev_event("session.start");
     transition_to(SessionState::BIOMETRIC_SESSION, EventType::BIOMETRIC_CONTINUITY_STARTED);
 }
 
@@ -223,7 +248,102 @@ core::Result<biometric::IdentityHypothesis> ExperienceEngine::identify_or_enroll
     return hypothesis;
 }
 
+void ExperienceEngine::set_content_catalog(std::shared_ptr<content::ContentCatalog> catalog) {
+    content_catalog_ = std::move(catalog);
+}
+
+core::Result<void> ExperienceEngine::select_contextual_content(
+    content::ContentRole role, std::string_view theme) {
+    if (!content_catalog_) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError, "ContentCatalog is not configured"));
+    }
+    content::SelectionContext ctx{
+        .target_role = role,
+        .theme_filter = std::string(theme),
+        .seen_content_ids = session_seen_content_,
+        .current_focus_id = active_atom_ ? active_atom_->content_id : "",
+        .audio_supported = true,
+        .session_depth = 1
+    };
+    auto res = content_selector_.select(*content_catalog_, ctx);
+    if (!res) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError, "No content atom matched contextual criteria"));
+    }
+    active_atom_ = res->atom;
+    active_variant_ = res->variant;
+    active_reason_ = res->reason;
+    if (active_atom_) {
+        session_seen_content_.insert(active_atom_->content_id);
+        record_jev_event("content.selected", active_atom_->content_id);
+    }
+    transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
+    return {};
+}
+
+core::Result<void> ExperienceEngine::start_recipe(const std::string& recipe_id) {
+    if (!content_catalog_) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError, "ContentCatalog not configured"));
+    }
+    const auto* rec = content_catalog_->find_recipe(recipe_id);
+    if (!rec) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError, "Recipe not found: " + recipe_id));
+    }
+    if (!active_atom_) {
+        auto sel_res = select_contextual_content(content::ContentRole::Attract, "pampa");
+        if (!sel_res) return sel_res;
+    }
+    recipe_state_ = recipe_executor_.start(*rec, *active_atom_);
+    recipe_active_ = true;
+    record_jev_event("recipe.started", recipe_id);
+    transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
+    return {};
+}
+
+std::vector<content::PresentationAction> ExperienceEngine::active_presentation_actions() const {
+    if (!recipe_active_ || !active_atom_ || !content_catalog_) {
+        if (active_variant_) {
+            return {content::PresentationAction{
+                .type = content::PresentationActionType::ShowText,
+                .title = active_variant_->presentation.title,
+                .text = active_variant_->presentation.text,
+                .asset_path = active_variant_->presentation.media_refs.empty() ? "" : active_variant_->presentation.media_refs.front(),
+                .options = active_variant_->presentation.options,
+                .target_content_id = active_variant_->content_id
+            }};
+        }
+        return {};
+    }
+    const auto* rec = content_catalog_->find_recipe(recipe_state_.recipe_id);
+    if (!rec) return {};
+    return recipe_executor_.evaluate_step(*rec, *active_atom_, recipe_state_);
+}
+
+void ExperienceEngine::advance_recipe(std::string_view user_action) {
+    if (!recipe_active_ || !active_atom_ || !content_catalog_) return;
+    const auto* rec = content_catalog_->find_recipe(recipe_state_.recipe_id);
+    if (!rec) return;
+
+    record_jev_event("user.touch", user_action);
+    recipe_state_ = recipe_executor_.advance(*rec, *active_atom_, recipe_state_, user_action);
+    transition_to(SessionState::CONTENT_ACTIVE, EventType::RECIPE_STEP_ADVANCED);
+
+    if (recipe_state_.completed) {
+        record_jev_event("recipe.completed", rec->recipe_id);
+    }
+}
+
 std::string ExperienceEngine::select_next_content() {
+    if (content_catalog_ && content_catalog_->atom_count() > 0) {
+        auto res = select_contextual_content(content::ContentRole::Attract, "pampa");
+        if (res && active_atom_) {
+            return active_atom_->content_id;
+        }
+    }
+
     transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
 
     if (!active_person_) {
@@ -280,6 +400,7 @@ core::Result<void> ExperienceEngine::submit_survey_response(
         return res;
     }
 
+    record_jev_event("answer.received", selected_option);
     transition_to(SessionState::SESSION_COMPLETE, EventType::SURVEY_RESPONSE_SUBMITTED);
     return {};
 }
@@ -299,8 +420,13 @@ core::Result<bool> ExperienceEngine::request_forget(const identity::PersonLocalI
 }
 
 void ExperienceEngine::finish_session() {
+    record_jev_event("session.end");
     active_person_ = std::nullopt;
     biometric_continuity_active_ = false;
+    active_atom_ = nullptr;
+    active_variant_ = nullptr;
+    recipe_active_ = false;
+    session_seen_content_.clear();
     transition_to(SessionState::IDLE, EventType::SESSION_FINISHED);
 }
 

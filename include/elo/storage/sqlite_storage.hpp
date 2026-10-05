@@ -12,6 +12,7 @@ struct LocalStores {
     std::shared_ptr<IBiometricStore> biometric;
     std::shared_ptr<IExperienceStore> experience;
     std::shared_ptr<ISurveyStore> survey;
+    std::shared_ptr<IJevEventStore> jev_events;
 };
 
 /// @brief Opens the production offline store. All three repositories share a

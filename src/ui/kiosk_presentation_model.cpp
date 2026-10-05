@@ -35,6 +35,97 @@ quint32 KioskPresentationModel::kernelGeneration() const {
     return engine_->kernel_view().generation;
 }
 
+QString KioskPresentationModel::contentTitle() const {
+    if (!engine_) return QString();
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty()) {
+        return QString::fromStdString(actions.front().title);
+    }
+    if (engine_->active_content_atom()) {
+        return QString::fromStdString(engine_->active_content_atom()->title);
+    }
+    return QStringLiteral("Bioma Pampa");
+}
+
+QString KioskPresentationModel::contentText() const {
+    if (!engine_) return QString();
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty()) {
+        return QString::fromStdString(actions.front().text);
+    }
+    if (engine_->active_content_variant()) {
+        return QString::fromStdString(engine_->active_content_variant()->presentation.text);
+    }
+    return QStringLiteral("Sempre pronto. Sempre incompleto.");
+}
+
+QString KioskPresentationModel::contentMedia() const {
+    if (!engine_) return QString();
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty()) {
+        return QString::fromStdString(actions.front().asset_path);
+    }
+    return QString();
+}
+
+QStringList KioskPresentationModel::contentOptions() const {
+    if (!engine_) return QStringList();
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty()) {
+        QStringList list;
+        for (const auto& opt : actions.front().options) {
+            list.append(QString::fromStdString(opt));
+        }
+        return list;
+    }
+    return QStringList();
+}
+
+bool KioskPresentationModel::isRecipeActive() const {
+    return engine_ && engine_->is_recipe_active();
+}
+
+QString KioskPresentationModel::selectionReason() const {
+    if (!engine_) return QString();
+    return QString::fromStdString(engine_->active_selection_reason().explanation);
+}
+
+void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
+    if (engine_) {
+        auto role = content::parse_content_role(roleStr.toStdString());
+        if (role == content::ContentRole::Unknown) role = content::ContentRole::Attract;
+        (void)engine_->select_contextual_content(role, "pampa");
+        emit contentChanged();
+        emit stateChanged();
+    }
+}
+
+void KioskPresentationModel::startRecipe(const QString& recipeId) {
+    if (engine_) {
+        (void)engine_->start_recipe(recipeId.toStdString());
+        emit contentChanged();
+        emit stateChanged();
+    }
+}
+
+void KioskPresentationModel::chooseOption(const QString& option) {
+    if (engine_) {
+        if (engine_->is_recipe_active()) {
+            engine_->advance_recipe(option.toStdString());
+        }
+        emit contentChanged();
+        emit stateChanged();
+    }
+}
+
+void KioskPresentationModel::deepenExperience() {
+    if (engine_) {
+        (void)engine_->select_contextual_content(content::ContentRole::Deepen, "pampa");
+        emit contentChanged();
+        emit stateChanged();
+    }
+}
+
 void KioskPresentationModel::advanceContent() {
     if (engine_) {
         current_content_ = engine_->select_next_content();

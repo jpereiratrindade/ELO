@@ -86,12 +86,37 @@ int main(int argc, char* argv[]) {
     elo::identity::EloId elo_system_id("elo://S01");
     constexpr std::uint64_t kernel_seed = 0x454c4f5f533031ULL; // "ELO_S01"
 
+    auto content_catalog = std::make_shared<elo::content::ContentCatalog>();
+    auto content_dir = qEnvironmentVariable("ELO_CONTENT_DIR");
+    if (content_dir.isEmpty()) {
+        for (const auto& candidate : {"content/catalog", "../content/catalog", "../../content/catalog"}) {
+            if (QDir(candidate).exists()) {
+                content_dir = QString::fromUtf8(candidate);
+                break;
+            }
+        }
+    }
+    if (!content_dir.isEmpty()) {
+        auto load_res = content_catalog->load_from_directory(content_dir.toStdString());
+        if (load_res) {
+            std::cout << "[ELO][content] Loaded decoupled content catalog: "
+                      << content_catalog->atom_count() << " atoms, "
+                      << content_catalog->relation_count() << " relations, "
+                      << content_catalog->recipe_count() << " recipes.\n";
+        } else {
+            std::cerr << "[ELO][content] Failed to load content: " << load_res.error().to_string() << '\n';
+        }
+    }
+
     auto engine = std::make_shared<elo::experience::ExperienceEngine>(
         elo_system_id,
         kernel_seed,
         stores.biometric,
         stores.experience,
-        stores.survey);
+        stores.survey,
+        nullptr,
+        stores.jev_events,
+        content_catalog);
     auto presentation_model = std::make_unique<elo::ui::KioskPresentationModel>(engine);
 
     QQmlApplicationEngine qml_engine;

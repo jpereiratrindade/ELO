@@ -46,6 +46,19 @@ int main() {
             .policy = elo::survey::LinkagePolicy::LinkedToIdentity,
             .linked_person = person
         }).has_value(), "Survey response persisted");
+
+        TEST_ASSERT(stores.jev_events->record_event(elo::judgment::JevEvent{
+            .event_name = "presence.enter",
+            .timestamp_ms = 1000000,
+            .session_id = "sess-test-1",
+            .payload = "distance=1.2"
+        }).has_value(), "JEV event recorded");
+        TEST_ASSERT(stores.jev_events->record_event(elo::judgment::JevEvent{
+            .event_name = "content.show",
+            .timestamp_ms = 1000500,
+            .session_id = "sess-test-1",
+            .payload = "species_cardeal_001"
+        }).has_value(), "JEV content.show event recorded");
     }
 
     {
@@ -66,6 +79,11 @@ int main() {
         TEST_ASSERT(responses && responses->size() == 1 &&
                     responses->front().linked_person == person,
                     "Linked survey response survived restart");
+
+        const auto jev_events = stores.jev_events->get_events_for_session("sess-test-1");
+        TEST_ASSERT(jev_events && jev_events->size() == 2, "JEV events survived restart");
+        TEST_ASSERT(jev_events->front().event_name == "presence.enter", "First event matches");
+        TEST_ASSERT(jev_events->back().event_name == "content.show", "Second event matches");
 
         elo::experience::ExperienceEngine engine(
             elo::identity::EloId("elo://sqlite-test"),
