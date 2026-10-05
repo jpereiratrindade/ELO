@@ -158,10 +158,13 @@ void test_exp_002_exp_003_exp_004_continuity() {
     engine.evaluate_biometric_evidence(initial_hyp);
     TEST_ASSERT(engine.current_state() == elo::experience::SessionState::IDENTITY_UNKNOWN, "Engine state UNKNOWN");
 
-    // EXP-003: Consented enrollment
-    auto enrolled_res = engine.enroll_consented_person(person_vector, 0.95);
-    TEST_ASSERT(enrolled_res.has_value(), "Enrollment succeeded");
-    auto p_id = *enrolled_res;
+    // EXP-003: the first consented face is enrolled automatically.
+    auto enrolled_res = engine.identify_or_enroll_consented_face(person_vector, 0.95);
+    TEST_ASSERT(enrolled_res.has_value(), "Automatic consented enrollment succeeded");
+    TEST_ASSERT(enrolled_res->state == elo::biometric::IdentityState::SUPPORTED,
+                "Newly enrolled local identity is supported for this session");
+    TEST_ASSERT(enrolled_res->resolved_person_id.has_value(), "Enrollment resolved a local id");
+    auto p_id = *enrolled_res->resolved_person_id;
     TEST_ASSERT(p_id.str() == "person-local://P01", "Assigned person-local://P01");
 
     // Serve content

@@ -25,3 +25,17 @@ target_include_directories(test_camera_catalog PRIVATE
 )
 
 add_test(NAME CameraCatalog COMMAND test_camera_catalog)
+
+add_executable(test_sqlite_storage
+    test_sqlite_storage.cpp
+)
+
+target_link_libraries(test_sqlite_storage PRIVATE
+    elo_core
+)
+
+target_include_directories(test_sqlite_storage PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+add_test(NAME SqliteStorage COMMAND test_sqlite_storage)

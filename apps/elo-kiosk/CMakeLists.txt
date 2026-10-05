@@ -1,6 +1,13 @@
 add_executable(elo-kiosk
+    camera_image_provider.cpp
+    camera_image_provider.hpp
     main.cpp
     ../../ui/qml.qrc
+)
+
+target_compile_definitions(elo-kiosk PRIVATE
+    ELO_FACE_DETECTOR_MODEL_PATH="${ELO_FACE_DETECTOR_MODEL_PATH}"
+    ELO_FACE_RECOGNIZER_MODEL_PATH="${ELO_FACE_RECOGNIZER_MODEL_PATH}"
 )
 
 target_link_libraries(elo-kiosk PRIVATE

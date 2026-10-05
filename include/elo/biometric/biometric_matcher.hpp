@@ -10,9 +10,11 @@ namespace elo::biometric {
 class BiometricMatcher {
 public:
     struct Config {
-        double supported_threshold{0.85};
-        double candidate_threshold{0.70};
-        double ambiguity_margin{0.05};
+        // SFace cosine thresholds. SUPPORTED is intentionally stricter than
+        // the model's common same-identity decision threshold (~0.363).
+        double supported_threshold{0.50};
+        double candidate_threshold{0.363};
+        double ambiguity_margin{0.08};
     };
 
     BiometricMatcher() = default;

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.25)
 project(elo VERSION 0.2.0 LANGUAGES CXX)
 
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
 set(CMAKE_CXX_STANDARD 26)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -14,10 +16,29 @@ set(CMAKE_AUTORCC ON)
 
 # Discover Qt 6
 find_package(Qt6 6.5 COMPONENTS Core Gui Quick Qml REQUIRED)
+find_package(OpenCV 4.8 REQUIRED COMPONENTS core imgproc objdetect videoio dnn)
+find_package(SQLite3 REQUIRED)
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(LIBCAMERA QUIET IMPORTED_TARGET libcamera)
 endif()
+
+option(ELO_DOWNLOAD_VISION_MODELS "Download pinned YuNet/SFace models during configure" ON)
+include(EloVisionModels)
+elo_resolve_vision_model(
+    ELO_FACE_DETECTOR_MODEL_PATH
+    ELO_FACE_DETECTOR_MODEL
+    face_detection_yunet_2023mar.onnx
+    https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx
+    8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+)
+elo_resolve_vision_model(
+    ELO_FACE_RECOGNIZER_MODEL_PATH
+    ELO_FACE_RECOGNIZER_MODEL
+    face_recognition_sface_2021dec_int8.onnx
+    https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/face_recognition_sface/face_recognition_sface_2021dec_int8.onnx
+    2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a
+)
 
 # Consumed components (Constitutional Invariants E2, E3)
 add_subdirectory(external/ente-kernel)
@@ -25,10 +46,13 @@ add_subdirectory(external/jev)
 
 # Core ELO Library
 add_library(elo_core
+    include/elo/perception/vision_service.hpp
     include/elo/ui/kiosk_presentation_model.hpp
     src/biometric/biometric_matcher.cpp
     src/experience/experience_engine.cpp
     src/perception/camera_catalog.cpp
+    src/perception/vision_service.cpp
+    src/storage/sqlite_storage.cpp
     src/ui/kiosk_presentation_model.cpp
 )
 
@@ -46,6 +70,8 @@ target_link_libraries(elo_core PUBLIC
     Qt6::Gui
     Qt6::Quick
     Qt6::Qml
+    ${OpenCV_LIBS}
+    SQLite3::SQLite3
 )
 
 target_compile_definitions(elo_core PUBLIC ELO_HAS_QT)

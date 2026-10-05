@@ -3,6 +3,7 @@
 #include "kernel.hpp"
 #include "elo/identity/identity_spaces.hpp"
 #include "elo/biometric/biometric_evidence.hpp"
+#include "elo/biometric/biometric_matcher.hpp"
 #include "elo/storage/storage_interfaces.hpp"
 #include "elo/judgment/jev_adapter.hpp"
 #include "elo/core/result.hpp"
@@ -141,6 +142,12 @@ public:
     // Enroll newly consented participant (Section 23, Invariant E9)
     core::Result<identity::PersonLocalId> enroll_consented_person(const std::vector<float>& embedding, double quality);
 
+    // Resolve a consented face automatically. UNKNOWN creates a new local
+    // identity; ambiguous evidence never creates a duplicate identity.
+    core::Result<biometric::IdentityHypothesis> identify_or_enroll_consented_face(
+        const std::vector<float>& embedding,
+        double quality);
+
     // Content sequencing (Section 31, 37)
     [[nodiscard]] std::string select_next_content();
 
@@ -166,6 +173,7 @@ private:
     std::shared_ptr<storage::IExperienceStore> experience_store_;
     std::shared_ptr<storage::ISurveyStore> survey_store_;
     std::unique_ptr<judgment::JevAdapter> jev_adapter_;
+    biometric::BiometricMatcher biometric_matcher_;
 
     SessionState state_{SessionState::IDLE};
     std::optional<identity::PersonLocalId> active_person_{std::nullopt};

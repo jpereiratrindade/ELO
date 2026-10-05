@@ -61,16 +61,17 @@ elo/
 
 ### Estado demonstrado nesta versão
 
-O código atual demonstra separação de identidades, descarte de frames em memória,
-biometria sintética como evidência, estados `UNKNOWN`/`UNCERTAIN`, consentimento,
-esquecimento em memória, continuidade durante o processo, separação entre julgamento
-JEV e ação, e independência entre transições de sessão e geração do kernel.
+O código atual demonstra separação de identidades, captura contínua local, detecção
+facial YuNet, embeddings SFace condicionados a consentimento, estados
+`UNKNOWN`/`UNCERTAIN`, cadastro automático consentido, persistência SQLite após
+reinício, esquecimento local, separação entre julgamento JEV e ação, e independência
+entre transições de sessão e geração do kernel.
 
-Ainda não estão demonstrados: persistência após reinício, captura e codificação facial
-reais, execução física no Raspberry Pi 5, consumo versionado dos repositórios externos,
-nem a totalidade de E1–E22 e EXP-ELO-001–014. Os stores de produção ainda são
-`InMemory*`; `external/ente-kernel` é um snapshot vendorizado e `external/jev` é um
-stub de contrato até que as dependências independentes sejam conectadas.
+Ainda não estão demonstrados: execução física no Raspberry Pi 5, calibração dos
+limiares biométricos no ambiente final, consumo versionado dos repositórios externos,
+nem a totalidade de E1–E22 e EXP-ELO-001–014. `external/ente-kernel` é um snapshot
+vendorizado e `external/jev` é um stub de contrato até que as dependências independentes
+sejam conectadas.
 
 ---
 
@@ -80,6 +81,9 @@ stub de contrato até que as dependências independentes sejam conectadas.
 - Compilador C++ com suporte a **C++26** (ex: GCC 16+)
 - CMake 3.25+ e Ninja
 - Qt 6 (Core, Gui, Quick, Qml)
+- OpenCV 4.8+ (Core, ImgProc, ObjDetect, VideoIO, DNN)
+- SQLite 3
+- `libcamera` e backend GStreamer correspondente para câmeras CSI no Raspberry Pi 5
 
 ### Build
 ```bash
@@ -99,30 +103,52 @@ ctest --test-dir build --output-on-failure
 ./build/apps/elo-kiosk/elo-kiosk
 ```
 
-### Descobrir e selecionar a câmera pela CLI
+### Operação como totem
 
-A descoberta somente consulta os dispositivos; ela não inicia captura nem retém frames.
+Não há escolha interativa de câmera nem botão de aproximação. O dispositivo físico do
+totem é descoberto no boot, a captura inicia imediatamente e o detector permanece pronto
+para observar presença. Quando um rosto é sustentado por frames consecutivos, a interface
+entra automaticamente no fluxo de transparência e consentimento.
 
 ```bash
-# Listar câmeras sem abrir a interface gráfica
-./build/apps/elo-kiosk/elo-kiosk --list-cameras
-
-# Abrir um menu de escolha antes de iniciar o kiosk
-./build/apps/elo-kiosk/elo-kiosk --choose-camera
-
-# Seleção determinística por índice, id ou caminho exibido pela listagem
-./build/apps/elo-kiosk/elo-kiosk --camera 0
-./build/apps/elo-kiosk/elo-kiosk --camera /dev/video0
-
-# Em instalação de produção, impedir boot sem uma câmera selecionada
-./build/apps/elo-kiosk/elo-kiosk --camera 0 --require-camera
+./build/apps/elo-kiosk/elo-kiosk
 ```
 
-No Linux, o build prefere `libcamera` quando o pacote de desenvolvimento está
-disponível; caso contrário usa descoberta V4L2, adequada a webcams USB. Para câmeras
-CSI no Raspberry Pi 5, instale os headers de desenvolvimento do `libcamera` antes de
-configurar o CMake para que o backend nativo seja selecionado.
+O primeiro rosto só é transformado em identidade local depois da ação positiva
+“Autorizar Continuidade Local”. Após o consentimento, o ELO tenta correspondência;
+se não houver template compatível, cria automaticamente `person-local://Pxx`. Frames
+brutos não são gravados. Templates, histórico e vínculos necessários são persistidos
+no SQLite local.
 
-Quando apenas uma câmera é encontrada, ela é selecionada automaticamente. Com duas
-ou mais câmeras, o ELO exige `--choose-camera` ou `--camera` para evitar que uma mudança
-na ordem dos dispositivos altere silenciosamente a câmera usada pelo kiosk.
+Configurações de implantação, não opções apresentadas à pessoa:
+
+```bash
+# Fixar uma câmera na imagem/configuração da unidade do totem
+ELO_CAMERA_ID=/dev/v4l/by-id/... ./build/apps/elo-kiosk/elo-kiosk
+
+# Fixar o diretório local persistente
+ELO_DATA_DIR=/var/lib/elo ./build/apps/elo-kiosk/elo-kiosk
+```
+
+No Linux, o build prefere `libcamera` quando seus headers estão disponíveis; caso
+contrário usa V4L2 para webcams USB. Os modelos YuNet e SFace são baixados durante a
+configuração do CMake com versões e hashes fixados. Em uma imagem de produção offline,
+use `ELO_FACE_DETECTOR_MODEL` e `ELO_FACE_RECOGNIZER_MODEL` para apontar aos artefatos
+pré-instalados e configure `ELO_DOWNLOAD_VISION_MODELS=OFF`.
+
+### Teste da interface e da continuidade
+
+1. Inicie `./build/apps/elo-kiosk/elo-kiosk` com uma câmera conectada.
+2. Confirme que o vídeo aparece sem clicar em qualquer botão e aproxime um único rosto.
+3. Verifique a abertura automática da tela de transparência e escolha
+   **Autorizar Continuidade Local**.
+4. Confirme que o conteúdo inicia automaticamente e que o cabeçalho exibe um
+   `person-local://Pxx`; nenhuma foto deve ser criada no diretório de dados.
+5. Encerre e abra o aplicativo novamente usando o mesmo `ELO_DATA_DIR`. O mesmo rosto
+   deve recuperar o identificador e avançar para o próximo conteúdo.
+6. Acione **Direito ao Esquecimento**, reinicie e confirme que a identidade anterior
+   não é recuperada.
+
+Para um ensaio descartável, aponte `ELO_DATA_DIR` para um diretório temporário dedicado.
+Se mais de uma pessoa estiver no enquadramento, o sistema deve pedir que apenas uma
+permaneça e não deve cadastrar um template até o enquadramento ficar inequívoco.

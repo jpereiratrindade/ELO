@@ -5,6 +5,7 @@ import QtQuick.Layouts
 Window {
     id: rootWindow
     visible: true
+    visibility: Window.FullScreen
     width: 1024
     height: 768
     title: "ELO — Totem de Experiência Presencial"
@@ -67,13 +68,14 @@ Window {
                 }
 
                 Text {
-                    text: cameraSelected
-                          ? "Camera: " + selectedCameraName + " [" + selectedCameraBackend + "]"
-                          : "Camera: não selecionada"
+                    text: cameraAvailable && kioskModel.visionOperational
+                          ? (kioskModel.faceDetected ? "● ROSTO DETECTADO" : "● VISÃO ATIVA")
+                          : "● CÂMERA INDISPONÍVEL"
                     font.pixelSize: 12
-                    color: cameraSelected ? "#34d399" : "#f59e0b"
+                    font.bold: true
+                    color: cameraAvailable && kioskModel.visionOperational ? "#34d399" : "#f87171"
                     elide: Text.ElideRight
-                    Layout.maximumWidth: 260
+                    Layout.maximumWidth: 180
                 }
 
                 Text {
@@ -93,33 +95,56 @@ Window {
             anchors.right: parent.right
             anchors.margins: 40
 
-            // 1. IDLE Screen
+            // 1. IDLE: the fixed camera remains active and presence is automatic.
             ColumnLayout {
                 anchors.centerIn: parent
-                spacing: 24
+                spacing: 16
                 visible: kioskModel.currentState === "IDLE"
 
                 Text {
-                    text: "Bem-vindo ao ELO"
-                    font.pixelSize: 36
+                    text: "ELO está pronto"
+                    font.pixelSize: 32
                     font.bold: true
                     color: "#f8fafc"
                     Layout.alignment: Qt.AlignHCenter
                 }
 
-                Text {
-                    text: "Aproxime-se para iniciar uma experiência personalizada local."
-                    font.pixelSize: 18
-                    color: "#94a3b8"
+                Rectangle {
+                    Layout.preferredWidth: 560
+                    Layout.preferredHeight: 360
                     Layout.alignment: Qt.AlignHCenter
+                    color: "#020617"
+                    radius: 16
+                    clip: true
+                    border.color: kioskModel.faceDetected ? "#34d399" : "#334155"
+                    border.width: 2
+
+                    Image {
+                        anchors.fill: parent
+                        source: "image://camera/live?" + kioskModel.cameraFrameRevision
+                        cache: false
+                        fillMode: Image.PreserveAspectCrop
+                        visible: cameraAvailable && kioskModel.visionOperational &&
+                                 kioskModel.cameraFrameRevision > 0
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: !cameraAvailable || !kioskModel.visionOperational ||
+                                 kioskModel.cameraFrameRevision === 0
+                        text: cameraAvailable ? kioskModel.visionStatus : "Câmera indisponível"
+                        color: "#94a3b8"
+                        font.pixelSize: 16
+                    }
                 }
 
-                Button {
+                Text {
+                    text: kioskModel.faceDetected
+                          ? "Presença reconhecida — preparando experiência"
+                          : "Aproxime-se. A detecção acontece automaticamente."
+                    font.pixelSize: 18
+                    color: kioskModel.faceDetected ? "#34d399" : "#94a3b8"
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 260
-                    Layout.preferredHeight: 64
-                    text: "Aproximar / Iniciar"
-                    onClicked: kioskModel.userApproached()
                 }
             }
 
@@ -183,16 +208,16 @@ Window {
                     spacing: 20
 
                     Button {
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 250
                         Layout.preferredHeight: 56
-                        text: "Usar Biometria Local"
+                        text: "Autorizar Continuidade Local"
                         onClicked: kioskModel.chooseBiometricConsent(true)
                     }
 
                     Button {
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 250
                         Layout.preferredHeight: 56
-                        text: "Sessão Anônima (Sem Rosto)"
+                        text: "Continuar Sem Ser Lembrado"
                         onClicked: kioskModel.chooseBiometricConsent(false)
                     }
 
@@ -212,30 +237,71 @@ Window {
                 visible: kioskModel.currentState === "BIOMETRIC_SESSION" ||
                          kioskModel.currentState === "IDENTITY_SUPPORTED" ||
                          kioskModel.currentState === "IDENTITY_CANDIDATE" ||
+                         kioskModel.currentState === "IDENTITY_UNCERTAIN" ||
                          kioskModel.currentState === "IDENTITY_UNKNOWN"
 
                 Text {
                     text: kioskModel.currentState === "IDENTITY_SUPPORTED" ? "Continuidade Reconhecida!" :
                           kioskModel.currentState === "IDENTITY_UNKNOWN" ? "Novo Participante Local" :
-                          "Avaliando Presença Biométrica..."
+                          "Identificando localmente..."
                     font.pixelSize: 28
                     font.bold: true
                     color: "#f8fafc"
                     Layout.alignment: Qt.AlignHCenter
                 }
 
+                Rectangle {
+                    Layout.preferredWidth: 560
+                    Layout.preferredHeight: 360
+                    Layout.alignment: Qt.AlignHCenter
+                    color: "#020617"
+                    radius: 16
+                    clip: true
+                    border.color: "#34d399"
+                    border.width: 2
+
+                    Image {
+                        anchors.fill: parent
+                        source: "image://camera/live?" + kioskModel.cameraFrameRevision
+                        cache: false
+                        fillMode: Image.PreserveAspectCrop
+                    }
+                }
+
                 Text {
-                    text: "Identificador Local: " + kioskModel.activePerson
+                    text: kioskModel.visionStatus
                     font.pixelSize: 16
                     color: "#38bdf8"
+                    Layout.alignment: Qt.AlignHCenter
+                }
+            }
+
+            // 3b. Anonymous participation remains possible without enrollment.
+            ColumnLayout {
+                anchors.centerIn: parent
+                spacing: 24
+                visible: kioskModel.currentState === "NON_BIOMETRIC_SESSION"
+
+                Text {
+                    text: "Sessão sem memória biométrica"
+                    font.pixelSize: 30
+                    font.bold: true
+                    color: "#f8fafc"
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                Text {
+                    text: "Nenhuma identidade local será criada para esta sessão."
+                    font.pixelSize: 17
+                    color: "#94a3b8"
                     Layout.alignment: Qt.AlignHCenter
                 }
 
                 Button {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 240
-                    Layout.preferredHeight: 60
-                    text: "Ver Meu Conteúdo"
+                    Layout.preferredWidth: 260
+                    Layout.preferredHeight: 58
+                    text: "Iniciar experiência"
                     onClicked: kioskModel.advanceContent()
                 }
             }

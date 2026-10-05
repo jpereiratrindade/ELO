@@ -1,5 +1,8 @@
 #include "elo/experience/experience_engine.hpp"
+#include <algorithm>
 #include <chrono>
+#include <charconv>
+#include <string_view>
 
 namespace elo::experience {
 
@@ -15,7 +18,27 @@ ExperienceEngine::ExperienceEngine(
       biometric_store_{std::move(biometric_store)},
       experience_store_{std::move(experience_store)},
       survey_store_{std::move(survey_store)},
-      jev_adapter_{std::move(jev_adapter)} {}
+      jev_adapter_{std::move(jev_adapter)} {
+    const auto templates = biometric_store_->get_all_templates();
+    if (!templates) {
+        return;
+    }
+
+    constexpr std::string_view prefix = "person-local://P";
+    for (const auto& value : *templates) {
+        const auto id = value.person_local_id.str();
+        if (!id.starts_with(prefix)) {
+            continue;
+        }
+        std::uint64_t index = 0;
+        const auto suffix = std::string_view(id).substr(prefix.size());
+        const auto [position, error] = std::from_chars(
+            suffix.data(), suffix.data() + suffix.size(), index);
+        if (error == std::errc{} && position == suffix.data() + suffix.size()) {
+            next_person_seq_ = std::max(next_person_seq_, index + 1);
+        }
+    }
+}
 
 void ExperienceEngine::transition_to(SessionState next_state, EventType cause) {
     const Event event{.type = cause, .sequence = next_event_sequence_++};
@@ -125,12 +148,12 @@ core::Result<identity::PersonLocalId> ExperienceEngine::enroll_consented_person(
     biometric::FaceTemplate tmpl{
         .template_id = "tmpl-" + new_person.str(),
         .person_local_id = new_person,
-        .model_id = "sface_local",
-        .model_version = "0.2.0",
+        .model_id = "opencv_sface",
+        .model_version = "2021dec-int8",
         .representation = embedding,
         .quality = quality,
         .created_at = static_cast<std::uint64_t>(now),
-        .integrity_digest = "sha256:local_verified"
+        .integrity_digest = "sha256:2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a"
     };
 
     auto res = biometric_store_->save_template(tmpl);
@@ -141,6 +164,40 @@ core::Result<identity::PersonLocalId> ExperienceEngine::enroll_consented_person(
     active_person_ = new_person;
     transition_to(SessionState::IDENTITY_SUPPORTED, EventType::PERSON_ENROLLED);
     return new_person;
+}
+
+core::Result<biometric::IdentityHypothesis> ExperienceEngine::identify_or_enroll_consented_face(
+    const std::vector<float>& embedding, double quality) {
+    if (!biometric_consented_) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ConsentRequired,
+            "Cannot resolve or enroll a biometric identity without explicit consent"));
+    }
+
+    auto templates_result = biometric_store_->get_all_templates();
+    if (!templates_result) {
+        return std::unexpected(templates_result.error());
+    }
+
+    auto hypothesis = biometric_matcher_.match(embedding, *templates_result);
+    if (hypothesis.state != biometric::IdentityState::UNKNOWN) {
+        evaluate_biometric_evidence(hypothesis);
+        return hypothesis;
+    }
+
+    auto enrollment = enroll_consented_person(embedding, quality);
+    if (!enrollment) {
+        return std::unexpected(enrollment.error());
+    }
+
+    hypothesis.state = biometric::IdentityState::SUPPORTED;
+    hypothesis.resolved_person_id = *enrollment;
+    hypothesis.match_score = 1.0;
+    hypothesis.liveness = biometric::LivenessState::NOT_VERIFIED;
+    hypothesis.rationale = templates_result->empty()
+        ? "First consented local identity enrolled automatically"
+        : "Unknown consented participant enrolled as a new local identity";
+    return hypothesis;
 }
 
 std::string ExperienceEngine::select_next_content() {
