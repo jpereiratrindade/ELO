@@ -93,9 +93,7 @@ void test_e2_ente_kernel_integration() {
     TEST_ASSERT(v0.alive == true, "Kernel is alive");
 
     engine.on_presence_detected();
-    engine.on_information_acknowledged();
-    engine.decide_participation(true);
-    engine.decide_biometric_consent(false);
+    engine.begin_automatic_continuity();
     (void)engine.select_next_content();
     engine.finish_session();
 
@@ -104,8 +102,8 @@ void test_e2_ente_kernel_integration() {
     TEST_ASSERT(engine.last_event().has_value(), "Operational event was recorded by ELO");
     TEST_ASSERT(engine.last_event()->type == elo::experience::EventType::SESSION_FINISHED,
                 "Last operational event is session completion");
-    TEST_ASSERT(engine.last_event()->sequence == 6, "Operational events have their own sequence");
-    TEST_ASSERT(engine.session_revision() == 5, "Only actual session state changes increment revision");
+    TEST_ASSERT(engine.last_event()->sequence == 4, "Operational events have their own sequence");
+    TEST_ASSERT(engine.session_revision() == 4, "Only actual session state changes increment revision");
     TEST_ASSERT(engine.last_session_transition()->from == elo::experience::SessionState::CONTENT_ACTIVE,
                 "Session transition records its origin");
     TEST_ASSERT(engine.last_session_transition()->to == elo::experience::SessionState::IDLE,
@@ -146,8 +144,7 @@ void test_exp_002_exp_003_exp_004_continuity() {
 
     // EXP-002: Unknown participant approaches
     engine.on_presence_detected();
-    engine.decide_participation(true);
-    engine.decide_biometric_consent(true);
+    engine.begin_automatic_continuity();
 
     elo::biometric::BiometricMatcher matcher;
     std::vector<float> person_vector = {0.2f, 0.4f, 0.6f, 0.8f};
@@ -158,9 +155,10 @@ void test_exp_002_exp_003_exp_004_continuity() {
     engine.evaluate_biometric_evidence(initial_hyp);
     TEST_ASSERT(engine.current_state() == elo::experience::SessionState::IDENTITY_UNKNOWN, "Engine state UNKNOWN");
 
-    // EXP-003: the first consented face is enrolled automatically.
-    auto enrolled_res = engine.identify_or_enroll_consented_face(person_vector, 0.95);
-    TEST_ASSERT(enrolled_res.has_value(), "Automatic consented enrollment succeeded");
+    // EXP-003: the first face is enrolled automatically as a local vector.
+    auto enrolled_res = engine.identify_or_enroll_local_face(person_vector, 0.95);
+    TEST_ASSERT(enrolled_res.has_value(), "Automatic local enrollment succeeded");
+    TEST_ASSERT(enrolled_res->newly_enrolled, "First observation is marked as new enrollment");
     TEST_ASSERT(enrolled_res->state == elo::biometric::IdentityState::SUPPORTED,
                 "Newly enrolled local identity is supported for this session");
     TEST_ASSERT(enrolled_res->resolved_person_id.has_value(), "Enrollment resolved a local id");
@@ -175,22 +173,36 @@ void test_exp_002_exp_003_exp_004_continuity() {
 
     // EXP-004: Person returns!
     engine.on_presence_detected();
-    engine.decide_participation(true);
-    engine.decide_biometric_consent(true);
+    engine.begin_automatic_continuity();
 
     // Person presents slightly noisy but very close embedding
     std::vector<float> return_vector = {0.21f, 0.40f, 0.59f, 0.80f};
-    auto return_hyp = matcher.match(return_vector, bio_store->get_all_templates().value());
+    auto return_hyp = engine.identify_or_enroll_local_face(return_vector, 0.94).value();
     TEST_ASSERT(return_hyp.state == elo::biometric::IdentityState::SUPPORTED, "Must be SUPPORTED on return");
+    TEST_ASSERT(!return_hyp.newly_enrolled, "Return is not classified as a new enrollment");
     TEST_ASSERT(return_hyp.resolved_person_id.has_value(), "Resolved person present");
     TEST_ASSERT(return_hyp.resolved_person_id->str() == "person-local://P01", "Matches P01");
+    const auto refined_templates = bio_store->get_templates_for(p_id).value();
+    TEST_ASSERT(refined_templates.size() == 1,
+                "Successful return keeps one data-minimized vector template");
+    TEST_ASSERT(refined_templates.front().representation != person_vector,
+                "Successful return refines the persisted vector");
 
-    engine.evaluate_biometric_evidence(return_hyp);
     TEST_ASSERT(engine.current_state() == elo::experience::SessionState::IDENTITY_SUPPORTED, "Engine supported");
 
     // Continuity: next content should advance to stage 2!
     auto c2 = engine.select_next_content();
     TEST_ASSERT(c2 == "content_stage_2", "Stage 2 content served due to continuity");
+
+    engine.finish_session();
+    engine.on_presence_detected();
+    engine.begin_automatic_continuity();
+    auto third_visit = engine.identify_or_enroll_local_face(
+        {0.19F, 0.41F, 0.61F, 0.79F}, 0.93).value();
+    TEST_ASSERT(third_visit.state == elo::biometric::IdentityState::SUPPORTED,
+                "Refined template remains recognizable on a later visit");
+    TEST_ASSERT(third_visit.resolved_person_id == p_id,
+                "Third visit still resolves the original local identity");
     std::cout << "  -> PASSED: Enrollment and continuity cycle succeeded.\n";
 }
 
@@ -237,11 +249,10 @@ void test_exp_007_forget_me() {
     );
 
     engine.on_presence_detected();
-    engine.decide_participation(true);
-    engine.decide_biometric_consent(true);
+    engine.begin_automatic_continuity();
 
     std::vector<float> vec = {0.5f, 0.5f};
-    auto p_res = engine.enroll_consented_person(vec, 1.0);
+    auto p_res = engine.enroll_local_person(vec, 1.0);
     auto p_id = *p_res;
 
     // Register survey answer linked to person

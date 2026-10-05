@@ -146,7 +146,12 @@ public:
             Statement statement(database_->handle(),
                 "INSERT INTO biometric_templates "
                 "(template_id, person_id, model_id, model_version, representation, quality, "
-                " created_at, integrity_digest) VALUES (?, ?, ?, ?, ?, ?, ?, ?);");
+                " created_at, integrity_digest) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(template_id) DO UPDATE SET "
+                " person_id = excluded.person_id, model_id = excluded.model_id,"
+                " model_version = excluded.model_version, representation = excluded.representation,"
+                " quality = excluded.quality, created_at = excluded.created_at,"
+                " integrity_digest = excluded.integrity_digest;");
             bind_text(statement.get(), 1, value.template_id);
             bind_text(statement.get(), 2, value.person_local_id.str());
             bind_text(statement.get(), 3, value.model_id);

@@ -32,6 +32,7 @@ public:
 
 public slots:
     void setBiometricAuthorized(bool authorized);
+    void setRecognitionConfirmed(bool confirmed);
 
 signals:
     void frameReady(const QImage& frame);

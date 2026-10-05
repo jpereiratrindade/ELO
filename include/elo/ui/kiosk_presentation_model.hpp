@@ -10,6 +10,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace elo::ui {
 
@@ -25,6 +26,9 @@ class KioskPresentationModel : public QObject {
     Q_PROPERTY(bool faceDetected READ faceDetected NOTIFY visionChanged)
     Q_PROPERTY(bool visionOperational READ visionOperational NOTIFY visionChanged)
     Q_PROPERTY(QString visionStatus READ visionStatus NOTIFY visionChanged)
+    Q_PROPERTY(QString greetingTitle READ greetingTitle NOTIFY recognitionChanged)
+    Q_PROPERTY(QString greetingMessage READ greetingMessage NOTIFY recognitionChanged)
+    Q_PROPERTY(bool recognitionResolved READ recognitionResolved NOTIFY recognitionChanged)
 #else
 class KioskPresentationModel {
 #endif
@@ -46,9 +50,10 @@ public:
     [[nodiscard]] bool faceDetected() const noexcept { return face_detected_; }
     [[nodiscard]] bool visionOperational() const noexcept { return vision_operational_; }
     [[nodiscard]] QString visionStatus() const { return vision_status_; }
+    [[nodiscard]] QString greetingTitle() const { return greeting_title_; }
+    [[nodiscard]] QString greetingMessage() const { return greeting_message_; }
+    [[nodiscard]] bool recognitionResolved() const noexcept { return recognition_resolved_; }
 
-    Q_INVOKABLE void chooseParticipation(bool participate);
-    Q_INVOKABLE void chooseBiometricConsent(bool consent);
     Q_INVOKABLE void advanceContent();
     Q_INVOKABLE void submitSurveyResponse(const QString& questionId, const QString& selectedOption, bool anonymous);
     Q_INVOKABLE void requestForgetMe();
@@ -67,7 +72,9 @@ signals:
     void kernelChanged();
     void cameraFrameChanged();
     void visionChanged();
+    void recognitionChanged();
     void biometricAuthorizationChanged(bool authorized);
+    void recognitionVisualStateChanged(bool confirmed);
 #else
     [[nodiscard]] std::string currentState() const;
     [[nodiscard]] std::string activePerson() const;
@@ -75,8 +82,6 @@ signals:
     [[nodiscard]] bool isBiometricSession() const;
     [[nodiscard]] uint32_t kernelGeneration() const;
 
-    void chooseParticipation(bool participate);
-    void chooseBiometricConsent(bool consent);
     void advanceContent();
     void submitSurveyResponse(const std::string& questionId, const std::string& selectedOption, bool anonymous);
     void requestForgetMe();
@@ -91,6 +96,11 @@ private:
     bool face_detected_{false};
     bool vision_operational_{false};
     QString vision_status_{QStringLiteral("Inicializando visão")};
+    QString greeting_title_{QStringLiteral("Reconhecendo presença")};
+    QString greeting_message_{QStringLiteral("Processamento local em andamento")};
+    bool recognition_resolved_{false};
+    std::vector<std::vector<float>> pending_embeddings_{};
+    double pending_quality_sum_{0.0};
 #endif
 };
 

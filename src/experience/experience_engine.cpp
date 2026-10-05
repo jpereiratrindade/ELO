@@ -83,31 +83,16 @@ void ExperienceEngine::on_presence_detected() {
     }
 }
 
-void ExperienceEngine::on_information_acknowledged() {
-    transition_to(SessionState::CONSENT_PENDING, EventType::INFORMATION_ACKNOWLEDGED);
-}
-
-void ExperienceEngine::decide_participation(bool participate) {
-    if (!participate) {
-        active_person_ = std::nullopt;
-        biometric_consented_ = false;
-        transition_to(SessionState::IDLE, EventType::PARTICIPATION_DECLINED);
-    } else {
-        transition_to(SessionState::CONSENT_PENDING, EventType::PARTICIPATION_ACCEPTED);
+void ExperienceEngine::begin_automatic_continuity() {
+    if (state_ != SessionState::PRESENCE_DETECTED) {
+        return;
     }
-}
-
-void ExperienceEngine::decide_biometric_consent(bool consent) {
-    biometric_consented_ = consent;
-    if (consent) {
-        transition_to(SessionState::BIOMETRIC_SESSION, EventType::BIOMETRIC_CONSENT_GRANTED);
-    } else {
-        transition_to(SessionState::NON_BIOMETRIC_SESSION, EventType::BIOMETRIC_CONSENT_DECLINED);
-    }
+    biometric_continuity_active_ = true;
+    transition_to(SessionState::BIOMETRIC_SESSION, EventType::BIOMETRIC_CONTINUITY_STARTED);
 }
 
 void ExperienceEngine::evaluate_biometric_evidence(const biometric::IdentityHypothesis& hypothesis) {
-    if (!biometric_consented_) {
+    if (!biometric_continuity_active_) {
         return;
     }
 
@@ -132,12 +117,12 @@ void ExperienceEngine::evaluate_biometric_evidence(const biometric::IdentityHypo
     }
 }
 
-core::Result<identity::PersonLocalId> ExperienceEngine::enroll_consented_person(
+core::Result<identity::PersonLocalId> ExperienceEngine::enroll_local_person(
     const std::vector<float>& embedding, double quality) {
-    if (!biometric_consented_) {
+    if (!biometric_continuity_active_) {
         return std::unexpected(core::make_error(
-            core::ErrorCode::ConsentRequired,
-            "Cannot enroll biometric identity without explicit consent (Invariant E9)"));
+            core::ErrorCode::BiometricContinuityInactive,
+            "Biometric continuity is not active for this session"));
     }
 
     auto new_person = identity::PersonLocalId::from_index(next_person_seq_++);
@@ -166,12 +151,12 @@ core::Result<identity::PersonLocalId> ExperienceEngine::enroll_consented_person(
     return new_person;
 }
 
-core::Result<biometric::IdentityHypothesis> ExperienceEngine::identify_or_enroll_consented_face(
+core::Result<biometric::IdentityHypothesis> ExperienceEngine::identify_or_enroll_local_face(
     const std::vector<float>& embedding, double quality) {
-    if (!biometric_consented_) {
+    if (!biometric_continuity_active_) {
         return std::unexpected(core::make_error(
-            core::ErrorCode::ConsentRequired,
-            "Cannot resolve or enroll a biometric identity without explicit consent"));
+            core::ErrorCode::BiometricContinuityInactive,
+            "Biometric continuity is not active for this session"));
     }
 
     auto templates_result = biometric_store_->get_all_templates();
@@ -181,11 +166,48 @@ core::Result<biometric::IdentityHypothesis> ExperienceEngine::identify_or_enroll
 
     auto hypothesis = biometric_matcher_.match(embedding, *templates_result);
     if (hypothesis.state != biometric::IdentityState::UNKNOWN) {
+        if (hypothesis.state == biometric::IdentityState::SUPPORTED &&
+            hypothesis.resolved_person_id) {
+            const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            std::vector<float> refined_embedding = embedding;
+            const auto existing_templates = biometric_store_->get_templates_for(
+                *hypothesis.resolved_person_id);
+            if (!existing_templates) {
+                return std::unexpected(existing_templates.error());
+            }
+            if (!existing_templates->empty()) {
+                const auto latest = std::max_element(
+                    existing_templates->begin(), existing_templates->end(),
+                    [](const auto& left, const auto& right) {
+                        return left.created_at < right.created_at;
+                    });
+                if (latest->representation.size() == refined_embedding.size()) {
+                    for (std::size_t index = 0; index < refined_embedding.size(); ++index) {
+                        refined_embedding[index] =
+                            0.7F * latest->representation[index] + 0.3F * refined_embedding[index];
+                    }
+                }
+            }
+            auto refresh_result = biometric_store_->save_template(biometric::FaceTemplate{
+                .template_id = "tmpl-" + hypothesis.resolved_person_id->str(),
+                .person_local_id = *hypothesis.resolved_person_id,
+                .model_id = "opencv_sface",
+                .model_version = "2021dec-int8",
+                .representation = std::move(refined_embedding),
+                .quality = quality,
+                .created_at = static_cast<std::uint64_t>(now),
+                .integrity_digest = "sha256:2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a"
+            });
+            if (!refresh_result) {
+                return std::unexpected(refresh_result.error());
+            }
+        }
         evaluate_biometric_evidence(hypothesis);
         return hypothesis;
     }
 
-    auto enrollment = enroll_consented_person(embedding, quality);
+    auto enrollment = enroll_local_person(embedding, quality);
     if (!enrollment) {
         return std::unexpected(enrollment.error());
     }
@@ -194,9 +216,10 @@ core::Result<biometric::IdentityHypothesis> ExperienceEngine::identify_or_enroll
     hypothesis.resolved_person_id = *enrollment;
     hypothesis.match_score = 1.0;
     hypothesis.liveness = biometric::LivenessState::NOT_VERIFIED;
+    hypothesis.newly_enrolled = true;
     hypothesis.rationale = templates_result->empty()
-        ? "First consented local identity enrolled automatically"
-        : "Unknown consented participant enrolled as a new local identity";
+        ? "First local identity enrolled automatically"
+        : "Unknown participant enrolled as a new local identity";
     return hypothesis;
 }
 
@@ -277,7 +300,7 @@ core::Result<bool> ExperienceEngine::request_forget(const identity::PersonLocalI
 
 void ExperienceEngine::finish_session() {
     active_person_ = std::nullopt;
-    biometric_consented_ = false;
+    biometric_continuity_active_ = false;
     transition_to(SessionState::IDLE, EventType::SESSION_FINISHED);
 }
 

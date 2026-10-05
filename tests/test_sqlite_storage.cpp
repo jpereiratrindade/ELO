@@ -27,9 +27,9 @@ int main() {
         const auto stores = *stores_result;
 
         auto biometric_result = stores.biometric->save_template(elo::biometric::FaceTemplate{
-            .template_id = "template-P01",
+            .template_id = "tmpl-person-local://P01",
             .person_local_id = person,
-            .model_id = "sface_local",
+            .model_id = "opencv_sface",
             .model_version = "2021dec-int8",
             .representation = {0.1F, 0.2F, 0.3F, 0.4F},
             .quality = 0.93,
@@ -75,20 +75,22 @@ int main() {
             stores.survey);
 
         engine.on_presence_detected();
-        engine.decide_participation(true);
-        engine.decide_biometric_consent(true);
-        const auto recognized_identity = engine.identify_or_enroll_consented_face(
+        engine.begin_automatic_continuity();
+        const auto recognized_identity = engine.identify_or_enroll_local_face(
             {0.1F, 0.2F, 0.3F, 0.4F}, 0.95);
         TEST_ASSERT(recognized_identity && recognized_identity->resolved_person_id == person,
                     "Persisted face is recognized after process restart");
+        TEST_ASSERT(!recognized_identity->newly_enrolled,
+                    "Returning identity is distinguished from first enrollment");
+        TEST_ASSERT(stores.biometric->get_templates_for(person)->size() == 1,
+                    "Returning recognition refines one data-minimized vector template");
         TEST_ASSERT(engine.select_next_content() == "content_stage_2",
                     "Recognized participant resumes at the next content");
         engine.finish_session();
 
         engine.on_presence_detected();
-        engine.decide_participation(true);
-        engine.decide_biometric_consent(true);
-        const auto second_identity = engine.identify_or_enroll_consented_face(
+        engine.begin_automatic_continuity();
+        const auto second_identity = engine.identify_or_enroll_local_face(
             {1.0F, 0.0F, 0.0F, 0.0F}, 0.95);
         TEST_ASSERT(second_identity && second_identity->resolved_person_id &&
                     second_identity->resolved_person_id->str() == "person-local://P02",

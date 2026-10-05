@@ -15,8 +15,7 @@ enum class IdentityState {
     SUPPORTED,
     UNCERTAIN,
     CONTRADICTORY,
-    UNAVAILABLE,
-    NOT_CONSENTED
+    UNAVAILABLE
 };
 
 constexpr std::string_view to_string(IdentityState s) noexcept {
@@ -27,7 +26,6 @@ constexpr std::string_view to_string(IdentityState s) noexcept {
         case IdentityState::UNCERTAIN: return "UNCERTAIN";
         case IdentityState::CONTRADICTORY: return "CONTRADICTORY";
         case IdentityState::UNAVAILABLE: return "UNAVAILABLE";
-        case IdentityState::NOT_CONSENTED: return "NOT_CONSENTED";
     }
     return "UNKNOWN";
 }
@@ -54,6 +52,7 @@ struct IdentityHypothesis {
     std::optional<identity::PersonLocalId> resolved_person_id{std::nullopt};
     double match_score{0.0};
     LivenessState liveness{LivenessState::NOT_VERIFIED};
+    bool newly_enrolled{false};
     std::vector<CandidateMatch> ranked_candidates{};
     std::string rationale{};
 };

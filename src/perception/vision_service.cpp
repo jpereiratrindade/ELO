@@ -20,7 +20,7 @@ constexpr int capture_height = 480;
 constexpr int capture_fps = 15;
 constexpr int frames_required_for_presence = 3;
 constexpr int frames_required_for_absence = 45;
-constexpr auto embedding_interval = std::chrono::milliseconds(1500);
+constexpr auto embedding_interval = std::chrono::milliseconds(400);
 
 bool open_camera(const CameraDevice& camera, cv::VideoCapture& capture) {
     if (camera.backend == "libcamera") {
@@ -66,7 +66,11 @@ cv::Mat best_face(const cv::Mat& faces) {
     return faces.row(best_index);
 }
 
-QImage preview_image(const cv::Mat& bgr_frame, const cv::Mat& face, bool authorized) {
+QImage preview_image(
+    const cv::Mat& bgr_frame,
+    const cv::Mat& face,
+    bool authorized,
+    bool recognition_confirmed) {
     cv::Mat annotated = bgr_frame.clone();
     if (!face.empty()) {
         const cv::Rect bounds{
@@ -75,11 +79,16 @@ QImage preview_image(const cv::Mat& bgr_frame, const cv::Mat& face, bool authori
             static_cast<int>(std::lround(face.at<float>(0, 2))),
             static_cast<int>(std::lround(face.at<float>(0, 3)))
         };
-        const auto color = authorized ? cv::Scalar(52, 211, 153) : cv::Scalar(8, 159, 245);
+        const auto color = (authorized || recognition_confirmed)
+            ? cv::Scalar(52, 211, 153)
+            : cv::Scalar(8, 159, 245);
         cv::rectangle(annotated, bounds, color, 2);
+        const auto* label = recognition_confirmed
+            ? "identidade reconhecida"
+            : (authorized ? "reconhecendo..." : "presenca detectada");
         cv::putText(
             annotated,
-            authorized ? "biometria autorizada" : "presenca detectada",
+            label,
             cv::Point(std::max(0, bounds.x), std::max(24, bounds.y - 8)),
             cv::FONT_HERSHEY_SIMPLEX,
             0.55,
@@ -127,6 +136,7 @@ struct VisionService::Impl {
     VisionService* owner;
     std::jthread worker;
     std::atomic_bool biometric_authorized{false};
+    std::atomic_bool recognition_confirmed{false};
     std::atomic_bool running{false};
 
     Impl(CameraDevice selected_camera, QString detector_path, QString recognizer_path,
@@ -191,6 +201,7 @@ struct VisionService::Impl {
                 }
 
                 const bool authorized = biometric_authorized.load(std::memory_order_relaxed);
+                const bool confirmed = recognition_confirmed.load(std::memory_order_relaxed);
                 const auto now = std::chrono::steady_clock::now();
                 if (authorized && faces.rows > 1 && !multiple_faces_reported) {
                     multiple_faces_reported = true;
@@ -214,7 +225,7 @@ struct VisionService::Impl {
 
                 if (++preview_counter >= 2) {
                     preview_counter = 0;
-                    emit owner->frameReady(preview_image(frame, face, authorized));
+                    emit owner->frameReady(preview_image(frame, face, authorized, confirmed));
                 }
 
                 frame.setTo(0);
@@ -265,6 +276,10 @@ void VisionService::stop() {
 
 void VisionService::setBiometricAuthorized(bool authorized) {
     impl_->biometric_authorized.store(authorized, std::memory_order_relaxed);
+}
+
+void VisionService::setRecognitionConfirmed(bool confirmed) {
+    impl_->recognition_confirmed.store(confirmed, std::memory_order_relaxed);
 }
 
 } // namespace elo::perception

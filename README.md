@@ -23,7 +23,7 @@ ELO ≠ QT
 - **Invariantes E3 & E4 (JEV_INDEPENDENCE & JUDGMENT_IS_NOT_ACTION)**: Consome JEV para julgamentos probabilísticos tipados (`Score`, `Choice`, `Noul`). JEV julga, mas quem toma decisão operacional e age é o ELO.
 - **Invariantes E5 & E6 (OFFLINE_PRIMARY_OPERATION & LOCAL_GUI_AVAILABILITY)**: estabelecem como requisito que `NETWORK = OFF` seja o estado padrão e que boot, interface, biometria, experiência, sorteios, questionários e persistência funcionem localmente.
 - **Invariante E7 (PRESENTATION_DOMAIN_SEPARATION)**: QML restringe-se à apresentação através de `KioskPresentationModel`. Lógica de domínio, biometria e SQLite nunca entram no QML.
-- **Invariantes E8, E9 & E10 (PERSON_AUTONOMY, NO_SILENT_ENROLLMENT & RAW_IMAGE_EPHEMERALITY)**: Participação consentida, imagens em RAM destruídas após extração de embedding (`EphemeralFrame`), sem retenção de fotos brutas.
+- **Invariantes E8, E9 & E10 (PERSON_AUTONOMY, VISIBLE_LOCAL_ENROLLMENT & RAW_IMAGE_EPHEMERALITY)**: reconhecimento local automático e visível, possibilidade imediata de esquecimento e imagens destruídas após extração do embedding, sem retenção de fotos brutas.
 - **Invariante E12 & E13 (BIOMETRIC_IS_EVIDENCE & UNKNOWN_IS_VALID)**: Correspondência facial é evidência probabilística. Estados: `UNKNOWN`, `CANDIDATE`, `SUPPORTED`, `UNCERTAIN`.
 - **Invariante E14 (LOCAL_FORGETTING)**: Direito local ao esquecimento instantâneo (`FORGET(Pxx)`) sem necessidade de conexão externa.
 - **Invariante E15 (IDENTITY_SPACE_SEPARATION)**: Separação forte de tipos:
@@ -62,8 +62,8 @@ elo/
 ### Estado demonstrado nesta versão
 
 O código atual demonstra separação de identidades, captura contínua local, detecção
-facial YuNet, embeddings SFace condicionados a consentimento, estados
-`UNKNOWN`/`UNCERTAIN`, cadastro automático consentido, persistência SQLite após
+facial YuNet, embeddings SFace locais, estados `UNKNOWN`/`UNCERTAIN`, cadastro
+automático e visível, persistência SQLite após
 reinício, esquecimento local, separação entre julgamento JEV e ação, e independência
 entre transições de sessão e geração do kernel.
 
@@ -107,18 +107,22 @@ ctest --test-dir build --output-on-failure
 
 Não há escolha interativa de câmera nem botão de aproximação. O dispositivo físico do
 totem é descoberto no boot, a captura inicia imediatamente e o detector permanece pronto
-para observar presença. Quando um rosto é sustentado por frames consecutivos, a interface
-entra automaticamente no fluxo de transparência e consentimento.
+para observar presença. Quando um único rosto é sustentado por frames consecutivos, a
+interface inicia automaticamente o reconhecimento local.
 
 ```bash
 ./build/apps/elo-kiosk/elo-kiosk
 ```
 
-O primeiro rosto só é transformado em identidade local depois da ação positiva
-“Autorizar Continuidade Local”. Após o consentimento, o ELO tenta correspondência;
-se não houver template compatível, cria automaticamente `person-local://Pxx`. Frames
-brutos não são gravados. Templates, histórico e vínculos necessários são persistidos
-no SQLite local.
+O ELO compara o embedding com os templates locais. Se não houver correspondência
+compatível, cria automaticamente `person-local://Pxx` e apresenta “Bem-vindo ao ELO”.
+Se houver correspondência, apresenta “Que bom ver você novamente” e retoma a
+continuidade. Frames brutos não são gravados: somente o vetor facial derivado, o
+histórico e os vínculos estritamente necessários são persistidos no SQLite local.
+Cada decisão combina três embeddings transitórios consecutivos. Em um retorno
+reconhecido, o vetor agregado atual refina o único template do mesmo `PersonLocalId`,
+tornando a representação local mais robusta a variações futuras sem acumular templates
+nem armazenar fotografias.
 
 Configurações de implantação, não opções apresentadas à pessoa:
 
@@ -140,12 +144,13 @@ pré-instalados e configure `ELO_DOWNLOAD_VISION_MODELS=OFF`.
 
 1. Inicie `./build/apps/elo-kiosk/elo-kiosk` com uma câmera conectada.
 2. Confirme que o vídeo aparece sem clicar em qualquer botão e aproxime um único rosto.
-3. Verifique a abertura automática da tela de transparência e escolha
-   **Autorizar Continuidade Local**.
-4. Confirme que o conteúdo inicia automaticamente e que o cabeçalho exibe um
-   `person-local://Pxx`; nenhuma foto deve ser criada no diretório de dados.
+3. Confirme que a prévia discreta no canto superior direito muda de “reconhecendo” para
+   “identidade reconhecida”, sem solicitar confirmação.
+4. Na primeira ocorrência, confirme a mensagem **Bem-vindo ao ELO** e a criação de um
+   `person-local://Pxx`; nenhuma fotografia deve ser criada no diretório de dados.
 5. Encerre e abra o aplicativo novamente usando o mesmo `ELO_DATA_DIR`. O mesmo rosto
-   deve recuperar o identificador e avançar para o próximo conteúdo.
+   deve receber **Que bom ver você novamente**, recuperar o identificador e avançar
+   para o próximo conteúdo.
 6. Acione **Direito ao Esquecimento**, reinicie e confirme que a identidade anterior
    não é recuperada.
 

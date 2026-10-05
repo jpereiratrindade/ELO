@@ -11,6 +11,15 @@ class InMemoryBiometricStore final : public IBiometricStore {
 public:
     core::Result<void> save_template(const biometric::FaceTemplate& tmpl) override {
         std::lock_guard lock(mutex_);
+        const auto existing = std::find_if(
+            templates_.begin(), templates_.end(),
+            [&tmpl](const biometric::FaceTemplate& value) {
+                return value.template_id == tmpl.template_id;
+            });
+        if (existing != templates_.end()) {
+            *existing = tmpl;
+            return {};
+        }
         templates_.push_back(tmpl);
         return {};
     }

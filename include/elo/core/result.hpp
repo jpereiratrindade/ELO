@@ -11,7 +11,7 @@ enum class ErrorCode {
     Success = 0,
     InvalidConstitutionalState,
     IdentitySpaceMismatch,
-    ConsentRequired,
+    BiometricContinuityInactive,
     EpistemicUncertainty,
     EntityRetired,
     BiometricStoreError,

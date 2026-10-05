@@ -143,6 +143,9 @@ int main(int argc, char* argv[]) {
         QObject::connect(
             presentation_model.get(), &elo::ui::KioskPresentationModel::biometricAuthorizationChanged,
             vision.get(), &elo::perception::VisionService::setBiometricAuthorized);
+        QObject::connect(
+            presentation_model.get(), &elo::ui::KioskPresentationModel::recognitionVisualStateChanged,
+            vision.get(), &elo::perception::VisionService::setRecognitionConfirmed);
     }
 
     const QUrl url(QStringLiteral("qrc:/Main.qml"));

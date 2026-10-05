@@ -62,11 +62,17 @@ IdentityHypothesis BiometricMatcher::match(
     const auto& best = candidates.front();
     hypothesis.match_score = best.similarity;
 
-    // Check ambiguity if there are at least two candidates
-    if (candidates.size() >= 2) {
-        const auto& second = candidates[1];
+    // Multiple templates for the same person strengthen that candidate. Only
+    // the strongest template belonging to another person can make it ambiguous.
+    const auto competing = std::find_if(
+        candidates.begin() + 1,
+        candidates.end(),
+        [&best](const CandidateMatch& candidate) {
+            return candidate.person_id != best.person_id;
+        });
+    if (competing != candidates.end()) {
         if (best.similarity >= config_.candidate_threshold &&
-            (best.similarity - second.similarity) < config_.ambiguity_margin) {
+            (best.similarity - competing->similarity) < config_.ambiguity_margin) {
             hypothesis.state = IdentityState::UNCERTAIN;
             hypothesis.rationale = "Ambiguous match between top candidates";
             hypothesis.resolved_person_id = std::nullopt;

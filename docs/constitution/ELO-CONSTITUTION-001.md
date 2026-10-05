@@ -25,7 +25,7 @@
     ]
   },
   "epistemic_scope": "system-constitution-hypothesis",
-  "privacy_model": "local-first, data-minimizing, consent-driven",
+  "privacy_model": "local-first, data-minimizing, visibly automatic and revocable",
   "operating_model": "offline-first",
   "motto": "Sempre pronto. Sempre incompleto."
 }
@@ -888,11 +888,11 @@ DATA_MINIMIZATION
 
 PURPOSE_LIMITATION
 
-EXPLICIT_CONSENT
+VISIBLE_LOCAL_PROCESSING
 
 REVOCABILITY
 
-NO_SILENT_ENROLLMENT
+VISIBLE_LOCAL_ENROLLMENT
 
 NO_REQUIRED_CLOUD
 
@@ -903,27 +903,28 @@ NO_RAW_FACE_RETENTION_BY_DEFAULT
 
 ---
 
-# 23. Consentimento
+# 23. Transparência e controle local
 
-Nenhuma identidade biométrica persistente deverá ser criada silenciosamente.
-
-Antes do cadastro, a pessoa deve compreender:
+O totem pode criar automaticamente uma identidade biométrica local, mas nunca de
+forma oculta. A interface deve mostrar continuamente:
 
 - que biometria facial será utilizada;
 - por qual motivo;
-- o que será armazenado;
-- o que não será armazenado;
+- que somente a representação vetorial derivada será armazenada;
 - que imagens não serão preservadas por padrão;
 - que o processamento é local;
-- como desistir;
 - como solicitar esquecimento.
 
-O consentimento deve decorrer de ação positiva.
+O cadastro não depende de confirmação interativa, mas deve ser imediatamente
+revogável pela ação local de esquecimento. O rosto enquadrado e o estado da operação
+devem permanecer visíveis durante detecção, comparação e reconhecimento.
 
 ```text
-ausência de recusa
+automação
++ transparência visível
++ esquecimento imediato
 ≠
-consentimento
+retenção oculta
 ```
 
 ---
@@ -934,34 +935,25 @@ consentimento
 pessoa aproxima-se
         │
         ▼
-interface apresenta
-a experiência
+detecção local visível
         │
         ▼
-deseja participar?
+embedding facial transitório
+        │
+        ▼
+comparação com templates locais
      ┌──┴──┐
-    não   sim
-     │     │
-     ▼     ▼
- termina  experiência
-             │
-             ▼
-      biometria será utilizada?
-          ┌──┴──┐
-         não   sim
-          │     │
-          ▼     ▼
-       sessão  explicar
-   temporária  finalidade
-                 │
-                 ▼
-            consentimento?
-              ┌──┴──┐
-             não   sim
-              │     │
-              ▼     ▼
-           sessão  continuidade
-        sem memória biométrica
+   novo  retorno
+     │      │
+     ▼      ▼
+ cria Pxx  recupera Pxx
+     └──┬───┘
+        ▼
+saudação correspondente
+        │
+        ▼
+experiência com opção local
+de esquecimento
 ```
 
 ---
@@ -1458,12 +1450,6 @@ IDLE
 
 PRESENCE_DETECTED
 
-INFORMATION_PRESENTED
-
-CONSENT_PENDING
-
-NON_BIOMETRIC_SESSION
-
 BIOMETRIC_SESSION
 
 IDENTITY_UNKNOWN
@@ -1503,8 +1489,6 @@ UNCERTAIN
 CONTRADICTORY
 
 UNAVAILABLE
-
-NOT_CONSENTED
 
 NOT_APPLICABLE
 ```
@@ -1614,20 +1598,18 @@ A primeira realização poderá funcionar como um totem de conteúdo personaliza
 
 3. presença é detectada
 
-4. experiência é apresentada
+4. reconhecimento local visível inicia automaticamente
 
-5. pessoa decide participar
+5. somente o embedding facial derivado pode ser persistido
 
-6. consentimento aplicável é verificado
+6. primeira visita ou retorno reconhecido são distinguidos
 
-7. reconhecimento local ocorre quando autorizado
-
-8. identidade local resulta em:
+7. identidade local resulta em:
       UNKNOWN
       ou
       Pxx
 
-9. conteúdo é selecionado
+8. conteúdo é selecionado
 
 10. elegibilidade para pesquisa é verificada
 
@@ -1720,11 +1702,11 @@ A GUI não contém lógica crítica de domínio, biometria ou identidade.
 
 ## E8 — PERSON_AUTONOMY
 
-Participação depende de decisão da pessoa.
+Participação pode ser encerrada e a identidade local pode ser esquecida pela pessoa.
 
-## E9 — NO_SILENT_ENROLLMENT
+## E9 — VISIBLE_LOCAL_ENROLLMENT
 
-Não existe cadastro biométrico persistente silencioso.
+Cadastro biométrico local automático permanece visível e imediatamente revogável.
 
 ## E10 — RAW_IMAGE_EPHEMERALITY
 
@@ -1793,7 +1775,7 @@ O ELO viola esta constituição se:
 - tornar a interface dependente de conteúdo remoto obrigatório;
 - colocar lógica biométrica diretamente em QML;
 - armazenar imagens silenciosamente;
-- cadastrar biometria sem consentimento;
+- cadastrar biometria sem indicação visual ou sem esquecimento local;
 - inferir atributos sensíveis a partir da face;
 - exigir identidade civil sem necessidade;
 - tratar baixa confiança como identificação positiva;
@@ -1848,7 +1830,7 @@ S12
 representação biométrica local
 
 S13
-criação consentida de identidade local
+criação automática e visível de identidade local
 
 S14
 reconhecimento posterior da mesma pessoa
@@ -1903,16 +1885,17 @@ Pessoa desconhecida aproxima-se.
 Esperado:
 
 ```text
-UNKNOWN
+person-local://P01
+newly_enrolled = true
 ```
 
-Nenhuma identidade persistente é criada automaticamente.
+Somente o template vetorial derivado é persistido; a fotografia não é armazenada.
 
 ---
 
-## EXP-ELO-003 — Consented Enrollment
+## EXP-ELO-003 — Automatic Visible Enrollment
 
-A pessoa autoriza continuidade biométrica.
+A primeira identidade local é criada automaticamente e o resultado é mostrado.
 
 Esperado:
 

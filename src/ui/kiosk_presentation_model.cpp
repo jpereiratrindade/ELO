@@ -35,25 +35,6 @@ quint32 KioskPresentationModel::kernelGeneration() const {
     return engine_->kernel_view().generation;
 }
 
-void KioskPresentationModel::chooseParticipation(bool participate) {
-    if (engine_) {
-        engine_->decide_participation(participate);
-        emit stateChanged();
-    }
-}
-
-void KioskPresentationModel::chooseBiometricConsent(bool consent) {
-    if (engine_) {
-        if (engine_->current_state() == experience::SessionState::PRESENCE_DETECTED ||
-            engine_->current_state() == experience::SessionState::CONSENT_PENDING) {
-            engine_->decide_participation(true);
-        }
-        engine_->decide_biometric_consent(consent);
-        emit stateChanged();
-        emit biometricAuthorizationChanged(consent);
-    }
-}
-
 void KioskPresentationModel::advanceContent() {
     if (engine_) {
         current_content_ = engine_->select_next_content();
@@ -76,6 +57,17 @@ void KioskPresentationModel::submitSurveyResponse(
 void KioskPresentationModel::requestForgetMe() {
     if (engine_ && engine_->active_person()) {
         (void)engine_->request_forget(*engine_->active_person());
+        emit biometricAuthorizationChanged(false);
+        emit recognitionVisualStateChanged(false);
+        engine_->finish_session();
+        current_content_.clear();
+        recognition_resolved_ = false;
+        pending_embeddings_.clear();
+        pending_quality_sum_ = 0.0;
+        greeting_title_ = QStringLiteral("Identidade local esquecida");
+        greeting_message_ = QStringLiteral("A continuidade anterior foi removida deste totem.");
+        emit contentChanged();
+        emit recognitionChanged();
         emit stateChanged();
     }
 }
@@ -83,9 +75,16 @@ void KioskPresentationModel::requestForgetMe() {
 void KioskPresentationModel::finishSession() {
     if (engine_) {
         emit biometricAuthorizationChanged(false);
+        emit recognitionVisualStateChanged(false);
         engine_->finish_session();
         current_content_.clear();
+        recognition_resolved_ = false;
+        pending_embeddings_.clear();
+        pending_quality_sum_ = 0.0;
+        greeting_title_ = QStringLiteral("Reconhecendo presença");
+        greeting_message_ = QStringLiteral("Processamento local em andamento");
         emit contentChanged();
+        emit recognitionChanged();
         emit stateChanged();
     }
 }
@@ -103,16 +102,30 @@ void KioskPresentationModel::onFacePresenceChanged(bool present) {
     face_detected_ = present;
     emit visionChanged();
     if (present && engine_ && engine_->current_state() == experience::SessionState::IDLE) {
+        recognition_resolved_ = false;
+        pending_embeddings_.clear();
+        pending_quality_sum_ = 0.0;
+        greeting_title_ = QStringLiteral("Reconhecendo presença");
+        greeting_message_ = QStringLiteral("Comparando somente a identidade facial local");
         engine_->on_presence_detected();
+        engine_->begin_automatic_continuity();
+        emit recognitionVisualStateChanged(false);
+        emit biometricAuthorizationChanged(true);
+        emit recognitionChanged();
         emit stateChanged();
     } else if (!present && engine_ &&
                (engine_->current_state() == experience::SessionState::PRESENCE_DETECTED ||
-                engine_->current_state() == experience::SessionState::CONSENT_PENDING ||
                 engine_->current_state() == experience::SessionState::BIOMETRIC_SESSION ||
                 engine_->current_state() == experience::SessionState::IDENTITY_CANDIDATE ||
-                engine_->current_state() == experience::SessionState::IDENTITY_UNCERTAIN)) {
+                engine_->current_state() == experience::SessionState::IDENTITY_UNCERTAIN ||
+                engine_->current_state() == experience::SessionState::IDENTITY_SUPPORTED)) {
         emit biometricAuthorizationChanged(false);
+        emit recognitionVisualStateChanged(false);
         engine_->finish_session();
+        recognition_resolved_ = false;
+        pending_embeddings_.clear();
+        pending_quality_sum_ = 0.0;
+        emit recognitionChanged();
         emit stateChanged();
     }
 }
@@ -124,7 +137,40 @@ void KioskPresentationModel::onFaceEmbeddingReady(
     }
 
     const std::vector<float> values(embedding.begin(), embedding.end());
-    auto resolution = engine_->identify_or_enroll_consented_face(values, quality);
+    if (values.empty()) {
+        return;
+    }
+    if (!pending_embeddings_.empty() && pending_embeddings_.front().size() != values.size()) {
+        pending_embeddings_.clear();
+        pending_quality_sum_ = 0.0;
+    }
+    pending_embeddings_.push_back(values);
+    pending_quality_sum_ += quality;
+
+    constexpr std::size_t samples_required = 3;
+    if (pending_embeddings_.size() < samples_required) {
+        greeting_message_ = QStringLiteral("Construindo identidade facial local • amostra %1 de %2")
+            .arg(pending_embeddings_.size())
+            .arg(samples_required);
+        emit recognitionChanged();
+        return;
+    }
+
+    std::vector<float> aggregate(values.size(), 0.0F);
+    for (const auto& sample : pending_embeddings_) {
+        for (std::size_t index = 0; index < sample.size(); ++index) {
+            aggregate[index] += sample[index];
+        }
+    }
+    for (auto& component : aggregate) {
+        component /= static_cast<float>(pending_embeddings_.size());
+    }
+    const double aggregate_quality = pending_quality_sum_ /
+        static_cast<double>(pending_embeddings_.size());
+    pending_embeddings_.clear();
+    pending_quality_sum_ = 0.0;
+
+    auto resolution = engine_->identify_or_enroll_local_face(aggregate, aggregate_quality);
     if (!resolution) {
         vision_status_ = QString::fromStdString(resolution.error().to_string());
         emit visionChanged();
@@ -137,9 +183,18 @@ void KioskPresentationModel::onFaceEmbeddingReady(
 
     if (resolution->state == biometric::IdentityState::SUPPORTED) {
         emit biometricAuthorizationChanged(false);
-        current_content_ = engine_->select_next_content();
-        emit contentChanged();
-        emit stateChanged();
+        emit recognitionVisualStateChanged(true);
+        recognition_resolved_ = true;
+        if (resolution->newly_enrolled) {
+            greeting_title_ = QStringLiteral("Bem-vindo ao ELO");
+            greeting_message_ = QStringLiteral(
+                "Sua continuidade local foi criada. Guardamos somente uma representação facial vetorial, nunca a fotografia.");
+        } else {
+            greeting_title_ = QStringLiteral("Que bom ver você novamente");
+            greeting_message_ = QStringLiteral(
+                "Continuidade local reconhecida. Vamos seguir de onde você parou.");
+        }
+        emit recognitionChanged();
     }
 }
 
@@ -154,10 +209,15 @@ void KioskPresentationModel::onVisionFailure(const QString& message) {
     face_detected_ = false;
     vision_status_ = QStringLiteral("Falha de visão: ") + message;
     emit biometricAuthorizationChanged(false);
+    emit recognitionVisualStateChanged(false);
     if (engine_ && engine_->current_state() != experience::SessionState::IDLE) {
         engine_->finish_session();
         current_content_.clear();
+        recognition_resolved_ = false;
+        pending_embeddings_.clear();
+        pending_quality_sum_ = 0.0;
         emit contentChanged();
+        emit recognitionChanged();
         emit stateChanged();
     }
     emit visionChanged();
@@ -194,14 +254,6 @@ bool KioskPresentationModel::isBiometricSession() const {
 uint32_t KioskPresentationModel::kernelGeneration() const {
     if (!engine_) return 0;
     return engine_->kernel_view().generation;
-}
-
-void KioskPresentationModel::chooseParticipation(bool participate) {
-    if (engine_) engine_->decide_participation(participate);
-}
-
-void KioskPresentationModel::chooseBiometricConsent(bool consent) {
-    if (engine_) engine_->decide_biometric_consent(consent);
 }
 
 void KioskPresentationModel::advanceContent() {

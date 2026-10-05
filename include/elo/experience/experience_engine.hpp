@@ -22,9 +22,6 @@ namespace elo::experience {
 enum class SessionState {
     IDLE,
     PRESENCE_DETECTED,
-    INFORMATION_PRESENTED,
-    CONSENT_PENDING,
-    NON_BIOMETRIC_SESSION,
     BIOMETRIC_SESSION,
     IDENTITY_UNKNOWN,
     IDENTITY_CANDIDATE,
@@ -41,9 +38,6 @@ constexpr std::string_view to_string(SessionState s) noexcept {
     switch (s) {
         case SessionState::IDLE: return "IDLE";
         case SessionState::PRESENCE_DETECTED: return "PRESENCE_DETECTED";
-        case SessionState::INFORMATION_PRESENTED: return "INFORMATION_PRESENTED";
-        case SessionState::CONSENT_PENDING: return "CONSENT_PENDING";
-        case SessionState::NON_BIOMETRIC_SESSION: return "NON_BIOMETRIC_SESSION";
         case SessionState::BIOMETRIC_SESSION: return "BIOMETRIC_SESSION";
         case SessionState::IDENTITY_UNKNOWN: return "IDENTITY_UNKNOWN";
         case SessionState::IDENTITY_CANDIDATE: return "IDENTITY_CANDIDATE";
@@ -63,11 +57,7 @@ constexpr std::string_view to_string(SessionState s) noexcept {
 /// ente::kernel constitutive transformation.
 enum class EventType {
     PRESENCE_DETECTED,
-    INFORMATION_ACKNOWLEDGED,
-    PARTICIPATION_ACCEPTED,
-    PARTICIPATION_DECLINED,
-    BIOMETRIC_CONSENT_GRANTED,
-    BIOMETRIC_CONSENT_DECLINED,
+    BIOMETRIC_CONTINUITY_STARTED,
     IDENTITY_EVIDENCE_EVALUATED,
     PERSON_ENROLLED,
     CONTENT_SELECTED,
@@ -132,19 +122,19 @@ public:
 
     // Session flow triggers (Section 24)
     void on_presence_detected();
-    void on_information_acknowledged();
-    void decide_participation(bool participate);
-    void decide_biometric_consent(bool consent);
+    void begin_automatic_continuity();
 
     // Biometric continuity hypothesis ingestion (Section 21, 37)
     void evaluate_biometric_evidence(const biometric::IdentityHypothesis& hypothesis);
 
-    // Enroll newly consented participant (Section 23, Invariant E9)
-    core::Result<identity::PersonLocalId> enroll_consented_person(const std::vector<float>& embedding, double quality);
+    // Persist only the derived local template; raw camera images remain transient.
+    core::Result<identity::PersonLocalId> enroll_local_person(
+        const std::vector<float>& embedding,
+        double quality);
 
-    // Resolve a consented face automatically. UNKNOWN creates a new local
+    // Resolve a face automatically. UNKNOWN creates a new local
     // identity; ambiguous evidence never creates a duplicate identity.
-    core::Result<biometric::IdentityHypothesis> identify_or_enroll_consented_face(
+    core::Result<biometric::IdentityHypothesis> identify_or_enroll_local_face(
         const std::vector<float>& embedding,
         double quality);
 
@@ -177,7 +167,7 @@ private:
 
     SessionState state_{SessionState::IDLE};
     std::optional<identity::PersonLocalId> active_person_{std::nullopt};
-    bool biometric_consented_{false};
+    bool biometric_continuity_active_{false};
     std::uint64_t next_event_sequence_{1};
     std::uint64_t session_revision_{0};
     std::optional<Event> last_event_{std::nullopt};

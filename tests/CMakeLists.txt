@@ -39,3 +39,17 @@ target_include_directories(test_sqlite_storage PRIVATE
 )
 
 add_test(NAME SqliteStorage COMMAND test_sqlite_storage)
+
+add_executable(test_kiosk_presentation
+    test_kiosk_presentation.cpp
+)
+
+target_link_libraries(test_kiosk_presentation PRIVATE
+    elo_core
+)
+
+target_include_directories(test_kiosk_presentation PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+)
+
+add_test(NAME KioskPresentation COMMAND test_kiosk_presentation)
