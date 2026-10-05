@@ -19,9 +19,9 @@ ELO ≠ QT
 ```
 
 - **Invariante E1 (SYSTEM_AUTONOMY)**: O ELO tem identidade, propósito, ciclo de vida e regras próprias.
-- **Invariante E2 (ENTE_INDEPENDENCE)**: Consome `ente-kernel` (`ente::kernel`) estritamente por seu contrato constitutivo (`observe()`, `transform()`, `retire()`), sem vazar domínio para o kernel.
+- **Invariante E2 (ENTE_INDEPENDENCE)**: Consome `ente-kernel` (`ente::kernel`) estritamente por seu contrato constitutivo. Eventos e transições de sessão pertencem ao ELO e não alteram a geração do kernel; `transform()` fica reservado a mudanças constitutivas identificadas da própria realização.
 - **Invariantes E3 & E4 (JEV_INDEPENDENCE & JUDGMENT_IS_NOT_ACTION)**: Consome JEV para julgamentos probabilísticos tipados (`Score`, `Choice`, `Noul`). JEV julga, mas quem toma decisão operacional e age é o ELO.
-- **Invariantes E5 & E6 (OFFLINE_PRIMARY_OPERATION & LOCAL_GUI_AVAILABILITY)**: `NETWORK = OFF` é o estado padrão. Boot, interface, biometria, experiência, sorteios, questionários e persistência funcionam 100% locais e desconectados.
+- **Invariantes E5 & E6 (OFFLINE_PRIMARY_OPERATION & LOCAL_GUI_AVAILABILITY)**: estabelecem como requisito que `NETWORK = OFF` seja o estado padrão e que boot, interface, biometria, experiência, sorteios, questionários e persistência funcionem localmente.
 - **Invariante E7 (PRESENTATION_DOMAIN_SEPARATION)**: QML restringe-se à apresentação através de `KioskPresentationModel`. Lógica de domínio, biometria e SQLite nunca entram no QML.
 - **Invariantes E8, E9 & E10 (PERSON_AUTONOMY, NO_SILENT_ENROLLMENT & RAW_IMAGE_EPHEMERALITY)**: Participação consentida, imagens em RAM destruídas após extração de embedding (`EphemeralFrame`), sem retenção de fotos brutas.
 - **Invariante E12 & E13 (BIOMETRIC_IS_EVIDENCE & UNKNOWN_IS_VALID)**: Correspondência facial é evidência probabilística. Estados: `UNKNOWN`, `CANDIDATE`, `SUPPORTED`, `UNCERTAIN`.
@@ -39,8 +39,8 @@ elo/
 ├── CMakeLists.txt              # Configuração global (C++26, Ninja, Qt6)
 ├── docs/constitution/          # ELO-CONSTITUTION-001 (documento normativo)
 ├── external/
-│   ├── ente-kernel/            # Integração limpa com ente::kernel
-│   └── jev/                    # Contrato de julgamento probabilístico (Score, Choice, Noul)
+│   ├── ente-kernel/            # Snapshot vendorizado temporário de ente::kernel
+│   └── jev/                    # Stub local do contrato JEV (Score, Choice, Noul)
 ├── include/elo/
 │   ├── core/                   # Invariantes, tipos fundamentais, Result<T, Error>
 │   ├── identity/               # Espaços de identidade estritamente separados
@@ -56,8 +56,21 @@ elo/
 │   ├── Main.qml
 │   └── qml.qrc
 ├── apps/elo-kiosk/             # Executável do totem presencial
-└── tests/                      # Validação de invariantes (E1–E22) e experimentos (EXP-001–014)
+└── tests/                      # Checks constitucionais e experimentos já implementados
 ```
+
+### Estado demonstrado nesta versão
+
+O código atual demonstra separação de identidades, descarte de frames em memória,
+biometria sintética como evidência, estados `UNKNOWN`/`UNCERTAIN`, consentimento,
+esquecimento em memória, continuidade durante o processo, separação entre julgamento
+JEV e ação, e independência entre transições de sessão e geração do kernel.
+
+Ainda não estão demonstrados: persistência após reinício, captura e codificação facial
+reais, execução física no Raspberry Pi 5, consumo versionado dos repositórios externos,
+nem a totalidade de E1–E22 e EXP-ELO-001–014. Os stores de produção ainda são
+`InMemory*`; `external/ente-kernel` é um snapshot vendorizado e `external/jev` é um
+stub de contrato até que as dependências independentes sejam conectadas.
 
 ---
 

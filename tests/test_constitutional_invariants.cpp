@@ -76,7 +76,7 @@ void test_e15_identity_spaces() {
 }
 
 void test_e2_ente_kernel_integration() {
-    std::cout << "[TEST] Invariant E2: ENTE_INDEPENDENCE & Continuity...\n";
+    std::cout << "[TEST] Invariant E2: operational state is not constitutive transformation...\n";
     auto bio_store = std::make_shared<elo::storage::InMemoryBiometricStore>();
     auto exp_store = std::make_shared<elo::storage::InMemoryExperienceStore>();
     auto srv_store = std::make_shared<elo::storage::InMemorySurveyStore>();
@@ -93,9 +93,43 @@ void test_e2_ente_kernel_integration() {
     TEST_ASSERT(v0.alive == true, "Kernel is alive");
 
     engine.on_presence_detected();
+    engine.on_information_acknowledged();
+    engine.decide_participation(true);
+    engine.decide_biometric_consent(false);
+    (void)engine.select_next_content();
+    engine.finish_session();
+
     auto v1 = engine.kernel_view();
-    TEST_ASSERT(v1.generation == 1, "Generation incremented on transformation");
-    std::cout << "  -> PASSED: ente::kernel consumed strictly by contract.\n";
+    TEST_ASSERT(v1.generation == 0, "Operational events must not increment kernel generation");
+    TEST_ASSERT(engine.last_event().has_value(), "Operational event was recorded by ELO");
+    TEST_ASSERT(engine.last_event()->type == elo::experience::EventType::SESSION_FINISHED,
+                "Last operational event is session completion");
+    TEST_ASSERT(engine.last_event()->sequence == 6, "Operational events have their own sequence");
+    TEST_ASSERT(engine.session_revision() == 5, "Only actual session state changes increment revision");
+    TEST_ASSERT(engine.last_session_transition()->from == elo::experience::SessionState::CONTENT_ACTIVE,
+                "Session transition records its origin");
+    TEST_ASSERT(engine.last_session_transition()->to == elo::experience::SessionState::IDLE,
+                "Session transition records its destination");
+
+    auto invalid_transformation = engine.apply_constitutive_transformation({});
+    TEST_ASSERT(!invalid_transformation.has_value(), "Anonymous constitutive changes are rejected");
+    TEST_ASSERT(engine.kernel_view().generation == 0, "Rejected changes do not increment generation");
+
+    auto transformed = engine.apply_constitutive_transformation({
+        .change_id = "test:biometric-model-v2",
+        .description = "Replace the biometric model as part of a controlled upgrade"
+    });
+    TEST_ASSERT(transformed.has_value(), "Explicit constitutive transformation succeeded");
+    TEST_ASSERT(transformed->generation == 1, "Only explicit transformation increments generation");
+    TEST_ASSERT(engine.last_constitutive_transformation().has_value(),
+                "Constitutive change metadata is retained");
+    TEST_ASSERT(engine.last_constitutive_transformation()->change_id == "test:biometric-model-v2",
+                "Constitutive change is identified");
+    TEST_ASSERT(!engine.last_constitutive_transformation()->description.empty(),
+                "Constitutive change explains the realization upgrade");
+    TEST_ASSERT(engine.last_event()->type == elo::experience::EventType::SESSION_FINISHED,
+                "Constitutive change is not misreported as a session event");
+    std::cout << "  -> PASSED: session revisions and kernel generations are independent.\n";
 }
 
 void test_exp_002_exp_003_exp_004_continuity() {
@@ -164,14 +198,20 @@ void test_exp_005_ambiguity() {
     elo::biometric::FaceTemplate t1{
         .template_id = "t1",
         .person_local_id = elo::identity::PersonLocalId("person-local://P01"),
+        .model_id = "synthetic-test-model",
+        .model_version = "1",
         .representation = {1.0f, 0.0f},
-        .quality = 0.9
+        .quality = 0.9,
+        .integrity_digest = "test:t1"
     };
     elo::biometric::FaceTemplate t2{
         .template_id = "t2",
         .person_local_id = elo::identity::PersonLocalId("person-local://P02"),
+        .model_id = "synthetic-test-model",
+        .model_version = "1",
         .representation = {0.999f, 0.01f},
-        .quality = 0.9
+        .quality = 0.9,
+        .integrity_digest = "test:t2"
     };
 
     std::vector<float> query = {1.0f, 0.005f};
@@ -202,12 +242,15 @@ void test_exp_007_forget_me() {
     auto p_id = *p_res;
 
     // Register survey answer linked to person
-    engine.submit_survey_response("q1", "opt_A", elo::survey::LinkagePolicy::LinkedToIdentity);
+    auto survey_result = engine.submit_survey_response(
+        "q1", "opt_A", elo::survey::LinkagePolicy::LinkedToIdentity);
+    TEST_ASSERT(survey_result.has_value(), "Linked survey response recorded");
     auto all_resp = srv_store->get_all_responses().value();
     TEST_ASSERT(all_resp.front().linked_person.has_value(), "Response linked before forgetting");
 
     // Invoke forget
-    engine.request_forget(p_id);
+    auto forget_result = engine.request_forget(p_id);
+    TEST_ASSERT(forget_result.has_value() && *forget_result, "Forget request completed");
 
     // Verify biometric store has no templates for p_id
     auto templates_left = bio_store->get_templates_for(p_id).value();
@@ -254,7 +297,7 @@ int main() {
     test_e3_e4_jev_independence();
 
     std::cout << "========================================================\n";
-    std::cout << "   ALL CONSTITUTIONAL EXPERIMENTS & INVARIANTS PASSED!  \n";
+    std::cout << "   ALL IMPLEMENTED CONSTITUTIONAL CHECKS PASSED!        \n";
     std::cout << "========================================================\n";
     return 0;
 }

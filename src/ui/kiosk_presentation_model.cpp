@@ -38,7 +38,6 @@ void KioskPresentationModel::userApproached() {
     if (engine_) {
         engine_->on_presence_detected();
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -46,7 +45,6 @@ void KioskPresentationModel::acknowledgeInfo() {
     if (engine_) {
         engine_->on_information_acknowledged();
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -54,7 +52,6 @@ void KioskPresentationModel::chooseParticipation(bool participate) {
     if (engine_) {
         engine_->decide_participation(participate);
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -62,7 +59,6 @@ void KioskPresentationModel::chooseBiometricConsent(bool consent) {
     if (engine_) {
         engine_->decide_biometric_consent(consent);
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -71,7 +67,6 @@ void KioskPresentationModel::advanceContent() {
         current_content_ = engine_->select_next_content();
         emit contentChanged();
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -83,7 +78,6 @@ void KioskPresentationModel::submitSurveyResponse(
         (void)engine_->submit_survey_response(
             questionId.toStdString(), selectedOption.toStdString(), policy);
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -91,7 +85,6 @@ void KioskPresentationModel::requestForgetMe() {
     if (engine_ && engine_->active_person()) {
         (void)engine_->request_forget(*engine_->active_person());
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 
@@ -101,7 +94,6 @@ void KioskPresentationModel::finishSession() {
         current_content_.clear();
         emit contentChanged();
         emit stateChanged();
-        emit kernelChanged();
     }
 }
 

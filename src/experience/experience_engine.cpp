@@ -17,37 +17,70 @@ ExperienceEngine::ExperienceEngine(
       survey_store_{std::move(survey_store)},
       jev_adapter_{std::move(jev_adapter)} {}
 
+void ExperienceEngine::transition_to(SessionState next_state, EventType cause) {
+    const Event event{.type = cause, .sequence = next_event_sequence_++};
+    last_event_ = event;
+
+    if (state_ == next_state) {
+        return;
+    }
+
+    const auto previous_state = state_;
+    state_ = next_state;
+    ++session_revision_;
+    last_session_transition_ = SessionTransition{
+        .from = previous_state,
+        .to = next_state,
+        .cause = event
+    };
+}
+
+core::Result<ente::kernel::view> ExperienceEngine::apply_constitutive_transformation(
+    const ConstitutiveTransformation& transformation) {
+    if (transformation.change_id.empty()) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::InvalidOperation,
+            "A constitutive transformation requires a non-empty change identifier"));
+    }
+
+    if (!kernel_.transform()) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::InvalidConstitutionalState,
+            "The ente-kernel rejected the constitutive transformation",
+            transformation.change_id));
+    }
+
+    last_constitutive_transformation_ = transformation;
+    return kernel_.observe();
+}
+
 void ExperienceEngine::on_presence_detected() {
     if (state_ == SessionState::IDLE) {
-        state_ = SessionState::PRESENCE_DETECTED;
-        (void)kernel_.transform();
+        transition_to(SessionState::PRESENCE_DETECTED, EventType::PRESENCE_DETECTED);
     }
 }
 
 void ExperienceEngine::on_information_acknowledged() {
-    state_ = SessionState::CONSENT_PENDING;
-    (void)kernel_.transform();
+    transition_to(SessionState::CONSENT_PENDING, EventType::INFORMATION_ACKNOWLEDGED);
 }
 
 void ExperienceEngine::decide_participation(bool participate) {
     if (!participate) {
-        state_ = SessionState::IDLE;
         active_person_ = std::nullopt;
         biometric_consented_ = false;
+        transition_to(SessionState::IDLE, EventType::PARTICIPATION_DECLINED);
     } else {
-        state_ = SessionState::CONSENT_PENDING;
+        transition_to(SessionState::CONSENT_PENDING, EventType::PARTICIPATION_ACCEPTED);
     }
-    (void)kernel_.transform();
 }
 
 void ExperienceEngine::decide_biometric_consent(bool consent) {
     biometric_consented_ = consent;
     if (consent) {
-        state_ = SessionState::BIOMETRIC_SESSION;
+        transition_to(SessionState::BIOMETRIC_SESSION, EventType::BIOMETRIC_CONSENT_GRANTED);
     } else {
-        state_ = SessionState::NON_BIOMETRIC_SESSION;
+        transition_to(SessionState::NON_BIOMETRIC_SESSION, EventType::BIOMETRIC_CONSENT_DECLINED);
     }
-    (void)kernel_.transform();
 }
 
 void ExperienceEngine::evaluate_biometric_evidence(const biometric::IdentityHypothesis& hypothesis) {
@@ -57,24 +90,23 @@ void ExperienceEngine::evaluate_biometric_evidence(const biometric::IdentityHypo
 
     switch (hypothesis.state) {
         case biometric::IdentityState::SUPPORTED:
-            state_ = SessionState::IDENTITY_SUPPORTED;
             active_person_ = hypothesis.resolved_person_id;
+            transition_to(SessionState::IDENTITY_SUPPORTED, EventType::IDENTITY_EVIDENCE_EVALUATED);
             break;
         case biometric::IdentityState::CANDIDATE:
-            state_ = SessionState::IDENTITY_CANDIDATE;
             active_person_ = hypothesis.resolved_person_id;
+            transition_to(SessionState::IDENTITY_CANDIDATE, EventType::IDENTITY_EVIDENCE_EVALUATED);
             break;
         case biometric::IdentityState::UNCERTAIN:
-            state_ = SessionState::IDENTITY_UNCERTAIN;
             active_person_ = std::nullopt;
+            transition_to(SessionState::IDENTITY_UNCERTAIN, EventType::IDENTITY_EVIDENCE_EVALUATED);
             break;
         case biometric::IdentityState::UNKNOWN:
         default:
-            state_ = SessionState::IDENTITY_UNKNOWN;
             active_person_ = std::nullopt;
+            transition_to(SessionState::IDENTITY_UNKNOWN, EventType::IDENTITY_EVIDENCE_EVALUATED);
             break;
     }
-    (void)kernel_.transform();
 }
 
 core::Result<identity::PersonLocalId> ExperienceEngine::enroll_consented_person(
@@ -107,14 +139,12 @@ core::Result<identity::PersonLocalId> ExperienceEngine::enroll_consented_person(
     }
 
     active_person_ = new_person;
-    state_ = SessionState::IDENTITY_SUPPORTED;
-    (void)kernel_.transform();
+    transition_to(SessionState::IDENTITY_SUPPORTED, EventType::PERSON_ENROLLED);
     return new_person;
 }
 
 std::string ExperienceEngine::select_next_content() {
-    state_ = SessionState::CONTENT_ACTIVE;
-    (void)kernel_.transform();
+    transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
 
     if (!active_person_) {
         return "content_welcome_anonymous";
@@ -142,11 +172,10 @@ bool ExperienceEngine::evaluate_survey_selection(double probability) {
     std::bernoulli_distribution dist(probability);
     bool selected = dist(rng_);
     if (selected) {
-        state_ = SessionState::SURVEY_SELECTED;
+        transition_to(SessionState::SURVEY_SELECTED, EventType::SURVEY_SELECTION_EVALUATED);
     } else {
-        state_ = SessionState::SURVEY_ELIGIBLE;
+        transition_to(SessionState::SURVEY_ELIGIBLE, EventType::SURVEY_SELECTION_EVALUATED);
     }
-    (void)kernel_.transform();
     return selected;
 }
 
@@ -171,8 +200,7 @@ core::Result<void> ExperienceEngine::submit_survey_response(
         return res;
     }
 
-    state_ = SessionState::SESSION_COMPLETE;
-    (void)kernel_.transform();
+    transition_to(SessionState::SESSION_COMPLETE, EventType::SURVEY_RESPONSE_SUBMITTED);
     return {};
 }
 
@@ -183,17 +211,17 @@ core::Result<bool> ExperienceEngine::request_forget(const identity::PersonLocalI
 
     if (active_person_ && *active_person_ == person_id) {
         active_person_ = std::nullopt;
-        state_ = SessionState::IDENTITY_UNKNOWN;
+        transition_to(SessionState::IDENTITY_UNKNOWN, EventType::PERSON_FORGOTTEN);
+    } else {
+        transition_to(state_, EventType::PERSON_FORGOTTEN);
     }
-    (void)kernel_.transform();
     return true;
 }
 
 void ExperienceEngine::finish_session() {
     active_person_ = std::nullopt;
     biometric_consented_ = false;
-    state_ = SessionState::IDLE;
-    (void)kernel_.transform();
+    transition_to(SessionState::IDLE, EventType::SESSION_FINISHED);
 }
 
 } // namespace elo::experience

@@ -8,8 +8,11 @@
 #include "elo/core/result.hpp"
 
 #include <memory>
+#include <cstdint>
+#include <optional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace elo::experience {
@@ -54,6 +57,47 @@ constexpr std::string_view to_string(SessionState s) noexcept {
     return "UNKNOWN";
 }
 
+/// @brief Operational facts emitted by the ELO domain.
+/// These events belong to the life of the system and never imply an
+/// ente::kernel constitutive transformation.
+enum class EventType {
+    PRESENCE_DETECTED,
+    INFORMATION_ACKNOWLEDGED,
+    PARTICIPATION_ACCEPTED,
+    PARTICIPATION_DECLINED,
+    BIOMETRIC_CONSENT_GRANTED,
+    BIOMETRIC_CONSENT_DECLINED,
+    IDENTITY_EVIDENCE_EVALUATED,
+    PERSON_ENROLLED,
+    CONTENT_SELECTED,
+    SURVEY_SELECTION_EVALUATED,
+    SURVEY_RESPONSE_SUBMITTED,
+    PERSON_FORGOTTEN,
+    SESSION_FINISHED
+};
+
+struct Event {
+    EventType type;
+    std::uint64_t sequence;
+};
+
+/// @brief A domain state change caused by an operational event.
+template <typename State>
+struct DomainStateTransition {
+    State from;
+    State to;
+    Event cause;
+};
+
+using SessionTransition = DomainStateTransition<SessionState>;
+
+/// @brief An identified change to the realization of ELO itself.
+/// Examples include a biometric-model replacement or a storage migration.
+struct ConstitutiveTransformation {
+    std::string change_id;
+    std::string description;
+};
+
 /// @brief Central coordinator for personal experience sessions.
 /// Conforms to Invariants E1, E2 (ente::kernel consumed), E8 (person autonomy), E17 (randomization independence).
 class ExperienceEngine {
@@ -70,6 +114,20 @@ public:
     [[nodiscard]] SessionState current_state() const noexcept { return state_; }
     [[nodiscard]] ente::kernel::view kernel_view() const noexcept { return kernel_.observe(); }
     [[nodiscard]] const std::optional<identity::PersonLocalId>& active_person() const noexcept { return active_person_; }
+    [[nodiscard]] std::uint64_t session_revision() const noexcept { return session_revision_; }
+    [[nodiscard]] const std::optional<Event>& last_event() const noexcept { return last_event_; }
+    [[nodiscard]] const std::optional<SessionTransition>& last_session_transition() const noexcept {
+        return last_session_transition_;
+    }
+    [[nodiscard]] const std::optional<ConstitutiveTransformation>&
+    last_constitutive_transformation() const noexcept {
+        return last_constitutive_transformation_;
+    }
+
+    // Reserved for changes to the realization of ELO itself. Operational
+    // events and session state changes must not call this API.
+    core::Result<ente::kernel::view> apply_constitutive_transformation(
+        const ConstitutiveTransformation& transformation);
 
     // Session flow triggers (Section 24)
     void on_presence_detected();
@@ -112,9 +170,16 @@ private:
     SessionState state_{SessionState::IDLE};
     std::optional<identity::PersonLocalId> active_person_{std::nullopt};
     bool biometric_consented_{false};
+    std::uint64_t next_event_sequence_{1};
+    std::uint64_t session_revision_{0};
+    std::optional<Event> last_event_{std::nullopt};
+    std::optional<SessionTransition> last_session_transition_{std::nullopt};
+    std::optional<ConstitutiveTransformation> last_constitutive_transformation_{std::nullopt};
 
     std::mt19937_64 rng_{std::random_device{}()};
     std::uint64_t next_person_seq_{1};
+
+    void transition_to(SessionState next_state, EventType cause);
 };
 
 } // namespace elo::experience
