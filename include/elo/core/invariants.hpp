@@ -1,0 +1,64 @@
+#pragma once
+
+#include <string_view>
+#include <array>
+
+namespace elo::core {
+
+/// @brief Constitutional Invariants from ELO-CONSTITUTION-001 Section 50.
+enum class Invariant {
+    E1_SYSTEM_AUTONOMY,
+    E2_ENTE_INDEPENDENCE,
+    E3_JEV_INDEPENDENCE,
+    E4_JUDGMENT_IS_NOT_ACTION,
+    E5_OFFLINE_PRIMARY_OPERATION,
+    E6_LOCAL_GUI_AVAILABILITY,
+    E7_PRESENTATION_DOMAIN_SEPARATION,
+    E8_PERSON_AUTONOMY,
+    E9_NO_SILENT_ENROLLMENT,
+    E10_RAW_IMAGE_EPHEMERALITY,
+    E11_MINIMUM_PERSISTENCE,
+    E12_BIOMETRIC_IS_EVIDENCE,
+    E13_UNKNOWN_IS_VALID,
+    E14_LOCAL_FORGETTING,
+    E15_IDENTITY_SPACE_SEPARATION,
+    E16_NO_SENSITIVE_TRAIT_INFERENCE,
+    E17_RANDOMIZATION_INDEPENDENCE,
+    E18_PURPOSE_BOUND_DATA,
+    E19_REVOCABLE_PARTICIPATION,
+    E20_CAPABILITY_MUTABILITY,
+    E21_SUBSTRATE_INDEPENDENCE,
+    E22_UI_REPLACEABILITY,
+    Count
+};
+
+constexpr std::string_view invariant_name(Invariant inv) noexcept {
+    switch (inv) {
+        case Invariant::E1_SYSTEM_AUTONOMY: return "E1 — SYSTEM_AUTONOMY";
+        case Invariant::E2_ENTE_INDEPENDENCE: return "E2 — ENTE_INDEPENDENCE";
+        case Invariant::E3_JEV_INDEPENDENCE: return "E3 — JEV_INDEPENDENCE";
+        case Invariant::E4_JUDGMENT_IS_NOT_ACTION: return "E4 — JUDGMENT_IS_NOT_ACTION";
+        case Invariant::E5_OFFLINE_PRIMARY_OPERATION: return "E5 — OFFLINE_PRIMARY_OPERATION";
+        case Invariant::E6_LOCAL_GUI_AVAILABILITY: return "E6 — LOCAL_GUI_AVAILABILITY";
+        case Invariant::E7_PRESENTATION_DOMAIN_SEPARATION: return "E7 — PRESENTATION_DOMAIN_SEPARATION";
+        case Invariant::E8_PERSON_AUTONOMY: return "E8 — PERSON_AUTONOMY";
+        case Invariant::E9_NO_SILENT_ENROLLMENT: return "E9 — NO_SILENT_ENROLLMENT";
+        case Invariant::E10_RAW_IMAGE_EPHEMERALITY: return "E10 — RAW_IMAGE_EPHEMERALITY";
+        case Invariant::E11_MINIMUM_PERSISTENCE: return "E11 — MINIMUM_PERSISTENCE";
+        case Invariant::E12_BIOMETRIC_IS_EVIDENCE: return "E12 — BIOMETRIC_IS_EVIDENCE";
+        case Invariant::E13_UNKNOWN_IS_VALID: return "E13 — UNKNOWN_IS_VALID";
+        case Invariant::E14_LOCAL_FORGETTING: return "E14 — LOCAL_FORGETTING";
+        case Invariant::E15_IDENTITY_SPACE_SEPARATION: return "E15 — IDENTITY_SPACE_SEPARATION";
+        case Invariant::E16_NO_SENSITIVE_TRAIT_INFERENCE: return "E16 — NO_SENSITIVE_TRAIT_INFERENCE";
+        case Invariant::E17_RANDOMIZATION_INDEPENDENCE: return "E17 — RANDOMIZATION_INDEPENDENCE";
+        case Invariant::E18_PURPOSE_BOUND_DATA: return "E18 — PURPOSE_BOUND_DATA";
+        case Invariant::E19_REVOCABLE_PARTICIPATION: return "E19 — REVOCABLE_PARTICIPATION";
+        case Invariant::E20_CAPABILITY_MUTABILITY: return "E20 — CAPABILITY_MUTABILITY";
+        case Invariant::E21_SUBSTRATE_INDEPENDENCE: return "E21 — SUBSTRATE_INDEPENDENCE";
+        case Invariant::E22_UI_REPLACEABILITY: return "E22 — UI_REPLACEABILITY";
+        case Invariant::Count: return "UNKNOWN";
+    }
+    return "UNKNOWN";
+}
+
+} // namespace elo::core
