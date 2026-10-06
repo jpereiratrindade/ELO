@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ELO Content Studio — Curadoria e Administração Soberana</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <!-- Header -->
+  <header class="studio-header">
+    <div class="header-left">
+      <div class="logo-badge">
+        <span class="logo-mark">ELO</span>
+        <span class="logo-sub">STUDIO</span>
+      </div>
+      <div class="header-title-group">
+        <h1 class="header-title">Curadoria e Administração Editorial</h1>
+        <p class="header-desc">Plano editorial soberano desacoplado do runtime · C++26 · Raspberry Pi 5</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div id="kiosk-status-pill" class="status-pill status-checking">
+        <span class="status-dot"></span>
+        <span id="kiosk-status-text">Kiosk: Verificando...</span>
+      </div>
+      <div class="realization-pill">
+        <span class="tag-mono">elo://S01</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Dashboard: Active Bundle & Lifecycle -->
+  <main class="studio-container">
+    <section class="hero-card">
+      <div class="hero-main">
+        <div class="hero-meta">
+          <div class="bundle-badge" id="bundle-badge">BUNDLE ATIVO</div>
+          <h2 id="active-bundle-title" class="bundle-title">Carregando catálogo...</h2>
+          <p id="active-bundle-desc" class="bundle-desc">Buscando manifesto soberano do totem...</p>
+          
+          <div class="bundle-hash-row">
+            <span class="label-tiny">HASH SHA-256</span>
+            <code id="active-bundle-hash" class="hash-code">Calculando hash determinístico...</code>
+          </div>
+        </div>
+
+        <div class="hero-stats">
+          <div class="stat-box">
+            <span class="stat-label">Versão</span>
+            <span id="stat-version" class="stat-value">—</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Revisão Curatorial</span>
+            <span id="stat-revision" class="stat-value">—</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Átomos</span>
+            <span id="stat-atoms" class="stat-value">—</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Receitas</span>
+            <span id="stat-recipes" class="stat-value">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Editorial Lifecycle Progress Bar -->
+      <div class="lifecycle-bar-wrapper">
+        <div class="lifecycle-label-row">
+          <span class="lifecycle-heading">ESTADO EDITORIAL CONSTITUCIONAL (ELO-ADMIN-001)</span>
+          <span id="lifecycle-current-name" class="lifecycle-active-name">ACTIVE (No Totem)</span>
+        </div>
+        <div class="lifecycle-steps">
+          <div class="step-item step-completed" data-step="draft">
+            <div class="step-circle">1</div>
+            <span class="step-text">DRAFT</span>
+          </div>
+          <div class="step-line step-line-active"></div>
+          <div class="step-item step-completed" data-step="valid">
+            <div class="step-circle">2</div>
+            <span class="step-text">VALID</span>
+          </div>
+          <div class="step-line step-line-active"></div>
+          <div class="step-item step-completed" data-step="previewed">
+            <div class="step-circle">3</div>
+            <span class="step-text">PREVIEWED</span>
+          </div>
+          <div class="step-line step-line-active"></div>
+          <div class="step-item step-completed" data-step="published">
+            <div class="step-circle">4</div>
+            <span class="step-text">PUBLISHED</span>
+          </div>
+          <div class="step-line step-line-active"></div>
+          <div class="step-item step-current" data-step="active">
+            <div class="step-circle">5</div>
+            <span class="step-text">ACTIVE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Toolbar -->
+      <div class="action-toolbar">
+        <button id="btn-validate" class="btn btn-secondary">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          Validar Catálogo (C++)
+        </button>
+        <button id="btn-publish" class="btn btn-primary">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          Publicar no Totem (Atômico)
+        </button>
+        <button id="btn-reload" class="btn btn-outline">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67"/></svg>
+          Recarregar Kiosk (IPC)
+        </button>
+      </div>
+    </section>
+
+    <!-- Feedback Notice / Validation Banner -->
+    <div id="notice-banner" class="notice-banner hidden">
+      <div class="notice-content">
+        <strong id="notice-title">Resultado da Operação</strong>
+        <p id="notice-desc">Detalhes da validação semântica.</p>
+      </div>
+      <button id="notice-close" class="notice-close">&times;</button>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="tab-atoms">Átomos de Conteúdo</button>
+      <button class="tab-btn" data-tab="tab-recipes">Receitas de Experiência</button>
+      <button class="tab-btn" data-tab="tab-history">Histórico & Rollback</button>
+      <button class="tab-btn" data-tab="tab-ipc">Control Plane & Socket</button>
+    </div>
+
+    <!-- Tab 1: Atoms Grid -->
+    <section id="tab-atoms" class="tab-pane active">
+      <div class="pane-header">
+        <h3 class="pane-title">Entidades e Átomos Canônicos</h3>
+        <p class="pane-subtitle">Unidades atômicas de conhecimento com proveniência e fatos canônicos verificados</p>
+      </div>
+      <div id="atoms-grid" class="atoms-grid">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Tab 2: Recipes Grid -->
+    <section id="tab-recipes" class="tab-pane">
+      <div class="pane-header">
+        <h3 class="pane-title">Receitas de Interação Semântica</h3>
+        <p class="pane-subtitle">Coreografias de micro-experiências interativas com passos, perguntas e revelações</p>
+      </div>
+      <div id="recipes-grid" class="recipes-grid">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Tab 3: History & Rollback -->
+    <section id="tab-history" class="tab-pane">
+      <div class="pane-header">
+        <h3 class="pane-title">Histórico de Publicações e Bundles Selados</h3>
+        <p class="pane-subtitle">Toda versão possui proveniência criptográfica (SHA-256) e ativação reversível (Rollback Atômico)</p>
+      </div>
+      <div class="table-card">
+        <table class="bundles-table">
+          <thead>
+            <tr>
+              <th>Versão</th>
+              <th>Revisão</th>
+              <th>Título</th>
+              <th>Hash do Bundle</th>
+              <th>Data de Publicação</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
+          <tbody id="bundles-tbody">
+            <!-- Rendered by app.js -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tab 4: Control Plane IPC -->
+    <section id="tab-ipc" class="tab-pane">
+      <div class="pane-header">
+        <h3 class="pane-title">Control Plane Local (Unix Domain Socket)</h3>
+        <p class="pane-subtitle">Comunicação privada entre o estúdio administrativo e o runtime do totem</p>
+      </div>
+      <div class="ipc-card">
+        <div class="ipc-detail-row">
+          <span class="ipc-key">Socket IPC:</span>
+          <code id="ipc-socket-path" class="ipc-value">/run/elo/control.sock</code>
+        </div>
+        <div class="ipc-detail-row">
+          <span class="ipc-key">Estado de Conexão:</span>
+          <span id="ipc-conn-state" class="badge-pill badge-green">Conectado ao elo-kiosk</span>
+        </div>
+        <div class="ipc-detail-row">
+          <span class="ipc-key">Comandos Suportados:</span>
+          <span class="tag-list">
+            <code>PING</code>
+            <code>CONTENT_RELOAD</code>
+            <code>CONTENT_PUBLISHED</code>
+            <code>STATUS_REQUEST</code>
+          </span>
+        </div>
+        <div class="ipc-detail-row">
+          <span class="ipc-key">Invariante A5:</span>
+          <span class="ipc-text">Kiosk Sovereignty — Se o admin cair, o kiosk continua funcionando sem interrupção.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="studio-footer">
+    <p>ELO Content Studio · Arquitetura Constitucional ELO-ADMIN-001 & ELO-PUBLISHING-001 · GPL-3.0</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

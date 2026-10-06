@@ -15,7 +15,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 # Discover Qt 6
-find_package(Qt6 6.5 COMPONENTS Core Gui Quick Qml REQUIRED)
+find_package(Qt6 6.5 COMPONENTS Core Gui Quick Qml Network REQUIRED)
 find_package(OpenCV 4.8 REQUIRED COMPONENTS core imgproc objdetect videoio dnn)
 find_package(SQLite3 REQUIRED)
 find_package(PkgConfig QUIET)
@@ -47,8 +47,10 @@ add_subdirectory(external/jev)
 # Core ELO Library
 add_library(elo_core
     include/elo/perception/vision_service.hpp
+    include/elo/system/control_socket.hpp
     include/elo/ui/kiosk_presentation_model.hpp
     src/biometric/biometric_matcher.cpp
+    src/content/content_bundle.cpp
     src/content/content_catalog.cpp
     src/content/content_validator.cpp
     src/content/content_selector.cpp
@@ -57,6 +59,7 @@ add_library(elo_core
     src/perception/camera_catalog.cpp
     src/perception/vision_service.cpp
     src/storage/sqlite_storage.cpp
+    src/system/control_socket.cpp
     src/ui/kiosk_presentation_model.cpp
 )
 
@@ -74,6 +77,7 @@ target_link_libraries(elo_core PUBLIC
     Qt6::Gui
     Qt6::Quick
     Qt6::Qml
+    Qt6::Network
     ${OpenCV_LIBS}
     SQLite3::SQLite3
 )
@@ -92,6 +96,7 @@ endif()
 
 # Applications
 add_subdirectory(apps/elo-kiosk)
+add_subdirectory(apps/elo-admin)
 
 # Constitutional Tests and Experiments
 enable_testing()

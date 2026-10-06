@@ -4,6 +4,7 @@
 #include "elo/perception/camera_catalog.hpp"
 #include "elo/perception/vision_service.hpp"
 #include "elo/storage/sqlite_storage.hpp"
+#include "elo/system/control_socket.hpp"
 #include "elo/ui/kiosk_presentation_model.hpp"
 
 #include <QCoreApplication>
@@ -89,8 +90,13 @@ int main(int argc, char* argv[]) {
     auto content_catalog = std::make_shared<elo::content::ContentCatalog>();
     auto content_dir = qEnvironmentVariable("ELO_CONTENT_DIR");
     if (content_dir.isEmpty()) {
-        for (const auto& candidate : {"content/catalog", "../content/catalog", "../../content/catalog"}) {
-            if (QDir(candidate).exists()) {
+        for (const auto& candidate : {"/var/lib/elo/content/current/catalog",
+                                      "content/current/catalog",
+                                      "content/current",
+                                      "content/catalog",
+                                      "../content/catalog",
+                                      "../../content/catalog"}) {
+            if (QDir(candidate).exists() || QFile::exists(candidate)) {
                 content_dir = QString::fromUtf8(candidate);
                 break;
             }
@@ -118,6 +124,23 @@ int main(int argc, char* argv[]) {
         stores.jev_events,
         content_catalog);
     auto presentation_model = std::make_unique<elo::ui::KioskPresentationModel>(engine);
+
+    auto control_server = std::make_unique<elo::system::ControlServer>();
+    if (control_server->start()) {
+        QObject::connect(control_server.get(), &elo::system::ControlServer::reloadRequested, [content_catalog, &content_dir, &presentation_model]() {
+            std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";
+            auto reload_res = content_catalog->load_from_directory(content_dir.toStdString());
+            if (reload_res) {
+                std::cout << "[ELO][kiosk] Successfully reloaded content catalog: "
+                          << content_catalog->atom_count() << " atoms, "
+                          << content_catalog->relation_count() << " relations, "
+                          << content_catalog->recipe_count() << " recipes.\n";
+                presentation_model->selectContextualContent();
+            } else {
+                std::cerr << "[ELO][kiosk] Hot reload failed: " << reload_res.error().to_string() << '\n';
+            }
+        });
+    }
 
     QQmlApplicationEngine qml_engine;
     auto* image_provider = new CameraImageProvider();
