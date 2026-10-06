@@ -7,23 +7,8 @@
 
 namespace {
 
-std::filesystem::path resolve_content_root() {
-    auto env = QProcessEnvironment::systemEnvironment();
-    QString custom = env.value(QStringLiteral("ELO_CONTENT_ROOT"));
-    if (!custom.isEmpty() && QDir(custom).exists()) {
-        return custom.toStdString();
-    }
-
-    for (const auto& candidate : {"content", "../content", "../../content", "/var/lib/elo/content"}) {
-        if (QDir(candidate).exists()) {
-            return std::filesystem::canonical(candidate);
-        }
-    }
-    return "content";
-}
-
 std::filesystem::path resolve_web_root() {
-    for (const auto& candidate : {"web/admin", "../web/admin", "../../web/admin"}) {
+    for (const auto& candidate : {"web/admin", "../web/admin", "../../web/admin", "/usr/share/elo/web/admin"}) {
         if (QDir(candidate).exists()) {
             return std::filesystem::canonical(candidate);
         }
@@ -46,7 +31,7 @@ int main(int argc, char* argv[]) {
         if (ok && p > 0) port = p;
     }
 
-    auto content_root = resolve_content_root();
+    auto content_root = elo::content::resolve_system_content_dir(true);
     auto web_root = resolve_web_root();
 
     std::cout << "========================================================\n"

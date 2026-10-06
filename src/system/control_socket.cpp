@@ -139,8 +139,6 @@ QString ControlClient::send_command(const QString& command, int timeout_ms) {
     QLocalSocket socket;
     socket.connectToServer(socket_path_);
     if (!socket.waitForConnected(timeout_ms)) {
-        std::cerr << "[client error] connect failed: " << socket.errorString().toStdString()
-                  << " path: " << socket_path_.toStdString() << "\n";
         return QString();
     }
 

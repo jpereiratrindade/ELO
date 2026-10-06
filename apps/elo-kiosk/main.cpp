@@ -1,5 +1,6 @@
 #include "camera_image_provider.hpp"
 
+#include "elo/content/content_bundle.hpp"
 #include "elo/experience/experience_engine.hpp"
 #include "elo/perception/camera_catalog.hpp"
 #include "elo/perception/vision_service.hpp"
@@ -88,20 +89,19 @@ int main(int argc, char* argv[]) {
     constexpr std::uint64_t kernel_seed = 0x454c4f5f533031ULL; // "ELO_S01"
 
     auto content_catalog = std::make_shared<elo::content::ContentCatalog>();
-    auto content_dir = qEnvironmentVariable("ELO_CONTENT_DIR");
-    if (content_dir.isEmpty()) {
-        for (const auto& candidate : {"/var/lib/elo/content/current/catalog",
-                                      "content/current/catalog",
-                                      "content/current",
-                                      "content/catalog",
-                                      "../content/catalog",
-                                      "../../content/catalog"}) {
-            if (QDir(candidate).exists() || QFile::exists(candidate)) {
-                content_dir = QString::fromUtf8(candidate);
-                break;
-            }
+    auto system_content = elo::content::resolve_system_content_dir(true);
+
+    auto resolve_active_catalog = [](const std::filesystem::path& base_dir) -> std::filesystem::path {
+        if (std::filesystem::exists(base_dir / "current" / "catalog")) {
+            return base_dir / "current" / "catalog";
         }
-    }
+        if (std::filesystem::exists(base_dir / "catalog")) {
+            return base_dir / "catalog";
+        }
+        return {};
+    };
+
+    auto content_dir = QString::fromStdString(resolve_active_catalog(system_content).string());
     if (!content_dir.isEmpty()) {
         auto load_res = content_catalog->load_from_directory(content_dir.toStdString());
         if (load_res) {
@@ -127,19 +127,23 @@ int main(int argc, char* argv[]) {
 
     auto control_server = std::make_unique<elo::system::ControlServer>();
     if (control_server->start()) {
-        QObject::connect(control_server.get(), &elo::system::ControlServer::reloadRequested, [content_catalog, &content_dir, &presentation_model]() {
-            std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";
-            auto reload_res = content_catalog->load_from_directory(content_dir.toStdString());
-            if (reload_res) {
-                std::cout << "[ELO][kiosk] Successfully reloaded content catalog: "
-                          << content_catalog->atom_count() << " atoms, "
-                          << content_catalog->relation_count() << " relations, "
-                          << content_catalog->recipe_count() << " recipes.\n";
-                presentation_model->selectContextualContent();
-            } else {
-                std::cerr << "[ELO][kiosk] Hot reload failed: " << reload_res.error().to_string() << '\n';
-            }
-        });
+        QObject::connect(control_server.get(), &elo::system::ControlServer::reloadRequested,
+            [content_catalog, system_content, resolve_active_catalog, &presentation_model]() {
+                std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";
+                auto reload_path = resolve_active_catalog(system_content);
+                if (reload_path.empty()) reload_path = system_content / "catalog";
+
+                auto reload_res = content_catalog->load_from_directory(reload_path.string());
+                if (reload_res) {
+                    std::cout << "[ELO][kiosk] Successfully reloaded content catalog: "
+                              << content_catalog->atom_count() << " atoms, "
+                              << content_catalog->relation_count() << " relations, "
+                              << content_catalog->recipe_count() << " recipes from " << reload_path << ".\n";
+                    presentation_model->selectContextualContent();
+                } else {
+                    std::cerr << "[ELO][kiosk] Hot reload failed: " << reload_res.error().to_string() << '\n';
+                }
+            });
     }
 
     QQmlApplicationEngine qml_engine;

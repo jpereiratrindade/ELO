@@ -99,4 +99,12 @@ private:
     std::filesystem::path root_dir_;
 };
 
+/// @brief Resolves sovereign Linux system content directory according to FHS / XDG.
+/// Precedence:
+/// 1. ELO_CONTENT_DIR or ELO_CONTENT_ROOT if set in environment
+/// 2. /var/lib/elo/content if writable (production system kiosk)
+/// 3. $XDG_DATA_HOME/elo/content (default: ~/.local/share/elo/content)
+/// If bootstrap_from_seed is true and the resolved directory is empty, seeds it from the factory template.
+[[nodiscard]] std::filesystem::path resolve_system_content_dir(bool bootstrap_from_seed = true);
+
 } // namespace elo::content

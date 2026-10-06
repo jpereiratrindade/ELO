@@ -4,3 +4,6 @@ build-*/
 *.o
 *.a
 .DS_Store
+content/bundles/
+content/staging/
+content/current

@@ -1,3 +1,4 @@
+#include "elo/content/content_bundle.hpp"
 #include "elo/ui/kiosk_presentation_model.hpp"
 
 #ifdef ELO_HAS_QT
@@ -112,25 +113,43 @@ QString KioskPresentationModel::contentImage() const {
     }
     if (candidate.isEmpty()) return QString();
 
-    // Check direct file or search in content asset locations
+    // Check direct file or search in sovereign system content asset locations
     if (QFile::exists(candidate)) {
         return QUrl::fromLocalFile(QFileInfo(candidate).absoluteFilePath()).toString();
     }
-    for (const auto& prefix : {"content/", "../content/", "../../content/", "content/assets/images/", "assets/images/"}) {
-        QString testPath = QString::fromUtf8(prefix) + candidate;
+
+    auto sys_content = content::resolve_system_content_dir(false);
+    QString sysPath = QString::fromStdString(sys_content.string());
+
+    const QStringList searchPrefixes = {
+        sysPath + QStringLiteral("/current/"),
+        sysPath + QStringLiteral("/"),
+        sysPath + QStringLiteral("/current/assets/"),
+        sysPath + QStringLiteral("/assets/"),
+        sysPath + QStringLiteral("/current/assets/images/"),
+        sysPath + QStringLiteral("/assets/images/"),
+        QStringLiteral("content/"),
+        QStringLiteral("../content/"),
+        QStringLiteral("../../content/"),
+        QStringLiteral("content/assets/images/"),
+        QStringLiteral("assets/images/")
+    };
+
+    for (const auto& prefix : searchPrefixes) {
+        QString testPath = prefix + candidate;
         if (QFile::exists(testPath)) {
             return QUrl::fromLocalFile(QFileInfo(testPath).absoluteFilePath()).toString();
         }
         if (candidate.startsWith(QStringLiteral("assets/"))) {
-            QString testSub = QString::fromUtf8(prefix) + candidate.mid(7);
+            QString testSub = prefix + candidate.mid(7);
             if (QFile::exists(testSub)) {
                 return QUrl::fromLocalFile(QFileInfo(testSub).absoluteFilePath()).toString();
             }
         }
     }
 
-    // Default local file path mapping
-    QString resolved = QDir::current().filePath(QStringLiteral("content/") + candidate);
+    // Default local file path mapping in sovereign system directory
+    QString resolved = QDir(sysPath).filePath(candidate);
     return QUrl::fromLocalFile(resolved).toString();
 }
 

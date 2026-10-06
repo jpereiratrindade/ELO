@@ -8,6 +8,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcessEnvironment>
+#include <QStandardPaths>
 #include <QString>
 
 #include <algorithm>
@@ -292,15 +294,23 @@ BundlePublishResult BundlePublisher::publish_and_activate(
     auto target_dir = bundles_dir() / target_folder_name;
 
     std::error_code ec;
+    std::filesystem::remove_all(target_dir, ec);
     std::filesystem::create_directories(target_dir, ec);
 
-    // Copy candidate content recursively
-    std::filesystem::copy(candidate_dir, target_dir,
-                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
-    if (ec) {
-        res.success = false;
-        res.error_message = "Failed to copy bundle to target: " + ec.message();
-        return res;
+    // Copy canonical bundle constituents (skip bundles/, staging/, current symlink)
+    const std::vector<std::string> constituents = {"manifest.json", "catalog", "assets", "sources"};
+    for (const auto& item : constituents) {
+        auto src_item = candidate_dir / item;
+        if (std::filesystem::exists(src_item, ec)) {
+            auto dst_item = target_dir / item;
+            std::filesystem::copy(src_item, dst_item,
+                                  std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
+            if (ec) {
+                res.success = false;
+                res.error_message = "Failed to copy " + item + " to target: " + ec.message();
+                return res;
+            }
+        }
     }
 
     // Update sealed manifest with new hash and timestamps
@@ -347,6 +357,70 @@ core::Result<void> BundlePublisher::rollback_to(const std::string& bundle_dir_or
     }
 
     return atomic_activate(current_symlink(), target);
+}
+
+std::filesystem::path resolve_system_content_dir(bool bootstrap_from_seed) {
+    auto env = QProcessEnvironment::systemEnvironment();
+    QString custom = env.value(QStringLiteral("ELO_CONTENT_DIR"));
+    if (custom.isEmpty()) {
+        custom = env.value(QStringLiteral("ELO_CONTENT_ROOT"));
+    }
+    if (!custom.isEmpty()) {
+        std::filesystem::path p(custom.toStdString());
+        std::error_code ec;
+        std::filesystem::create_directories(p, ec);
+        return p;
+    }
+
+    std::filesystem::path target_dir;
+
+    // 1. Production kiosk system path: /var/lib/elo/content
+    QFileInfo varLibFi(QStringLiteral("/var/lib/elo/content"));
+    if (varLibFi.exists() && varLibFi.isWritable()) {
+        target_dir = "/var/lib/elo/content";
+    } else {
+        // 2. Standard XDG location: $XDG_DATA_HOME/elo/content (default: ~/.local/share/elo/content)
+        QString xdg = env.value(QStringLiteral("XDG_DATA_HOME"));
+        QString userContentDir;
+        if (!xdg.isEmpty()) {
+            userContentDir = QDir(xdg).filePath(QStringLiteral("elo/content"));
+        } else {
+            userContentDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+            if (userContentDir.isEmpty()) {
+                userContentDir = QDir::home().filePath(QStringLiteral(".local/share"));
+            }
+            userContentDir = QDir(userContentDir).filePath(QStringLiteral("elo/content"));
+        }
+        target_dir = userContentDir.toStdString();
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(target_dir, ec);
+
+    // 3. Bootstrap from template seed if target is empty (does not have manifest.json)
+    if (bootstrap_from_seed && !std::filesystem::exists(target_dir / "manifest.json", ec)) {
+        std::filesystem::path seed_dir;
+        for (const auto& candidate : {"content", "../content", "../../content", "/usr/share/elo/content"}) {
+            if (std::filesystem::exists(std::filesystem::path(candidate) / "manifest.json", ec)) {
+                seed_dir = candidate;
+                break;
+            }
+        }
+        if (!seed_dir.empty()) {
+            std::cout << "[ELO][content] Bootstrapping initial system content storage from seed: "
+                      << seed_dir << " -> " << target_dir << '\n';
+            for (const auto& item : {"manifest.json", "catalog", "assets", "sources"}) {
+                auto src_item = seed_dir / item;
+                if (std::filesystem::exists(src_item, ec)) {
+                    auto dst_item = target_dir / item;
+                    std::filesystem::copy(src_item, dst_item,
+                                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
+                }
+            }
+        }
+    }
+
+    return target_dir;
 }
 
 } // namespace elo::content
