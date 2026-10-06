@@ -99,6 +99,13 @@ void ControlServer::onReadyRead() {
         if (line == QStringLiteral("CONTENT_RELOAD")) {
             emit reloadRequested();
             socket->write("OK RELOAD_ACK\n");
+        } else if (line.startsWith(QStringLiteral("SHOW_ATOM "))) {
+            QString atomId = line.mid(10).trimmed();
+            emit showAtomRequested(atomId);
+            socket->write("OK SHOW_ACK\n");
+        } else if (line == QStringLiteral("ADVANCE_CONTENT")) {
+            emit advanceRequested();
+            socket->write("OK ADVANCE_ACK\n");
         } else if (line.startsWith(QStringLiteral("CONTENT_PUBLISHED"))) {
             auto parts = line.split(' ');
             QString bundleId = parts.size() > 1 ? parts[1] : QString();
@@ -109,7 +116,13 @@ void ControlServer::onReadyRead() {
         } else if (line == QStringLiteral("PING")) {
             socket->write("PONG\n");
         } else if (line == QStringLiteral("STATUS_REQUEST")) {
-            socket->write("STATUS_OK service=elo-kiosk\n");
+            if (status_provider_) {
+                QString status = status_provider_();
+                if (!status.endsWith('\n')) status.append('\n');
+                socket->write(status.toUtf8());
+            } else {
+                socket->write("STATUS_OK service=elo-kiosk\n");
+            }
         } else {
             socket->write("UNKNOWN_COMMAND\n");
         }
@@ -132,6 +145,16 @@ bool ControlClient::send_reload(int timeout_ms) {
 
 bool ControlClient::notify_published(const QString& bundle_id, const QString& hash, int timeout_ms) {
     auto reply = send_command(QString("CONTENT_PUBLISHED %1 %2").arg(bundle_id, hash), timeout_ms);
+    return reply.contains(QStringLiteral("OK"));
+}
+
+bool ControlClient::show_atom(const QString& atom_id, int timeout_ms) {
+    auto reply = send_command(QStringLiteral("SHOW_ATOM %1").arg(atom_id), timeout_ms);
+    return reply.contains(QStringLiteral("OK"));
+}
+
+bool ControlClient::advance_content(int timeout_ms) {
+    auto reply = send_command(QStringLiteral("ADVANCE_CONTENT"), timeout_ms);
     return reply.contains(QStringLiteral("OK"));
 }
 

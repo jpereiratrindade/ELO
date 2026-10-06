@@ -86,8 +86,10 @@ public:
     [[nodiscard]] bool autoNavigationEnabled() const noexcept { return auto_navigation_enabled_; }
     void setAutoNavigationEnabled(bool enabled);
     [[nodiscard]] QString behaviorStatus() const;
+    [[nodiscard]] QString activeAtomId() const;
 
     Q_INVOKABLE void advanceContent();
+    Q_INVOKABLE void selectAtomDirectly(const QString& contentId);
     Q_INVOKABLE void selectContextualContent(const QString& role = QStringLiteral("attract"));
     Q_INVOKABLE void selectPampaContent(const QString& role = QStringLiteral("attract"));
     Q_INVOKABLE void startRecipe(const QString& recipeId = QStringLiteral("discover_by_sound"));

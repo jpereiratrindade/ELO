@@ -286,6 +286,7 @@ core::Result<void> ExperienceEngine::select_contextual_content(
     active_atom_ = res->atom;
     active_variant_ = res->variant;
     active_reason_ = res->reason;
+    recipe_active_ = false;
     if (active_atom_) {
         session_seen_content_.insert(active_atom_->content_id);
         if (active_person_ && experience_store_) {
@@ -293,6 +294,44 @@ core::Result<void> ExperienceEngine::select_contextual_content(
         }
         record_jev_event("content.selected", active_atom_->content_id);
     }
+    transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
+    return {};
+}
+
+core::Result<void> ExperienceEngine::select_atom(std::string_view content_id) {
+    if (!content_catalog_) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError, "ContentCatalog not configured"));
+    }
+    const auto* atom = content_catalog_->find_atom(std::string(content_id));
+    if (!atom) {
+        atom = content_catalog_->find_atom_by_name(content_id);
+    }
+    if (!atom) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError, "Atom not found: " + std::string(content_id)));
+    }
+
+    active_atom_ = atom;
+    auto variants = content_catalog_->find_variants_for(atom->content_id);
+    active_variant_ = variants.empty() ? nullptr : variants.front();
+    active_reason_ = content::SelectionReason{
+        .selected_content_id = atom->content_id,
+        .selected_variant_id = active_variant_ ? active_variant_->variant_id : "",
+        .recipe_id = "",
+        .requested_role = content::ContentRole::Attract,
+        .theme_matched = "",
+        .not_seen_in_session = false,
+        .media_requirements_met = true,
+        .explanation = "Explicitly selected atom: " + atom->title
+    };
+    recipe_active_ = false;
+
+    session_seen_content_.insert(active_atom_->content_id);
+    if (active_person_ && experience_store_) {
+        (void)experience_store_->record_content_served(*active_person_, active_atom_->content_id);
+    }
+    record_jev_event("content.selected", active_atom_->content_id);
     transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
     return {};
 }

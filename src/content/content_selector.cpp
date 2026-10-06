@@ -34,13 +34,46 @@ std::optional<ContentSelector::SelectionResult> ContentSelector::select(
                 });
             }
         }
+        if (candidates.empty()) {
+            for (const auto* r : rels) {
+                const auto* target = catalog.find_atom(r->to_content_id);
+                if (target && target->content_id != context.current_focus_id) {
+                    candidates.push_back({
+                        target,
+                        90,
+                        "Followed seen relation '" + std::string(to_string(r->type)) + "' from " + context.current_focus_id
+                    });
+                }
+            }
+        }
     }
 
     // 2. Score remaining atoms if needed
     if (candidates.empty()) {
-        for (const auto* atom : all) {
+        size_t curr_idx = 0;
+        bool found_curr = false;
+        for (size_t i = 0; i < all.size(); ++i) {
+            if (all[i]->content_id == context.current_focus_id) {
+                curr_idx = i;
+                found_curr = true;
+                break;
+            }
+        }
+
+        for (size_t i = 0; i < all.size(); ++i) {
+            const auto* atom = all[i];
             int score = 10;
             std::string reason_parts;
+
+            // Current focus penalty: prevent sticking to the same atom
+            if (atom->content_id == context.current_focus_id && all.size() > 1) {
+                score -= 100;
+                reason_parts += "current focus penalty; ";
+            } else if (found_curr && all.size() > 1) {
+                size_t dist = (i + all.size() - curr_idx) % all.size();
+                score += static_cast<int>(all.size() - dist);
+                reason_parts += "round-robin rotation bonus; ";
+            }
 
             // Unseen penalty/bonus
             bool unseen = !context.seen_content_ids.contains(atom->content_id);

@@ -292,6 +292,37 @@ const ContentAtom* ContentCatalog::find_atom(const std::string& content_id) cons
     return (it != atoms_.end()) ? &it->second : nullptr;
 }
 
+const ContentAtom* ContentCatalog::find_atom_by_name(std::string_view name) const noexcept {
+    if (name.empty()) return nullptr;
+    auto to_lower = [](std::string_view s) {
+        std::string res;
+        res.reserve(s.size());
+        for (char c : s) res.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(c))));
+        return res;
+    };
+    std::string needle = to_lower(name);
+
+    // 1. Exact ID match
+    auto it = atoms_.find(std::string(name));
+    if (it != atoms_.end()) return &it->second;
+
+    // 2. Case-insensitive canonical_name or title match
+    for (const auto& [_, a] : atoms_) {
+        if (to_lower(a.subject.canonical_name) == needle || to_lower(a.title) == needle) {
+            return &a;
+        }
+    }
+
+    // 3. Substring match
+    for (const auto& [_, a] : atoms_) {
+        if (to_lower(a.subject.canonical_name).find(needle) != std::string::npos ||
+            to_lower(a.title).find(needle) != std::string::npos) {
+            return &a;
+        }
+    }
+    return nullptr;
+}
+
 std::vector<const ContentAtom*> ContentCatalog::all_atoms() const {
     std::vector<const ContentAtom*> res;
     res.reserve(atoms_.size());

@@ -85,6 +85,19 @@ document.addEventListener('DOMContentLoaded', () => {
         kioskText.textContent = 'Kiosk: AGUARDANDO IPC';
       }
 
+      // Live totem active atom indicator
+      const livePill = document.getElementById('kiosk-live-pill');
+      const liveText = document.getElementById('kiosk-live-text');
+      if (livePill) {
+        if (data.kiosk_online && (data.kiosk_active_atom_title || data.kiosk_active_atom_id)) {
+          livePill.style.display = 'inline-flex';
+          const displayTitle = data.kiosk_active_atom_title || data.kiosk_active_atom_id;
+          liveText.textContent = `Totem: ${displayTitle}`;
+        } else {
+          livePill.style.display = 'none';
+        }
+      }
+
       // Socket path in IPC tab
       document.getElementById('ipc-socket-path').textContent = data.control_socket || '/run/elo/control.sock';
       const connState = document.getElementById('ipc-conn-state');
@@ -164,10 +177,13 @@ document.addEventListener('DOMContentLoaded', () => {
         audioButtonHtml = `<button class="btn btn-outline btn-sm btn-play-audio" data-src="${audioSrc}">▶️ Ouvir</button>`;
       }
 
+      const isLiveOnKiosk = currentStatus && currentStatus.kiosk_active_atom_id === atom.content_id;
+      const liveBadgeHtml = isLiveOnKiosk ? '<span class="badge-pill badge-green" style="font-size: 10px; margin-left: 6px;">AO VIVO NO TOTEM</span>' : '';
+
       card.innerHTML = `
         <div class="atom-header">
           <div>
-            <h4 class="atom-title">${atom.canonical_name || atom.title}</h4>
+            <h4 class="atom-title">${atom.canonical_name || atom.title} ${liveBadgeHtml}</h4>
             <div class="atom-scientific">${atom.scientific_name || atom.type_label || ''}</div>
           </div>
           <span class="atom-type-badge">${atom.type}</span>
@@ -176,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ${assetsHtml}
         <div class="atom-actions-row">
           ${audioButtonHtml}
+          <button class="btn btn-outline btn-sm btn-kiosk-show" data-id="${atom.content_id}" title="Exibir imediatamente no totem">📺 Totem</button>
           <button class="btn btn-secondary btn-sm btn-edit-atom" data-id="${atom.content_id}">✏️ Editar</button>
           <button class="btn btn-danger-outline btn-sm btn-del-atom" data-id="${atom.content_id}" data-title="${atom.canonical_name || atom.title}">🗑️</button>
         </div>
@@ -184,6 +201,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Attach actions
+    container.querySelectorAll('.btn-kiosk-show').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        try {
+          btn.disabled = true;
+          const res = await fetch('/api/kiosk/show', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content_id: id })
+          });
+          const data = await res.json();
+          btn.disabled = false;
+          if (data.success) {
+            showNotice('Totem Atualizado', `Exibindo átomo "${id}" no totem agora.`);
+            fetchStatus();
+          } else {
+            showNotice('Falha no Totem', data.error || 'Totem não respondeu', true);
+          }
+        } catch (err) {
+          btn.disabled = false;
+          showNotice('Erro de Comunicação', err.message, true);
+        }
+      });
+    });
     container.querySelectorAll('.btn-edit-atom').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
@@ -902,6 +943,25 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       reader.readAsDataURL(file);
       directMediaUpload.value = '';
+    });
+  const btnKioskAdvance = document.getElementById('btn-kiosk-advance');
+  if (btnKioskAdvance) {
+    btnKioskAdvance.addEventListener('click', async () => {
+      try {
+        btnKioskAdvance.disabled = true;
+        const res = await fetch('/api/kiosk/advance', { method: 'POST' });
+        const data = await res.json();
+        btnKioskAdvance.disabled = false;
+        if (data.success) {
+          showNotice('Totem Avançado', 'Comando de avanço enviado ao totem com sucesso.');
+          setTimeout(fetchStatus, 400);
+        } else {
+          showNotice('Falha no Totem', data.error || 'Totem não respondeu', true);
+        }
+      } catch (err) {
+        btnKioskAdvance.disabled = false;
+        showNotice('Erro de Comunicação', err.message, true);
+      }
     });
   }
 

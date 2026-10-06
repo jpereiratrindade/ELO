@@ -29,6 +29,7 @@ public:
 
     // Queries
     [[nodiscard]] const ContentAtom* find_atom(const std::string& content_id) const noexcept;
+    [[nodiscard]] const ContentAtom* find_atom_by_name(std::string_view name) const noexcept;
     [[nodiscard]] std::vector<const ContentAtom*> all_atoms() const;
     [[nodiscard]] std::vector<const ContentAtom*> find_by_type(ContentType type) const;
     [[nodiscard]] std::vector<const ContentAtom*> find_by_theme(std::string_view theme) const;

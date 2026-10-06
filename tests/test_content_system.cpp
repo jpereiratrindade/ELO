@@ -101,6 +101,18 @@ void test_content_selector_and_recipes() {
     actions = executor.evaluate_step(*recipe, *selection->atom, state);
     TEST_ASSERT(actions.front().type == elo::content::PresentationActionType::ShowImage, "Action is ShowImage");
 
+    // Test Rotation: advancing from current focus must select a different atom
+    ctx.current_focus_id = selection->atom->content_id;
+    ctx.seen_content_ids.insert(selection->atom->content_id);
+    auto next_selection = selector.select(catalog, ctx);
+    TEST_ASSERT(next_selection.has_value(), "Must select next content");
+    TEST_ASSERT(next_selection->atom->content_id != ctx.current_focus_id, "Next selection must rotate away from current focus");
+
+    // Test find_atom_by_name
+    const auto* found_by_name = catalog.find_atom_by_name("Cardeal-amarelo");
+    TEST_ASSERT(found_by_name != nullptr, "find_atom_by_name found Cardeal-amarelo");
+    TEST_ASSERT(found_by_name->content_id == "species_cardeal_001", "Correct atom resolved by name");
+
     std::cout << "  -> PASSED: Contextual selection and recipe stepping verified.\n";
 }
 

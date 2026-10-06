@@ -49,6 +49,29 @@ AdminHttpServer::AdminHttpServer(
       tcp_server_(std::make_unique<QTcpServer>(this)),
       publisher_(content_root_) {
     connect(tcp_server_.get(), &QTcpServer::newConnection, this, &AdminHttpServer::onNewConnection);
+
+    // Ensure draft catalog has published bundle atoms and assets if missing
+    std::error_code ec;
+    auto cur_atoms = content_root_ / "current" / "catalog" / "atoms";
+    auto draft_atoms = content_root_ / "catalog" / "atoms";
+    if (std::filesystem::exists(cur_atoms, ec)) {
+        std::filesystem::create_directories(draft_atoms, ec);
+        for (const auto& entry : std::filesystem::directory_iterator(cur_atoms, ec)) {
+            if (entry.is_regular_file(ec)) {
+                auto target = draft_atoms / entry.path().filename();
+                if (!std::filesystem::exists(target, ec)) {
+                    std::filesystem::copy_file(entry.path(), target, ec);
+                }
+            }
+        }
+    }
+    auto cur_assets = content_root_ / "current" / "assets";
+    auto draft_assets = content_root_ / "assets";
+    if (std::filesystem::exists(cur_assets, ec)) {
+        std::filesystem::create_directories(draft_assets, ec);
+        std::filesystem::copy(cur_assets, draft_assets,
+                              std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing, ec);
+    }
 }
 
 AdminHttpServer::~AdminHttpServer() {
@@ -788,9 +811,28 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     if (method == QStringLiteral("GET") && path == QStringLiteral("/api/status")) {
         system::ControlClient client;
         bool kiosk_online = client.ping(300);
+        QString activeAtomId;
+        QString activeAtomTitle;
+        QString kioskState;
+
+        if (kiosk_online) {
+            QString reply = client.send_command(QStringLiteral("STATUS_REQUEST"), 500);
+            for (const auto& token : reply.split(' ', Qt::SkipEmptyParts)) {
+                if (token.startsWith(QStringLiteral("active_atom_id="))) {
+                    activeAtomId = token.mid(15).trimmed();
+                } else if (token.startsWith(QStringLiteral("active_atom_title="))) {
+                    activeAtomTitle = token.mid(18).trimmed().replace('_', ' ');
+                } else if (token.startsWith(QStringLiteral("state="))) {
+                    kioskState = token.mid(6).trimmed();
+                }
+            }
+        }
 
         QJsonObject resp;
         resp[QStringLiteral("kiosk_online")] = kiosk_online;
+        resp[QStringLiteral("kiosk_active_atom_id")] = activeAtomId;
+        resp[QStringLiteral("kiosk_active_atom_title")] = activeAtomTitle;
+        resp[QStringLiteral("kiosk_state")] = kioskState;
         resp[QStringLiteral("control_socket")] = system::resolve_control_socket_path();
         resp[QStringLiteral("editorial_state")] = draft_modified_ ? QStringLiteral("draft") : QStringLiteral("active");
         resp[QStringLiteral("draft_modified")] = draft_modified_;
@@ -825,6 +867,40 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         resp[QStringLiteral("bundles")] = bundlesArr;
 
         sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: POST /api/kiosk/show (Force Totem to display specific atom)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/show")) {
+        auto doc = QJsonDocument::fromJson(body);
+        QString contentId = doc.object().value(QStringLiteral("content_id")).toString().trimmed();
+        if (contentId.isEmpty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Parâmetro content_id obrigatório\"}");
+            return;
+        }
+
+        system::ControlClient client;
+        bool ok = client.show_atom(contentId, 1000);
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = ok;
+        resp[QStringLiteral("content_id")] = contentId;
+        if (!ok) {
+            resp[QStringLiteral("error")] = QStringLiteral("Totem offline ou não respondeu ao comando");
+        }
+        sendJsonResponse(socket, ok ? 200 : 503, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: POST /api/kiosk/advance (Tell Totem to rotate to next content)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/advance")) {
+        system::ControlClient client;
+        bool ok = client.advance_content(1000);
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = ok;
+        if (!ok) {
+            resp[QStringLiteral("error")] = QStringLiteral("Totem offline ou não respondeu ao comando");
+        }
+        sendJsonResponse(socket, ok ? 200 : 503, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }
 

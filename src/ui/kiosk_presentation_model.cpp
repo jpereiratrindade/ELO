@@ -305,20 +305,67 @@ void KioskPresentationModel::startRecipe(const QString& recipeId) {
     }
 }
 
-void KioskPresentationModel::chooseOption(const QString& option) {
+QString KioskPresentationModel::activeAtomId() const {
+    if (engine_ && engine_->active_content_atom()) {
+        return QString::fromStdString(engine_->active_content_atom()->content_id);
+    }
+    return QString();
+}
+
+void KioskPresentationModel::selectAtomDirectly(const QString& contentId) {
     if (engine_) {
-        if (engine_->is_recipe_active()) {
-            engine_->advance_recipe(option.toStdString());
-        } else {
-            advanceContent();
+        auto res = engine_->select_atom(contentId.toStdString());
+        if (res) {
+            current_content_ = contentId.toStdString();
+            resetBehaviorTimer();
+            emit contentChanged();
+            emit stateChanged();
+            auto audio = contentAudio();
+            if (!audio.isEmpty()) {
+                playSound(audio);
+            }
         }
-        resetBehaviorTimer();
-        emit contentChanged();
-        emit stateChanged();
-        auto audio = contentAudio();
-        if (!audio.isEmpty()) {
-            playSound(audio);
+    }
+}
+
+void KioskPresentationModel::chooseOption(const QString& option) {
+    if (!engine_) return;
+
+    QString optTrimmed = option.trimmed();
+    if (optTrimmed == QStringLiteral("Próxima Descoberta") ||
+        optTrimmed == QStringLiteral("Avançar") ||
+        optTrimmed == QStringLiteral("Próximo") ||
+        optTrimmed == QStringLiteral("Explorar mais")) {
+        advanceContent();
+        return;
+    }
+
+    if (optTrimmed == QStringLiteral("Habitats e Teia Ecológica") ||
+        optTrimmed == QStringLiteral("Aprofundar") ||
+        optTrimmed == QStringLiteral("Ver Relações")) {
+        deepenExperience();
+        return;
+    }
+
+    if (auto catalog = engine_->content_catalog()) {
+        const auto* atom = catalog->find_atom_by_name(optTrimmed.toStdString());
+        if (atom) {
+            selectAtomDirectly(QString::fromStdString(atom->content_id));
+            return;
         }
+    }
+
+    if (engine_->is_recipe_active()) {
+        engine_->advance_recipe(option.toStdString());
+    } else {
+        advanceContent();
+    }
+    resetBehaviorTimer();
+    emit contentChanged();
+    emit stateChanged();
+    auto audio = contentAudio();
+    if (!audio.isEmpty()) {
+        playSound(audio);
     }
 }
 
@@ -491,7 +538,7 @@ void KioskPresentationModel::tick(double delta_seconds) {
             if (state_duration_ >= kGreetingDuration) {
                 state_duration_ = 0.0;
                 behavior_progress_ = 0.0;
-                startRecipe(QStringLiteral("discover_by_sound"));
+                selectContextualContent(QStringLiteral("attract"));
             }
             break;
         }
@@ -499,11 +546,13 @@ void KioskPresentationModel::tick(double delta_seconds) {
         case experience::SessionState::CONTENT_ACTIVE: {
             // Se a receita foi concluída (ex: tela "Concluído"):
             if (engine_->is_recipe_active() && engine_->recipe_state().completed) {
-                constexpr double kCompletionReadingDuration = 4.0;
+                constexpr double kCompletionReadingDuration = 3.5;
                 behavior_progress_ = std::clamp(state_duration_ / kCompletionReadingDuration, 0.0, 1.0);
                 emit behaviorProgressChanged();
                 if (state_duration_ >= kCompletionReadingDuration) {
-                    finishSession();
+                    state_duration_ = 0.0;
+                    behavior_progress_ = 0.0;
+                    advanceContent();
                 }
                 break;
             }
@@ -517,7 +566,7 @@ void KioskPresentationModel::tick(double delta_seconds) {
                 if (state_duration_ >= kExplorationStepDuration) {
                     state_duration_ = 0.0;
                     behavior_progress_ = 0.0;
-                    chooseOption(opts.first());
+                    advanceContent();
                 }
             } else {
                 // Modo contemplativo narrativo: 7.0s

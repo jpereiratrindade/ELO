@@ -130,6 +130,27 @@ int main(int argc, char* argv[]) {
 
     auto control_server = std::make_unique<elo::system::ControlServer>();
     if (control_server->start()) {
+        control_server->setStatusProvider([&presentation_model]() {
+            QString atomId = presentation_model->activeAtomId();
+            QString title = presentation_model->contentTitle();
+            title.replace(' ', '_');
+            QString state = presentation_model->currentState();
+            return QStringLiteral("STATUS_OK service=elo-kiosk active_atom_id=%1 active_atom_title=%2 state=%3")
+                .arg(atomId, title, state);
+        });
+
+        QObject::connect(control_server.get(), &elo::system::ControlServer::showAtomRequested,
+            [&presentation_model](const QString& atomId) {
+                std::cout << "[ELO][kiosk] Remote show atom request received: " << atomId.toStdString() << '\n';
+                presentation_model->selectAtomDirectly(atomId);
+            });
+
+        QObject::connect(control_server.get(), &elo::system::ControlServer::advanceRequested,
+            [&presentation_model]() {
+                std::cout << "[ELO][kiosk] Remote advance content request received\n";
+                presentation_model->advanceContent();
+            });
+
         QObject::connect(control_server.get(), &elo::system::ControlServer::reloadRequested,
             [content_catalog, system_content, resolve_active_catalog, &presentation_model]() {
                 std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";
