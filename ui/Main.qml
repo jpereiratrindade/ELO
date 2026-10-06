@@ -312,24 +312,39 @@ Window {
                 }
             }
 
-            // Opções táteis para interação sem mouse (touch friendly)
+            // Opções interativas táteis da narrativa (somente quando houver escolha)
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillWidth: true
-                spacing: 12
+                spacing: 14
                 visible: kioskModel.contentOptions.length > 0
 
                 Repeater {
                     model: kioskModel.contentOptions
 
-                    Button {
+                    Rectangle {
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.min(parent.width * 0.82, 500)
-                        Layout.preferredHeight: 56
-                        text: modelData
-                        font.pixelSize: 18
-                        font.bold: true
-                        onClicked: kioskModel.chooseOption(modelData)
+                        Layout.preferredWidth: Math.min(parent.width * 0.82, 520)
+                        Layout.preferredHeight: 58
+                        radius: 12
+                        color: optArea.pressed ? "#0284c7" : (optArea.containsMouse ? "#334155" : "#1e293b")
+                        border.color: optArea.containsMouse ? "#38bdf8" : "#475569"
+                        border.width: 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData
+                            font.pixelSize: 18
+                            font.bold: true
+                            color: "#f8fafc"
+                        }
+
+                        MouseArea {
+                            id: optArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: kioskModel.chooseOption(modelData)
+                        }
                     }
                 }
             }
@@ -352,8 +367,8 @@ Window {
 
                     Text {
                         text: kioskModel.contentOptions.length > 0
-                              ? "Toque para responder ou aguarde o avanço"
-                              : "Avanço automático em ritmo natural"
+                              ? "Toque para escolher ou aguarde o avanço"
+                              : "Navegação autônoma por ritmo natural"
                         font.pixelSize: 12
                         color: "#64748b"
                     }
@@ -377,36 +392,9 @@ Window {
                     }
                 }
             }
-
-            // Ações manuais por toque na tela (sem necessidade de mouse)
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 18
-
-                Button {
-                    Layout.preferredWidth: 200
-                    Layout.preferredHeight: 50
-                    text: "Descobrir Som"
-                    onClicked: kioskModel.startRecipe("discover_by_sound")
-                }
-
-                Button {
-                    Layout.preferredWidth: 200
-                    Layout.preferredHeight: 50
-                    text: "Aprofundar"
-                    onClicked: kioskModel.deepenExperience()
-                }
-
-                Button {
-                    Layout.preferredWidth: 200
-                    Layout.preferredHeight: 50
-                    text: "Próximo Conteúdo"
-                    onClicked: kioskModel.advanceContent()
-                }
-            }
         }
 
-        // Conclusão da sessão
+        // Conclusão da sessão (retorno automático por ausência ou tempo)
         ColumnLayout {
             anchors.centerIn: parent
             spacing: 20
@@ -443,14 +431,6 @@ Window {
                     color: "#34d399"
                 }
             }
-
-            Button {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 240
-                Layout.preferredHeight: 54
-                text: "Retornar ao início"
-                onClicked: kioskModel.finishSession()
-            }
         }
     }
 
@@ -476,16 +456,28 @@ Window {
 
             Item { Layout.fillWidth: true }
 
-            Button {
-                text: "Esquecer minha identidade local"
+            Rectangle {
                 visible: kioskModel.activePerson !== "UNKNOWN"
-                onClicked: kioskModel.requestForgetMe()
-            }
+                width: 210
+                height: 32
+                radius: 16
+                color: forgetArea.pressed ? "#7f1d1d" : "#1e293b"
+                border.color: forgetArea.containsMouse ? "#f87171" : "#334155"
+                border.width: 1
 
-            Button {
-                text: "Encerrar sessão"
-                visible: kioskModel.currentState !== "IDLE"
-                onClicked: kioskModel.finishSession()
+                Text {
+                    anchors.centerIn: parent
+                    text: "Esquecer minha identidade"
+                    font.pixelSize: 11
+                    color: forgetArea.containsMouse ? "#f87171" : "#94a3b8"
+                }
+
+                MouseArea {
+                    id: forgetArea
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: kioskModel.requestForgetMe()
+                }
             }
         }
     }
