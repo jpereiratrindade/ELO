@@ -78,6 +78,7 @@ public:
     [[nodiscard]] QString behaviorStatus() const;
 
     Q_INVOKABLE void advanceContent();
+    Q_INVOKABLE void selectContextualContent(const QString& role = QStringLiteral("attract"));
     Q_INVOKABLE void selectPampaContent(const QString& role = QStringLiteral("attract"));
     Q_INVOKABLE void startRecipe(const QString& recipeId = QStringLiteral("discover_by_sound"));
     Q_INVOKABLE void chooseOption(const QString& option);

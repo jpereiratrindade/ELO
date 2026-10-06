@@ -43,6 +43,10 @@ public:
     [[nodiscard]] const ExperienceRecipe* find_recipe(const std::string& recipe_id) const noexcept;
     [[nodiscard]] std::vector<const ExperienceRecipe*> all_recipes() const;
 
+    [[nodiscard]] const BundleManifest& manifest() const noexcept { return manifest_; }
+    [[nodiscard]] std::string_view default_theme() const noexcept { return manifest_.default_theme; }
+    void set_manifest(BundleManifest manifest) noexcept { manifest_ = std::move(manifest); }
+
     [[nodiscard]] std::size_t atom_count() const noexcept { return atoms_.size(); }
     [[nodiscard]] std::size_t relation_count() const noexcept { return relations_.size(); }
     [[nodiscard]] std::size_t variant_count() const noexcept { return variants_.size(); }
@@ -51,6 +55,7 @@ public:
     void clear() noexcept;
 
 private:
+    BundleManifest manifest_{};
     std::unordered_map<std::string, ContentAtom> atoms_{};
     std::vector<ContentRelation> relations_{};
     std::unordered_map<std::string, ContentVariant> variants_{};

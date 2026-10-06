@@ -396,4 +396,19 @@ struct PresentationAction {
     std::string target_content_id{};
 };
 
+/// @brief ELO-PUBLISHING-001 Section 3: Bundle Manifest
+struct BundleManifest {
+    std::string bundle_id{"elo-content-default"};
+    std::string version{"0.1.0"};
+    std::string schema_version{"0.1"};
+    std::string title{};
+    std::string default_theme{};
+    std::string description{};
+    std::string license{"GPL-3.0-only"};
+    std::uint64_t curation_revision{1};
+    std::string content_hash{};
+    std::string parent_bundle{};
+    std::string created_at{};
+};
+
 } // namespace elo::content

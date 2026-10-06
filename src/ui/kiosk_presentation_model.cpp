@@ -187,11 +187,11 @@ void KioskPresentationModel::resetBehaviorTimer() {
     emit behaviorProgressChanged();
 }
 
-void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
+void KioskPresentationModel::selectContextualContent(const QString& roleStr) {
     if (engine_) {
         auto role = content::parse_content_role(roleStr.toStdString());
         if (role == content::ContentRole::Unknown) role = content::ContentRole::Attract;
-        auto res = engine_->select_contextual_content(role, "pampa");
+        auto res = engine_->select_contextual_content(role);
         if (!res) {
             advanceContent();
             return;
@@ -200,6 +200,10 @@ void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
         emit contentChanged();
         emit stateChanged();
     }
+}
+
+void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
+    selectContextualContent(roleStr);
 }
 
 void KioskPresentationModel::startRecipe(const QString& recipeId) {
@@ -232,7 +236,7 @@ void KioskPresentationModel::chooseOption(const QString& option) {
 
 void KioskPresentationModel::deepenExperience() {
     if (engine_) {
-        (void)engine_->select_contextual_content(content::ContentRole::Deepen, "pampa");
+        (void)engine_->select_contextual_content(content::ContentRole::Deepen);
         resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
@@ -372,7 +376,7 @@ void KioskPresentationModel::tick(double delta_seconds) {
             if (state_duration_ >= kAmbientRotationDuration) {
                 state_duration_ = 0.0;
                 behavior_progress_ = 0.0;
-                selectPampaContent(QStringLiteral("attract"));
+                selectContextualContent(QStringLiteral("attract"));
                 playSound(QStringLiteral("content/assets/audio/pampa_ambient.wav"));
             }
             break;

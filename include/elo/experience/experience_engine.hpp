@@ -150,7 +150,7 @@ public:
     [[nodiscard]] std::string select_next_content();
     core::Result<void> select_contextual_content(
         content::ContentRole role = content::ContentRole::Attract,
-        std::string_view theme = "pampa");
+        std::string_view theme = "");
 
     [[nodiscard]] const content::ContentAtom* active_content_atom() const noexcept { return active_atom_; }
     [[nodiscard]] const content::ContentVariant* active_content_variant() const noexcept { return active_variant_; }

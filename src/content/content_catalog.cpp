@@ -147,6 +147,22 @@ std::optional<QJsonDocument> read_json_file(const QString& file_path) {
     return doc;
 }
 
+BundleManifest parse_manifest_json(const QJsonObject& obj) {
+    BundleManifest manifest;
+    manifest.bundle_id = obj.value(QStringLiteral("bundle_id")).toString().toStdString();
+    manifest.version = obj.value(QStringLiteral("version")).toString(QStringLiteral("0.1.0")).toStdString();
+    manifest.schema_version = obj.value(QStringLiteral("schema_version")).toString(QStringLiteral("0.1")).toStdString();
+    manifest.title = obj.value(QStringLiteral("title")).toString().toStdString();
+    manifest.default_theme = obj.value(QStringLiteral("default_theme")).toString().toStdString();
+    manifest.description = obj.value(QStringLiteral("description")).toString().toStdString();
+    manifest.license = obj.value(QStringLiteral("license")).toString(QStringLiteral("GPL-3.0-only")).toStdString();
+    manifest.curation_revision = static_cast<std::uint64_t>(obj.value(QStringLiteral("curation_revision")).toInteger(1));
+    manifest.content_hash = obj.value(QStringLiteral("content_hash")).toString().toStdString();
+    manifest.parent_bundle = obj.value(QStringLiteral("parent_bundle")).toString().toStdString();
+    manifest.created_at = obj.value(QStringLiteral("created_at")).toString().toStdString();
+    return manifest;
+}
+
 } // namespace
 
 core::Result<void> ContentCatalog::load_from_directory(const std::filesystem::path& catalog_dir) {
@@ -159,6 +175,18 @@ core::Result<void> ContentCatalog::load_from_directory(const std::filesystem::pa
     }
 
     clear();
+
+    // 0. Load manifest.json if present (in catalog dir or parent bundle dir)
+    QString manifest_path = dir.filePath(QStringLiteral("manifest.json"));
+    if (!QFile::exists(manifest_path)) {
+        manifest_path = QDir(dir.filePath(QStringLiteral(".."))).filePath(QStringLiteral("manifest.json"));
+    }
+    if (QFile::exists(manifest_path)) {
+        auto doc = read_json_file(manifest_path);
+        if (doc && doc->isObject()) {
+            manifest_ = parse_manifest_json(doc->object());
+        }
+    }
 
     // 1. Load atoms from catalog/atoms or objects
     QDir atoms_dir(dir.filePath(QStringLiteral("atoms")));
@@ -363,6 +391,7 @@ std::vector<const ExperienceRecipe*> ContentCatalog::all_recipes() const {
 }
 
 void ContentCatalog::clear() noexcept {
+    manifest_ = {};
     atoms_.clear();
     relations_.clear();
     variants_.clear();

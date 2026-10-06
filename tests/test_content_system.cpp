@@ -43,6 +43,8 @@ void test_content_catalog_and_validation() {
     TEST_ASSERT(catalog.atom_count() >= 4, "Must have at least 4 Pampa atoms");
     TEST_ASSERT(catalog.relation_count() >= 2, "Must have relations");
     TEST_ASSERT(catalog.recipe_count() >= 2, "Must have recipes");
+    TEST_ASSERT(!catalog.manifest().bundle_id.empty(), "Manifest must be loaded");
+    TEST_ASSERT(catalog.default_theme() == "pampa", "Default theme is pampa");
 
     auto cardeal = catalog.find_atom("species_cardeal_001");
     TEST_ASSERT(cardeal != nullptr, "Cardeal-amarelo atom must exist");
@@ -67,7 +69,7 @@ void test_content_selector_and_recipes() {
     elo::content::ContentSelector selector(12345);
     elo::content::SelectionContext ctx;
     ctx.target_role = elo::content::ContentRole::Attract;
-    ctx.theme_filter = "pampa";
+    ctx.theme_filter = std::string(catalog.default_theme());
 
     auto selection = selector.select(catalog, ctx);
     TEST_ASSERT(selection.has_value(), "Must select content for Attract role");

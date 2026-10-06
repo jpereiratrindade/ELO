@@ -266,9 +266,13 @@ core::Result<void> ExperienceEngine::select_contextual_content(
         return std::unexpected(core::make_error(
             core::ErrorCode::ContentError, "ContentCatalog is not configured"));
     }
+    std::string effective_theme(theme);
+    if (effective_theme.empty()) {
+        effective_theme = std::string(content_catalog_->default_theme());
+    }
     content::SelectionContext ctx{
         .target_role = role,
-        .theme_filter = std::string(theme),
+        .theme_filter = effective_theme,
         .seen_content_ids = session_seen_content_,
         .current_focus_id = active_atom_ ? active_atom_->content_id : "",
         .audio_supported = true,
@@ -304,7 +308,7 @@ core::Result<void> ExperienceEngine::start_recipe(const std::string& recipe_id) 
             core::ErrorCode::ContentError, "Recipe not found: " + recipe_id));
     }
     if (!active_atom_) {
-        auto sel_res = select_contextual_content(content::ContentRole::Attract, "pampa");
+        auto sel_res = select_contextual_content(content::ContentRole::Attract);
         if (!sel_res) return sel_res;
     }
     recipe_state_ = recipe_executor_.start(*rec, *active_atom_);
@@ -352,7 +356,7 @@ void ExperienceEngine::advance_recipe(std::string_view user_action) {
 
 std::string ExperienceEngine::select_next_content() {
     if (content_catalog_ && content_catalog_->atom_count() > 0) {
-        auto res = select_contextual_content(content::ContentRole::Attract, "pampa");
+        auto res = select_contextual_content(content::ContentRole::Attract);
         if (res && active_atom_) {
             return active_atom_->content_id;
         }
