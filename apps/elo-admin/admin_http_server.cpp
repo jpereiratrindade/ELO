@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QUrl>
 #include <iostream>
 
 namespace elo::admin {
@@ -96,10 +97,8 @@ void AdminHttpServer::onClientReadyRead() {
 
     int contentLength = 0;
     QByteArray headerBytes = buf.left(headerEnd);
-    int clIdx = headerBytes.indexOf("Content-Length:");
-    if (clIdx == -1) {
-        clIdx = headerBytes.indexOf("content-length:");
-    }
+    QByteArray lowerHeader = headerBytes.toLower();
+    int clIdx = lowerHeader.indexOf("content-length:");
     if (clIdx != -1) {
         int clEnd = headerBytes.indexOf("\r\n", clIdx);
         if (clEnd != -1) {
@@ -312,6 +311,221 @@ void AdminHttpServer::handleUploadRoute(QTcpSocket* socket, const QByteArray& bo
     sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
 }
 
+void AdminHttpServer::handleMediaRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body) {
+    // GET /api/media — Lista todos os arquivos de mídia e seus vínculos
+    if (method == QStringLiteral("GET")) {
+        QJsonArray mediaList;
+
+        // Mapear átomos para identificar quais usam cada mídia
+        QDir atomsDir(QString::fromStdString((content_root_ / "catalog" / "atoms").string()));
+        QMap<QString, QStringList> mediaUsage;
+        for (const auto& fileInfo : atomsDir.entryInfoList(QStringList() << QStringLiteral("*.json"), QDir::Files)) {
+            QFile af(fileInfo.absoluteFilePath());
+            if (af.open(QIODevice::ReadOnly)) {
+                auto doc = QJsonDocument::fromJson(af.readAll());
+                if (doc.isObject()) {
+                    auto obj = doc.object();
+                    QString atomId = obj.value(QStringLiteral("content_id")).toString();
+                    QString atomTitle = obj.value(QStringLiteral("title")).toString();
+                    if (atomTitle.isEmpty()) atomTitle = atomId;
+
+                    auto modalities = obj.value(QStringLiteral("modalities")).toObject();
+                    auto imgArr = modalities.value(QStringLiteral("image")).toArray();
+                    for (const auto& imgVal : imgArr) {
+                        QString p = imgVal.toString();
+                        QFileInfo imgFi(p);
+                        mediaUsage[imgFi.fileName()].append(atomTitle);
+                        mediaUsage[p].append(atomTitle);
+                    }
+                    auto audArr = modalities.value(QStringLiteral("audio")).toArray();
+                    for (const auto& audVal : audArr) {
+                        QString p = audVal.toString();
+                        QFileInfo audFi(p);
+                        mediaUsage[audFi.fileName()].append(atomTitle);
+                        mediaUsage[p].append(atomTitle);
+                    }
+                }
+            }
+        }
+
+        // Varrer subpastas de assets: images e audio
+        QStringList folders = { QStringLiteral("images"), QStringLiteral("audio") };
+        for (const auto& folder : folders) {
+            QDir dir(QString::fromStdString((content_root_ / "assets" / folder.toStdString()).string()));
+            if (!dir.exists()) continue;
+
+            for (const auto& fi : dir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Time)) {
+                QJsonObject item;
+                QString relPath = QStringLiteral("assets/") + folder + QStringLiteral("/") + fi.fileName();
+                item[QStringLiteral("filename")] = fi.fileName();
+                item[QStringLiteral("path")] = relPath;
+                item[QStringLiteral("folder")] = folder;
+                item[QStringLiteral("type")] = (folder == QStringLiteral("images")) ? QStringLiteral("image") : QStringLiteral("audio");
+                item[QStringLiteral("size_bytes")] = fi.size();
+                item[QStringLiteral("modified")] = fi.lastModified().toString(Qt::ISODate);
+
+                QJsonArray usedArr;
+                QStringList users = mediaUsage.value(fi.fileName());
+                users.append(mediaUsage.value(relPath));
+                users.removeDuplicates();
+                for (const auto& u : users) {
+                    usedArr.append(u);
+                }
+                item[QStringLiteral("used_by")] = usedArr;
+
+                mediaList.append(item);
+            }
+        }
+
+        QJsonObject resp;
+        resp[QStringLiteral("media")] = mediaList;
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // DELETE /api/media (ou DELETE /api/upload)
+    if (method == QStringLiteral("DELETE")) {
+        QString requestedPath;
+
+        // 1. Verificar query parameter: /api/media?path=assets/images/foto.png
+        int qIdx = path.indexOf('?');
+        if (qIdx != -1) {
+            QString query = path.mid(qIdx + 1);
+            auto pairs = query.split('&');
+            for (const auto& p : pairs) {
+                auto kv = p.split('=');
+                if (kv.size() == 2 && kv[0] == QStringLiteral("path")) {
+                    requestedPath = QUrl::fromPercentEncoding(kv[1].toUtf8());
+                    break;
+                }
+            }
+        }
+
+        // 2. Se não estiver no query, verificar corpo JSON
+        if (requestedPath.isEmpty() && !body.isEmpty()) {
+            auto doc = QJsonDocument::fromJson(body);
+            if (doc.isObject()) {
+                requestedPath = doc.object().value(QStringLiteral("path")).toString();
+                if (requestedPath.isEmpty()) {
+                    QString fn = doc.object().value(QStringLiteral("filename")).toString();
+                    QString fol = doc.object().value(QStringLiteral("folder")).toString(QStringLiteral("images"));
+                    if (!fn.isEmpty()) {
+                        requestedPath = QStringLiteral("assets/") + fol + QStringLiteral("/") + fn;
+                    }
+                }
+            }
+        }
+
+        if (requestedPath.isEmpty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Parâmetro 'path' de mídia ausente para exclusão\"}");
+            return;
+        }
+
+        // Normalização e verificação de segurança (Prevenção rigorosa de path traversal)
+        requestedPath.replace('\\', '/');
+        while (requestedPath.startsWith('/')) requestedPath.remove(0, 1);
+        if (requestedPath.startsWith(QStringLiteral("assets/"))) {
+            requestedPath.remove(0, 7);
+        }
+
+        if (requestedPath.contains(QStringLiteral("..")) || requestedPath.contains(QStringLiteral(":"))) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Caminho de arquivo inválido ou inseguro\"}");
+            return;
+        }
+
+        std::filesystem::path assetsRoot = content_root_ / "assets";
+        std::filesystem::path targetFile = (assetsRoot / requestedPath.toStdString()).lexically_normal();
+
+        // Assegurar que o arquivo resolvido está estritamente dentro da raiz de assets
+        std::string assetsNorm = assetsRoot.lexically_normal().string();
+        std::string targetNorm = targetFile.string();
+        if (targetNorm.find(assetsNorm) != 0) {
+            sendJsonResponse(socket, 403, "{\"error\":\"Acesso negado fora do repositório soberano de assets\"}");
+            return;
+        }
+
+        bool fileRemoved = false;
+        if (std::filesystem::exists(targetFile) && std::filesystem::is_regular_file(targetFile)) {
+            std::error_code ec;
+            fileRemoved = std::filesystem::remove(targetFile, ec);
+            if (ec) {
+                std::cerr << "[ELO][admin] Erro ao excluir arquivo de mídia: " << ec.message() << std::endl;
+            }
+        }
+
+        // Limpeza dos átomos que eventualmente referenciavam esta mídia
+        QString filenameOnly = QFileInfo(QString::fromStdString(targetFile.string())).fileName();
+        QString relAssetPath = QStringLiteral("assets/") + requestedPath;
+        int cleanedAtoms = 0;
+
+        QDir atomsDir(QString::fromStdString((content_root_ / "catalog" / "atoms").string()));
+        for (const auto& fileInfo : atomsDir.entryInfoList(QStringList() << QStringLiteral("*.json"), QDir::Files)) {
+            QFile af(fileInfo.absoluteFilePath());
+            if (af.open(QIODevice::ReadOnly)) {
+                auto doc = QJsonDocument::fromJson(af.readAll());
+                af.close();
+
+                if (doc.isObject()) {
+                    auto obj = doc.object();
+                    bool atomModified = false;
+                    auto modalities = obj.value(QStringLiteral("modalities")).toObject();
+
+                    // Limpar imagem
+                    auto imgArr = modalities.value(QStringLiteral("image")).toArray();
+                    QJsonArray newImgArr;
+                    for (const auto& v : imgArr) {
+                        QString p = v.toString();
+                        if (p == relAssetPath || p == requestedPath || p.endsWith(filenameOnly)) {
+                            atomModified = true;
+                        } else {
+                            newImgArr.append(v);
+                        }
+                    }
+                    if (atomModified) {
+                        modalities[QStringLiteral("image")] = newImgArr;
+                    }
+
+                    // Limpar áudio
+                    auto audArr = modalities.value(QStringLiteral("audio")).toArray();
+                    QJsonArray newAudArr;
+                    for (const auto& v : audArr) {
+                        QString p = v.toString();
+                        if (p == relAssetPath || p == requestedPath || p.endsWith(filenameOnly)) {
+                            atomModified = true;
+                        } else {
+                            newAudArr.append(v);
+                        }
+                    }
+                    if (atomModified) {
+                        modalities[QStringLiteral("audio")] = newAudArr;
+                        obj[QStringLiteral("modalities")] = modalities;
+                    }
+
+                    if (atomModified) {
+                        if (af.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                            af.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+                            af.close();
+                            cleanedAtoms++;
+                        }
+                    }
+                }
+            }
+        }
+
+        draft_modified_ = true;
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("deleted")] = relAssetPath;
+        resp[QStringLiteral("file_removed_from_disk")] = fileRemoved;
+        resp[QStringLiteral("atoms_cleaned_count")] = cleanedAtoms;
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    sendJsonResponse(socket, 400, "{\"error\":\"Método não suportado para /api/media\"}");
+}
+
 void AdminHttpServer::handleRelationsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body) {
     QString relPath = QString::fromStdString((content_root_ / "catalog" / "relations" / "relations.json").string());
     QDir().mkpath(QFileInfo(relPath).absolutePath());
@@ -503,6 +717,13 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     // CRUD: Upload Media
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/upload")) {
         handleUploadRoute(socket, body);
+        return;
+    }
+
+    // CRUD: Media Management & Deletion
+    if (path.startsWith(QStringLiteral("/api/media")) ||
+        (method == QStringLiteral("DELETE") && path.startsWith(QStringLiteral("/api/upload")))) {
+        handleMediaRoute(socket, method, path, body);
         return;
     }
 

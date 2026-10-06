@@ -13,7 +13,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
       btn.classList.add('active');
       const target = document.getElementById(btn.getAttribute('data-tab'));
-      if (target) target.classList.add('active');
+      if (target) {
+        target.classList.add('active');
+        if (target.id === 'tab-media') fetchMedia();
+      }
     });
   });
 
@@ -463,6 +466,78 @@ document.addEventListener('DOMContentLoaded', () => {
     handleFileUpload(e.target, 'audio', 'atom-audio-path', 'preview-audio-box', 'preview-audio');
   });
 
+  const btnDeleteAtomImage = document.getElementById('btn-delete-atom-image');
+  if (btnDeleteAtomImage) {
+    btnDeleteAtomImage.addEventListener('click', async () => {
+      const imgPath = document.getElementById('atom-image-path').value.trim();
+      if (!imgPath) {
+        document.getElementById('preview-image-box').classList.add('hidden');
+        return;
+      }
+
+      const deleteFileOnDisk = confirm(`Deseja excluir a imagem deste átomo?\n\n• Clique em OK para apagar também o arquivo de mídia do disco (${imgPath})\n• Clique em Cancelar para apenas desvincular deste átomo`);
+
+      if (deleteFileOnDisk) {
+        try {
+          const res = await fetch(`/api/media?path=${encodeURIComponent(imgPath)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Imagem Excluída', `Arquivo ${imgPath} removido do repositório soberano de mídias.`);
+            updateLifecycleUI(true);
+            fetchMedia();
+            fetchCatalog();
+          } else {
+            showNotice('Aviso na Exclusão', data.error || 'Não foi possível apagar o arquivo do disco', true);
+          }
+        } catch (err) {
+          showNotice('Falha na Exclusão', err.message, true);
+        }
+      } else {
+        showNotice('Imagem Desvinculada', 'A imagem foi desvinculada do formulário. Salve o átomo para confirmar.');
+      }
+
+      document.getElementById('atom-image-path').value = '';
+      document.getElementById('preview-image').src = '';
+      document.getElementById('preview-image-box').classList.add('hidden');
+      document.getElementById('upload-image-file').value = '';
+    });
+  }
+
+  const btnDeleteAtomAudio = document.getElementById('btn-delete-atom-audio');
+  if (btnDeleteAtomAudio) {
+    btnDeleteAtomAudio.addEventListener('click', async () => {
+      const audPath = document.getElementById('atom-audio-path').value.trim();
+      if (!audPath) {
+        document.getElementById('preview-audio-box').classList.add('hidden');
+        return;
+      }
+
+      const deleteFileOnDisk = confirm(`Deseja excluir o áudio deste átomo?\n\n• Clique em OK para apagar também o arquivo do disco (${audPath})\n• Clique em Cancelar para apenas desvincular do átomo`);
+
+      if (deleteFileOnDisk) {
+        try {
+          const res = await fetch(`/api/media?path=${encodeURIComponent(audPath)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Áudio Excluído', `Arquivo ${audPath} removido do repositório.`);
+            updateLifecycleUI(true);
+            fetchMedia();
+            fetchCatalog();
+          }
+        } catch (err) {
+          showNotice('Falha na Exclusão', err.message, true);
+        }
+      } else {
+        showNotice('Áudio Desvinculado', 'O áudio foi desvinculado do formulário. Salve o átomo para confirmar.');
+      }
+
+      document.getElementById('atom-audio-path').value = '';
+      document.getElementById('preview-audio').src = '';
+      document.getElementById('preview-audio-box').classList.add('hidden');
+      document.getElementById('upload-audio-file').value = '';
+    });
+  }
+
   // Save Atom (Create or Update)
   formAtom.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -660,8 +735,179 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Media & Assets Manager
+  let mediaItems = [];
+  let currentMediaFilter = 'all';
+
+  async function fetchMedia() {
+    try {
+      const res = await fetch('/api/media');
+      if (!res.ok) throw new Error('Media API error: ' + res.status);
+      const data = await res.json();
+      mediaItems = data.media || [];
+      renderMedia(mediaItems, currentMediaFilter);
+    } catch (err) {
+      console.warn('Erro ao carregar mídias:', err);
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function renderMedia(items, filter = 'all') {
+    const grid = document.getElementById('media-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    const filtered = items.filter(item => {
+      if (filter === 'all') return true;
+      return item.type === filter;
+    });
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `<p style="grid-column: 1/-1; text-align: center; color: var(--text-dim); padding: 40px;">Nenhum arquivo de mídia encontrado nesta categoria.</p>`;
+      return;
+    }
+
+    filtered.forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'media-card';
+
+      let mediaPreviewHtml = '';
+      if (item.type === 'image') {
+        mediaPreviewHtml = `
+          <div class="media-thumb-container">
+            <img class="media-thumb" src="/${item.path}" alt="${item.filename}" loading="lazy">
+          </div>
+        `;
+      } else {
+        mediaPreviewHtml = `
+          <div class="media-thumb-container">
+            <div class="media-audio-box">
+              <span style="font-size: 2.2rem;">🎵</span>
+              <audio controls src="/${item.path}" style="width: 100%; max-height: 40px;"></audio>
+            </div>
+          </div>
+        `;
+      }
+
+      const isUsed = item.used_by && item.used_by.length > 0;
+      const usageBadge = isUsed
+        ? `<span class="media-badge media-badge-used" title="${item.used_by.join(', ')}">✓ Vinculado: ${item.used_by.slice(0, 2).join(', ')}${item.used_by.length > 2 ? ' +' + (item.used_by.length - 2) : ''}</span>`
+        : `<span class="media-badge media-badge-orphan">⚪ Mídia não vinculada</span>`;
+
+      card.innerHTML = `
+        ${mediaPreviewHtml}
+        <div class="media-body">
+          <h4 class="media-name" title="${item.filename}">${item.filename}</h4>
+          <span class="media-path-text">${item.path}</span>
+          <div class="media-meta-row">
+            <span>${formatBytes(item.size_bytes)}</span>
+            <span>${item.type === 'image' ? '🖼️ Imagem' : '🎵 Áudio'}</span>
+          </div>
+          ${usageBadge}
+          <div class="media-actions">
+            <button class="btn btn-outline btn-xs btn-copy-path" data-path="${item.path}">📋 Copiar</button>
+            <button class="btn btn-danger-outline btn-xs btn-delete-media" data-path="${item.path}" data-name="${item.filename}">🗑️ Excluir</button>
+          </div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+
+    // Event listeners dos cards de mídia
+    grid.querySelectorAll('.btn-copy-path').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = btn.getAttribute('data-path');
+        navigator.clipboard.writeText(p).then(() => {
+          showNotice('Caminho Copiado!', `Caminho "${p}" copiado para a área de transferência.`);
+        });
+      });
+    });
+
+    grid.querySelectorAll('.btn-delete-media').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const p = btn.getAttribute('data-path');
+        const name = btn.getAttribute('data-name');
+        if (!confirm(`Deseja realmente EXCLUIR a mídia "${name}"?\n\n• O arquivo será excluído permanentemente do totem.\n• Quaisquer vínculos em átomos existentes serão limpos automaticamente.`)) {
+          return;
+        }
+
+        try {
+          const res = await fetch(`/api/media?path=${encodeURIComponent(p)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Mídia Excluída!', `Arquivo "${name}" excluído com sucesso do totem.`);
+            updateLifecycleUI(true);
+            fetchMedia();
+            fetchCatalog();
+          } else {
+            showNotice('Erro ao Excluir', data.error || 'Falha na exclusão', true);
+          }
+        } catch (err) {
+          showNotice('Falha na Exclusão', err.message, true);
+        }
+      });
+    });
+  }
+
+  // Filtros de mídia
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      currentMediaFilter = chip.getAttribute('data-filter') || 'all';
+      renderMedia(mediaItems, currentMediaFilter);
+    });
+  });
+
+  // Upload direto na aba de mídias
+  const directMediaUpload = document.getElementById('direct-media-upload');
+  if (directMediaUpload) {
+    directMediaUpload.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const folder = file.type.startsWith('audio') ? 'audio' : 'images';
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const base64Data = evt.target.result;
+        try {
+          showNotice('Enviando Mídia...', `Processando upload de ${file.name}...`);
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              folder: folder,
+              filename: file.name,
+              base64_data: base64Data
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Upload Realizado!', `Arquivo ${file.name} salvo com sucesso em ${data.path}.`);
+            updateLifecycleUI(true);
+            fetchMedia();
+          } else {
+            showNotice('Erro no Upload', data.error || 'Falha ao salvar', true);
+          }
+        } catch (err) {
+          showNotice('Falha de Rede', err.message, true);
+        }
+      };
+      reader.readAsDataURL(file);
+      directMediaUpload.value = '';
+    });
+  }
+
   // Initial load
   fetchStatus();
   fetchCatalog();
+  fetchMedia();
   setInterval(fetchStatus, 4000);
 });

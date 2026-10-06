@@ -40,6 +40,7 @@ private:
     // CRUD Handlers
     void handleAtomsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
     void handleUploadRoute(QTcpSocket* socket, const QByteArray& body);
+    void handleMediaRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
     void handleRelationsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
     void handleRecipesRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
 

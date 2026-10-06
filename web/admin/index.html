@@ -135,6 +135,7 @@
     <!-- Navigation Tabs -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="tab-atoms">Átomos de Conteúdo</button>
+      <button class="tab-btn" data-tab="tab-media">Mídias & Assets</button>
       <button class="tab-btn" data-tab="tab-relations">Relações Ecológicas</button>
       <button class="tab-btn" data-tab="tab-recipes">Receitas de Experiência</button>
       <button class="tab-btn" data-tab="tab-history">Histórico & Rollback</button>
@@ -153,6 +154,30 @@
         </button>
       </div>
       <div id="atoms-grid" class="atoms-grid">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+ 
+    <!-- Tab: Media & Assets Manager -->
+    <section id="tab-media" class="tab-pane">
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Repositório Soberano de Mídias e Assets</h3>
+          <p class="pane-subtitle">Gerenciamento visual, desvinculação e exclusão permanente de imagens e áudios armazenados no totem</p>
+        </div>
+        <div class="media-header-actions">
+          <label for="direct-media-upload" class="btn btn-primary btn-sm-action" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+            <span>📤 Upload de Nova Mídia</span>
+            <input type="file" id="direct-media-upload" accept="image/*,audio/*" style="display: none;">
+          </label>
+        </div>
+      </div>
+      <div class="media-filter-bar">
+        <button class="filter-chip active" data-filter="all">Todas as Mídias</button>
+        <button class="filter-chip" data-filter="image">🖼️ Apenas Imagens</button>
+        <button class="filter-chip" data-filter="audio">🎵 Apenas Áudio</button>
+      </div>
+      <div id="media-grid" class="media-grid">
         <!-- Rendered by app.js -->
       </div>
     </section>
@@ -320,6 +345,9 @@
             <input type="text" id="atom-image-path" class="input-text" placeholder="assets/images/exemplo.png">
             <div id="preview-image-box" class="preview-box hidden">
               <img id="preview-image" src="" alt="Prévia">
+              <div class="preview-action-bar">
+                <button type="button" id="btn-delete-atom-image" class="btn btn-danger-outline btn-xs">🗑️ Excluir Imagem</button>
+              </div>
             </div>
           </div>
           <div class="form-group asset-upload-box">
@@ -328,6 +356,9 @@
             <input type="text" id="atom-audio-path" class="input-text" placeholder="assets/audio/canto.wav">
             <div id="preview-audio-box" class="preview-box hidden">
               <audio id="preview-audio" controls></audio>
+              <div class="preview-action-bar">
+                <button type="button" id="btn-delete-atom-audio" class="btn btn-danger-outline btn-xs">🗑️ Excluir Áudio</button>
+              </div>
             </div>
           </div>
         </div>
