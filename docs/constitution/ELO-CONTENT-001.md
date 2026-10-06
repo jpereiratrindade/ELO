@@ -22,7 +22,9 @@
     "ui_candidate": "Qt 6 + QML"
   },
   "depends_on": [
-    "ELO-EXPERIENCE-001"
+    "ELO-EXPERIENCE-001",
+    "ELO-PUBLISHING-001",
+    "ELO-ADMIN-001"
   ],
   "primary_consumer": "Gemini / implementation agent"
 }

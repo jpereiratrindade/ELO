@@ -1,9 +1,12 @@
 {
   "bundle_id": "elo-content-pampa",
   "version": "0.1.0",
+  "schema_version": "0.1",
   "title": "Corpus Canônico do Bioma Pampa",
   "default_theme": "pampa",
   "description": "Corpus estruturado e rastreável sobre a biodiversidade, paisagens e processos ecológicos do Pampa gaúcho.",
   "license": "GPL-3.0-only",
-  "created_at": "2026-10-05"
+  "curation_revision": 1,
+  "content_hash": "sha256:26371c4fb1e37e489eebb198208ac2dd8fa055aa440e2b20626de22366d1ac6d",
+  "created_at": "2026-10-05T22:00:00Z"
 }
