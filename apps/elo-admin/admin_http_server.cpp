@@ -10,6 +10,32 @@
 
 namespace elo::admin {
 
+namespace {
+
+QString sanitize_filename(const QString& name) {
+    QFileInfo fi(name);
+    QString base = fi.fileName();
+    base.replace(QStringLiteral(".."), QStringLiteral(""));
+    base.replace(QStringLiteral("/"), QStringLiteral(""));
+    base.replace(QStringLiteral("\\"), QStringLiteral(""));
+    return base;
+}
+
+QString slugify(const QString& text) {
+    QString res = text.toLower().trimmed();
+    res.replace(' ', '_');
+    res.replace('-', '_');
+    QString clean;
+    for (QChar c : res) {
+        if (c.isLetterOrNumber() || c == '_') {
+            clean.append(c);
+        }
+    }
+    return clean.isEmpty() ? QStringLiteral("item_%1").arg(QDateTime::currentMSecsSinceEpoch()) : clean;
+}
+
+} // namespace
+
 AdminHttpServer::AdminHttpServer(
     std::filesystem::path content_root,
     std::filesystem::path web_root,
@@ -63,6 +89,7 @@ void AdminHttpServer::onClientReadyRead() {
 
 void AdminHttpServer::sendResponse(QTcpSocket* socket, int statusCode, const QString& contentType, const QByteArray& body) {
     QString statusText = (statusCode == 200) ? QStringLiteral("OK")
+                       : (statusCode == 201) ? QStringLiteral("Created")
                        : (statusCode == 404) ? QStringLiteral("Not Found")
                        : (statusCode == 400) ? QStringLiteral("Bad Request")
                                              : QStringLiteral("Internal Server Error");
@@ -72,7 +99,7 @@ void AdminHttpServer::sendResponse(QTcpSocket* socket, int statusCode, const QSt
     response.append(QString("Content-Type: %1\r\n").arg(contentType).toUtf8());
     response.append(QString("Content-Length: %1\r\n").arg(body.size()).toUtf8());
     response.append("Access-Control-Allow-Origin: *\r\n");
-    response.append("Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n");
+    response.append("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n");
     response.append("Access-Control-Allow-Headers: Content-Type\r\n");
     response.append("Connection: close\r\n\r\n");
     response.append(body);
@@ -84,6 +111,327 @@ void AdminHttpServer::sendResponse(QTcpSocket* socket, int statusCode, const QSt
 
 void AdminHttpServer::sendJsonResponse(QTcpSocket* socket, int statusCode, const QByteArray& jsonBytes) {
     sendResponse(socket, statusCode, QStringLiteral("application/json; charset=utf-8"), jsonBytes);
+}
+
+void AdminHttpServer::handleAtomsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body) {
+    QString atomsDir = QString::fromStdString((content_root_ / "catalog" / "atoms").string());
+    QDir().mkpath(atomsDir);
+
+    // GET /api/atoms/:id
+    if (method == QStringLiteral("GET") && path.startsWith(QStringLiteral("/api/atoms/"))) {
+        QString id = path.mid(11);
+        QString filePath = QDir(atomsDir).filePath(id + QStringLiteral(".json"));
+        if (!QFile::exists(filePath)) {
+            filePath = QString::fromStdString((content_root_ / "catalog" / "objects" / (id.toStdString() + ".json")).string());
+        }
+
+        if (QFile::exists(filePath)) {
+            QFile f(filePath);
+            if (f.open(QIODevice::ReadOnly)) {
+                sendJsonResponse(socket, 200, f.readAll());
+                return;
+            }
+        }
+        sendJsonResponse(socket, 404, "{\"error\":\"Átomo não encontrado\"}");
+        return;
+    }
+
+    // POST /api/atoms (Create)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/atoms")) {
+        auto doc = QJsonDocument::fromJson(body);
+        if (!doc.isObject()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Payload JSON inválido\"}");
+            return;
+        }
+
+        auto obj = doc.object();
+        QString contentId = obj.value(QStringLiteral("content_id")).toString().trimmed();
+        if (contentId.isEmpty()) {
+            QString title = obj.value(QStringLiteral("title")).toString();
+            contentId = QStringLiteral("atom_") + slugify(title);
+            obj[QStringLiteral("content_id")] = contentId;
+        }
+
+        if (!obj.contains(QStringLiteral("schema_version"))) {
+            obj[QStringLiteral("schema_version")] = QStringLiteral("0.1");
+        }
+
+        QString filePath = QDir(atomsDir).filePath(contentId + QStringLiteral(".json"));
+        QFile f(filePath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Não foi possível gravar arquivo do átomo\"}");
+            return;
+        }
+
+        f.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+        draft_modified_ = true;
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("content_id")] = contentId;
+        resp[QStringLiteral("atom")] = obj;
+        sendJsonResponse(socket, 201, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // PUT /api/atoms/:id (Update)
+    if (method == QStringLiteral("PUT") && path.startsWith(QStringLiteral("/api/atoms/"))) {
+        QString id = path.mid(11);
+        auto doc = QJsonDocument::fromJson(body);
+        if (!doc.isObject()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Payload JSON inválido\"}");
+            return;
+        }
+
+        auto obj = doc.object();
+        obj[QStringLiteral("content_id")] = id;
+
+        QString filePath = QDir(atomsDir).filePath(id + QStringLiteral(".json"));
+        QFile f(filePath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Não foi possível atualizar arquivo do átomo\"}");
+            return;
+        }
+
+        f.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+        draft_modified_ = true;
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("content_id")] = id;
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // DELETE /api/atoms/:id (Delete)
+    if (method == QStringLiteral("DELETE") && path.startsWith(QStringLiteral("/api/atoms/"))) {
+        QString id = path.mid(11);
+        QString filePath = QDir(atomsDir).filePath(id + QStringLiteral(".json"));
+        bool removed = false;
+        if (QFile::exists(filePath)) {
+            removed = QFile::remove(filePath);
+        } else {
+            QString alt = QString::fromStdString((content_root_ / "catalog" / "objects" / (id.toStdString() + ".json")).string());
+            if (QFile::exists(alt)) {
+                removed = QFile::remove(alt);
+            }
+        }
+
+        if (removed) {
+            draft_modified_ = true;
+            QJsonObject resp;
+            resp[QStringLiteral("success")] = true;
+            resp[QStringLiteral("deleted_id")] = id;
+            sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        } else {
+            sendJsonResponse(socket, 404, "{\"error\":\"Átomo não encontrado para exclusão\"}");
+        }
+        return;
+    }
+
+    sendJsonResponse(socket, 400, "{\"error\":\"Ação não suportada para átomos\"}");
+}
+
+void AdminHttpServer::handleUploadRoute(QTcpSocket* socket, const QByteArray& body) {
+    auto doc = QJsonDocument::fromJson(body);
+    if (!doc.isObject()) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Payload JSON inválido para upload\"}");
+        return;
+    }
+
+    auto obj = doc.object();
+    QString folder = obj.value(QStringLiteral("folder")).toString(QStringLiteral("images"));
+    if (folder != QStringLiteral("audio")) folder = QStringLiteral("images");
+
+    QString filename = sanitize_filename(obj.value(QStringLiteral("filename")).toString());
+    if (filename.isEmpty()) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Nome de arquivo ausente\"}");
+        return;
+    }
+
+    QString b64 = obj.value(QStringLiteral("base64_data")).toString();
+    int comma = b64.indexOf(QStringLiteral(","));
+    if (comma != -1) {
+        b64 = b64.mid(comma + 1);
+    }
+
+    QByteArray rawData = QByteArray::fromBase64(b64.toUtf8());
+    if (rawData.isEmpty()) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Dados de mídia em base64 vazios ou corrompidos\"}");
+        return;
+    }
+
+    QString destDir = QString::fromStdString((content_root_ / "assets" / folder.toStdString()).string());
+    QDir().mkpath(destDir);
+
+    QString destPath = QDir(destDir).filePath(filename);
+    QFile f(destPath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        sendJsonResponse(socket, 500, "{\"error\":\"Falha ao gravar arquivo em assets\"}");
+        return;
+    }
+
+    f.write(rawData);
+    draft_modified_ = true;
+
+    QJsonObject resp;
+    resp[QStringLiteral("success")] = true;
+    resp[QStringLiteral("path")] = QStringLiteral("assets/") + folder + QStringLiteral("/") + filename;
+    resp[QStringLiteral("size_bytes")] = rawData.size();
+    sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+}
+
+void AdminHttpServer::handleRelationsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body) {
+    QString relPath = QString::fromStdString((content_root_ / "catalog" / "relations" / "relations.json").string());
+    QDir().mkpath(QFileInfo(relPath).absolutePath());
+
+    QJsonArray relArr;
+    if (QFile::exists(relPath)) {
+        QFile f(relPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            auto d = QJsonDocument::fromJson(f.readAll());
+            if (d.isArray()) relArr = d.array();
+        }
+    }
+
+    // POST /api/relations (Add)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/relations")) {
+        auto doc = QJsonDocument::fromJson(body);
+        if (!doc.isObject()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Payload JSON inválido\"}");
+            return;
+        }
+
+        auto obj = doc.object();
+        QString relId = obj.value(QStringLiteral("relation_id")).toString().trimmed();
+        if (relId.isEmpty()) {
+            relId = QStringLiteral("rel_") + slugify(obj.value(QStringLiteral("from")).toString()) +
+                    QStringLiteral("_") + slugify(obj.value(QStringLiteral("to")).toString());
+            obj[QStringLiteral("relation_id")] = relId;
+        }
+
+        relArr.append(obj);
+
+        QFile f(relPath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Falha ao salvar relations.json\"}");
+            return;
+        }
+        f.write(QJsonDocument(relArr).toJson(QJsonDocument::Indented));
+        draft_modified_ = true;
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("relation")] = obj;
+        sendJsonResponse(socket, 201, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // DELETE /api/relations/:id
+    if (method == QStringLiteral("DELETE") && path.startsWith(QStringLiteral("/api/relations/"))) {
+        QString id = path.mid(15);
+        QJsonArray newArr;
+        bool found = false;
+        for (const auto& elem : relArr) {
+            if (elem.isObject() && elem.toObject().value(QStringLiteral("relation_id")).toString() == id) {
+                found = true;
+            } else {
+                newArr.append(elem);
+            }
+        }
+
+        if (found) {
+            QFile f(relPath);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                f.write(QJsonDocument(newArr).toJson(QJsonDocument::Indented));
+            }
+            draft_modified_ = true;
+            QJsonObject resp;
+            resp[QStringLiteral("success")] = true;
+            sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        } else {
+            sendJsonResponse(socket, 404, "{\"error\":\"Relação não encontrada\"}");
+        }
+        return;
+    }
+
+    sendJsonResponse(socket, 400, "{\"error\":\"Ação não suportada para relations\"}");
+}
+
+void AdminHttpServer::handleRecipesRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body) {
+    QString recPath = QString::fromStdString((content_root_ / "catalog" / "recipes" / "recipes.json").string());
+    QDir().mkpath(QFileInfo(recPath).absolutePath());
+
+    QJsonArray recArr;
+    if (QFile::exists(recPath)) {
+        QFile f(recPath);
+        if (f.open(QIODevice::ReadOnly)) {
+            auto d = QJsonDocument::fromJson(f.readAll());
+            if (d.isArray()) recArr = d.array();
+        }
+    }
+
+    // POST /api/recipes (Add)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/recipes")) {
+        auto doc = QJsonDocument::fromJson(body);
+        if (!doc.isObject()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Payload JSON inválido\"}");
+            return;
+        }
+
+        auto obj = doc.object();
+        QString recId = obj.value(QStringLiteral("recipe_id")).toString().trimmed();
+        if (recId.isEmpty()) {
+            recId = QStringLiteral("recipe_") + slugify(obj.value(QStringLiteral("name")).toString());
+            obj[QStringLiteral("recipe_id")] = recId;
+        }
+
+        recArr.append(obj);
+
+        QFile f(recPath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Falha ao salvar recipes.json\"}");
+            return;
+        }
+        f.write(QJsonDocument(recArr).toJson(QJsonDocument::Indented));
+        draft_modified_ = true;
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("recipe")] = obj;
+        sendJsonResponse(socket, 201, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // DELETE /api/recipes/:id
+    if (method == QStringLiteral("DELETE") && path.startsWith(QStringLiteral("/api/recipes/"))) {
+        QString id = path.mid(13);
+        QJsonArray newArr;
+        bool found = false;
+        for (const auto& elem : recArr) {
+            if (elem.isObject() && elem.toObject().value(QStringLiteral("recipe_id")).toString() == id) {
+                found = true;
+            } else {
+                newArr.append(elem);
+            }
+        }
+
+        if (found) {
+            QFile f(recPath);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                f.write(QJsonDocument(newArr).toJson(QJsonDocument::Indented));
+            }
+            draft_modified_ = true;
+            QJsonObject resp;
+            resp[QStringLiteral("success")] = true;
+            sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        } else {
+            sendJsonResponse(socket, 404, "{\"error\":\"Receita não encontrada\"}");
+        }
+        return;
+    }
+
+    sendJsonResponse(socket, 400, "{\"error\":\"Ação não suportada para recipes\"}");
 }
 
 void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& requestData) {
@@ -103,7 +451,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         return;
     }
 
-    // Extract body if POST
+    // Extract body
     QByteArray body;
     int bodyStart = requestData.indexOf("\r\n\r\n");
     if (bodyStart != -1) {
@@ -115,6 +463,30 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         }
     }
 
+    // CRUD: Atoms
+    if (path.startsWith(QStringLiteral("/api/atoms"))) {
+        handleAtomsRoute(socket, method, path, body);
+        return;
+    }
+
+    // CRUD: Upload Media
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/upload")) {
+        handleUploadRoute(socket, body);
+        return;
+    }
+
+    // CRUD: Relations
+    if (path.startsWith(QStringLiteral("/api/relations"))) {
+        handleRelationsRoute(socket, method, path, body);
+        return;
+    }
+
+    // CRUD: Recipes
+    if (path.startsWith(QStringLiteral("/api/recipes"))) {
+        handleRecipesRoute(socket, method, path, body);
+        return;
+    }
+
     // API: GET /api/status
     if (method == QStringLiteral("GET") && path == QStringLiteral("/api/status")) {
         system::ControlClient client;
@@ -123,7 +495,8 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         QJsonObject resp;
         resp[QStringLiteral("kiosk_online")] = kiosk_online;
         resp[QStringLiteral("control_socket")] = system::resolve_control_socket_path();
-        resp[QStringLiteral("editorial_state")] = QStringLiteral("active");
+        resp[QStringLiteral("editorial_state")] = draft_modified_ ? QStringLiteral("draft") : QStringLiteral("active");
+        resp[QStringLiteral("draft_modified")] = draft_modified_;
 
         auto active = publisher_.active_bundle();
         if (active) {
@@ -160,11 +533,14 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
 
     // API: GET /api/catalog
     if (method == QStringLiteral("GET") && path == QStringLiteral("/api/catalog")) {
-        auto cur_res = publisher_.current_symlink();
-        std::filesystem::path load_path = std::filesystem::exists(cur_res) ? cur_res : content_root_;
+        // Read directly from draft workspace to always reflect current editing changes
+        std::filesystem::path load_path = content_root_ / "catalog";
+        if (!std::filesystem::exists(load_path)) {
+            load_path = content_root_;
+        }
 
-        content::ContentBundle bundle(load_path);
-        auto cat_res = bundle.load_catalog();
+        content::ContentCatalog catalog;
+        auto cat_res = catalog.load_from_directory(load_path);
         if (!cat_res) {
             QJsonObject err;
             err[QStringLiteral("error")] = QString::fromStdString(cat_res.error().to_string());
@@ -173,31 +549,38 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         }
 
         QJsonObject resp;
-        auto m_res = bundle.load_manifest();
-        if (m_res) {
-            QJsonObject mObj;
-            mObj[QStringLiteral("bundle_id")] = QString::fromStdString(m_res->bundle_id);
-            mObj[QStringLiteral("version")] = QString::fromStdString(m_res->version);
-            mObj[QStringLiteral("title")] = QString::fromStdString(m_res->title);
-            mObj[QStringLiteral("default_theme")] = QString::fromStdString(m_res->default_theme);
-            resp[QStringLiteral("manifest")] = mObj;
-        }
+        auto m = catalog.manifest();
+        QJsonObject mObj;
+        mObj[QStringLiteral("bundle_id")] = QString::fromStdString(m.bundle_id);
+        mObj[QStringLiteral("version")] = QString::fromStdString(m.version);
+        mObj[QStringLiteral("title")] = QString::fromStdString(m.title);
+        mObj[QStringLiteral("default_theme")] = QString::fromStdString(m.default_theme);
+        resp[QStringLiteral("manifest")] = mObj;
 
         QJsonArray atomsArr;
-        for (const auto* atom : cat_res->all_atoms()) {
+        for (const auto* atom : catalog.all_atoms()) {
             QJsonObject aObj;
             aObj[QStringLiteral("content_id")] = QString::fromStdString(atom->content_id);
             aObj[QStringLiteral("title")] = QString::fromStdString(atom->title);
             aObj[QStringLiteral("type")] = QString::fromStdString(std::string(content::to_string(atom->type)));
+            aObj[QStringLiteral("subtype")] = QString::fromStdString(atom->subtype);
             aObj[QStringLiteral("canonical_name")] = QString::fromStdString(atom->subject.canonical_name);
             aObj[QStringLiteral("scientific_name")] = QString::fromStdString(atom->subject.scientific_name);
             aObj[QStringLiteral("type_label")] = QString::fromStdString(atom->subject.type_label);
+
+            QJsonArray themesArr;
+            for (const auto& t : atom->themes) themesArr.append(QString::fromStdString(t));
+            aObj[QStringLiteral("themes")] = themesArr;
 
             QJsonArray factsArr;
             for (const auto& fact : atom->canonical_facts) {
                 QJsonObject fObj;
                 fObj[QStringLiteral("fact_id")] = QString::fromStdString(fact.fact_id);
                 fObj[QStringLiteral("statement")] = QString::fromStdString(fact.statement);
+                fObj[QStringLiteral("confidence")] = QString::fromStdString(fact.confidence);
+                QJsonArray srcArr;
+                for (const auto& s : fact.source_ids) srcArr.append(QString::fromStdString(s));
+                fObj[QStringLiteral("source_ids")] = srcArr;
                 factsArr.append(fObj);
             }
             aObj[QStringLiteral("canonical_facts")] = factsArr;
@@ -215,7 +598,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         resp[QStringLiteral("atoms")] = atomsArr;
 
         QJsonArray recipesArr;
-        for (const auto* rec : cat_res->all_recipes()) {
+        for (const auto* rec : catalog.all_recipes()) {
             QJsonObject rObj;
             rObj[QStringLiteral("recipe_id")] = QString::fromStdString(rec->recipe_id);
             rObj[QStringLiteral("name")] = QString::fromStdString(rec->name);
@@ -262,6 +645,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         QJsonObject resp;
         resp[QStringLiteral("success")] = pub_res.success;
         if (pub_res.success) {
+            draft_modified_ = false;
             resp[QStringLiteral("bundle_id")] = QString::fromStdString(pub_res.bundle_id);
             resp[QStringLiteral("version")] = QString::fromStdString(pub_res.version);
             resp[QStringLiteral("content_hash")] = QString::fromStdString(pub_res.content_hash);
@@ -289,6 +673,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         QJsonObject resp;
         resp[QStringLiteral("success")] = rb_res.has_value();
         if (rb_res.has_value()) {
+            draft_modified_ = false;
             system::ControlClient client;
             (void)client.send_reload();
             resp[QStringLiteral("kiosk_reloaded")] = true;
@@ -330,6 +715,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         }
         if (filePath.endsWith(QStringLiteral(".png"))) contentType = QStringLiteral("image/png");
         else if (filePath.endsWith(QStringLiteral(".jpg")) || filePath.endsWith(QStringLiteral(".jpeg"))) contentType = QStringLiteral("image/jpeg");
+        else if (filePath.endsWith(QStringLiteral(".webp"))) contentType = QStringLiteral("image/webp");
         else if (filePath.endsWith(QStringLiteral(".wav"))) contentType = QStringLiteral("audio/wav");
         else if (filePath.endsWith(QStringLiteral(".ogg"))) contentType = QStringLiteral("audio/ogg");
         else contentType = QStringLiteral("application/octet-stream");

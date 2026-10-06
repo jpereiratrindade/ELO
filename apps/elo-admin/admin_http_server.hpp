@@ -37,11 +37,18 @@ private:
     void sendResponse(QTcpSocket* socket, int statusCode, const QString& contentType, const QByteArray& body);
     void sendJsonResponse(QTcpSocket* socket, int statusCode, const QByteArray& jsonBytes);
 
+    // CRUD Handlers
+    void handleAtomsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
+    void handleUploadRoute(QTcpSocket* socket, const QByteArray& body);
+    void handleRelationsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
+    void handleRecipesRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
+
     std::filesystem::path content_root_;
     std::filesystem::path web_root_;
     quint16 port_{8080};
     std::unique_ptr<QTcpServer> tcp_server_;
     content::BundlePublisher publisher_;
+    bool draft_modified_{false};
 };
 
 } // namespace elo::admin

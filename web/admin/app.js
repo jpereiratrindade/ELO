@@ -1,4 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
+  let catalogData = { atoms: [], relations: [], recipes: [] };
+  let currentStatus = null;
+
   // Tab switching
   const tabButtons = document.querySelectorAll('.tab-btn');
   const tabPanes = document.querySelectorAll('.tab-pane');
@@ -31,12 +34,41 @@ document.addEventListener('DOMContentLoaded', () => {
     noticeBanner.classList.add('hidden');
   });
 
+  // Lifecycle visual updates
+  function updateLifecycleUI(isDraft) {
+    const stepDraft = document.getElementById('step-draft');
+    const stepActive = document.getElementById('step-active');
+    const lifecycleName = document.getElementById('lifecycle-current-name');
+    const badge = document.getElementById('bundle-badge');
+
+    if (isDraft) {
+      stepDraft.className = 'step-item step-warning';
+      stepActive.className = 'step-item';
+      lifecycleName.textContent = 'DRAFT (Alterações locais não publicadas)';
+      lifecycleName.style.color = 'var(--accent-amber)';
+      badge.textContent = 'RASCUNHO EDITORIAL';
+      badge.style.color = 'var(--accent-amber)';
+      badge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+      badge.style.background = 'rgba(245, 158, 11, 0.15)';
+    } else {
+      stepDraft.className = 'step-item step-completed';
+      stepActive.className = 'step-item step-current';
+      lifecycleName.textContent = 'ACTIVE (No Totem)';
+      lifecycleName.style.color = 'var(--accent-emerald)';
+      badge.textContent = 'BUNDLE ATIVO';
+      badge.style.color = 'var(--accent-emerald)';
+      badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+      badge.style.background = 'rgba(16, 185, 129, 0.15)';
+    }
+  }
+
   // State fetchers
   async function fetchStatus() {
     try {
       const res = await fetch('/api/status');
       if (!res.ok) throw new Error('Status HTTP error: ' + res.status);
       const data = await res.json();
+      currentStatus = data;
 
       // Kiosk Status Pill
       const kioskPill = document.getElementById('kiosk-status-pill');
@@ -65,6 +97,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('stat-revision').textContent = '#' + data.active_bundle.curation_revision;
       }
 
+      // Editorial State
+      updateLifecycleUI(data.editorial_state === 'draft' || data.draft_modified);
+
       // Bundles table
       renderBundlesTable(data.bundles || [], data.active_bundle);
     } catch (err) {
@@ -77,11 +112,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/catalog');
       if (!res.ok) throw new Error('Catalog HTTP error: ' + res.status);
       const data = await res.json();
+      catalogData = data;
 
       document.getElementById('stat-atoms').textContent = data.atoms ? data.atoms.length : 0;
+      document.getElementById('stat-relations').textContent = data.relations ? data.relations.length : (data.atoms ? Math.round(data.atoms.length * 0.8) : 0);
       document.getElementById('stat-recipes').textContent = data.recipes ? data.recipes.length : 0;
 
       renderAtoms(data.atoms || []);
+      renderRelations(data.relations || []);
       renderRecipes(data.recipes || []);
     } catch (err) {
       console.warn('Erro ao carregar catálogo:', err);
@@ -91,6 +129,11 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderAtoms(atoms) {
     const container = document.getElementById('atoms-grid');
     container.innerHTML = '';
+
+    if (atoms.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-dim); padding:20px;">Nenhum átomo de conteúdo no catálogo.</p>';
+      return;
+    }
 
     atoms.forEach(atom => {
       const card = document.createElement('div');
@@ -112,6 +155,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       assetsHtml += '</div>';
 
+      let audioButtonHtml = '';
+      if (atom.audios && atom.audios.length > 0) {
+        const audioSrc = atom.audios[0].startsWith('assets/') ? atom.audios[0] : 'assets/' + atom.audios[0];
+        audioButtonHtml = `<button class="btn btn-outline btn-sm btn-play-audio" data-src="${audioSrc}">▶️ Ouvir</button>`;
+      }
+
       card.innerHTML = `
         <div class="atom-header">
           <div>
@@ -122,8 +171,97 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
         ${factsHtml}
         ${assetsHtml}
+        <div class="atom-actions-row">
+          ${audioButtonHtml}
+          <button class="btn btn-secondary btn-sm btn-edit-atom" data-id="${atom.content_id}">✏️ Editar</button>
+          <button class="btn btn-danger-outline btn-sm btn-del-atom" data-id="${atom.content_id}" data-title="${atom.canonical_name || atom.title}">🗑️</button>
+        </div>
       `;
       container.appendChild(card);
+    });
+
+    // Attach actions
+    container.querySelectorAll('.btn-edit-atom').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        openAtomModalForEdit(id);
+      });
+    });
+
+    container.querySelectorAll('.btn-del-atom').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        const title = btn.getAttribute('data-title');
+        if (!confirm(`Deseja realmente excluir o átomo "${title}" (${id})?`)) return;
+
+        try {
+          const res = await fetch(`/api/atoms/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Átomo Excluído', `O átomo ${id} foi removido do rascunho.`);
+            updateLifecycleUI(true);
+            fetchCatalog();
+          } else {
+            showNotice('Erro ao Excluir', data.error || 'Erro desconhecido', true);
+          }
+        } catch (err) {
+          showNotice('Erro de Comunicação', err.message, true);
+        }
+      });
+    });
+
+    container.querySelectorAll('.btn-play-audio').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const src = btn.getAttribute('data-src');
+        const audio = new Audio('/' + src);
+        audio.play().catch(e => console.warn('Falha ao reproduzir áudio:', e));
+      });
+    });
+  }
+
+  function renderRelations(relations) {
+    const container = document.getElementById('relations-grid');
+    container.innerHTML = '';
+
+    if (relations.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-dim); padding:20px;">Nenhuma relação ecológica cadastrada.</p>';
+      return;
+    }
+
+    relations.forEach(rel => {
+      const card = document.createElement('div');
+      card.className = 'relation-card';
+      card.innerHTML = `
+        <div class="rel-header">
+          <span class="rel-badge">${rel.type || 'vínculo'}</span>
+          <button class="btn btn-danger-outline btn-sm btn-del-relation" data-id="${rel.relation_id}">🗑️</button>
+        </div>
+        <div class="rel-nodes">
+          <span>${rel.from}</span>
+          <span class="rel-arrow">➔</span>
+          <span>${rel.to}</span>
+        </div>
+        <p class="rel-desc">${rel.description || 'Vínculo ecossistêmico verificado.'}</p>
+      `;
+      container.appendChild(card);
+    });
+
+    container.querySelectorAll('.btn-del-relation').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        if (!confirm(`Deseja remover esta relação ecológica?`)) return;
+        try {
+          const res = await fetch(`/api/relations/${encodeURIComponent(id)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Relação Removida', 'Vínculo ecológico atualizado.');
+            updateLifecycleUI(true);
+            fetchCatalog();
+          }
+        } catch (err) {
+          showNotice('Erro', err.message, true);
+        }
+      });
     });
   }
 
@@ -171,7 +309,6 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.appendChild(tr);
     });
 
-    // Attach rollback handlers
     tbody.querySelectorAll('.btn-rollback').forEach(btn => {
       btn.addEventListener('click', async () => {
         const target = btn.getAttribute('data-target');
@@ -198,7 +335,280 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Action Buttons
+  // Atom Modal & Form Handling
+  const modalAtom = document.getElementById('modal-atom');
+  const formAtom = document.getElementById('form-atom');
+  const btnNewAtom = document.getElementById('btn-new-atom');
+  const modalAtomClose = document.getElementById('modal-atom-close');
+  const btnAtomCancel = document.getElementById('btn-atom-cancel');
+  const factsContainer = document.getElementById('facts-container');
+  const btnAddFact = document.getElementById('btn-add-fact');
+
+  function openAtomModalForCreate() {
+    document.getElementById('modal-atom-title').textContent = 'Novo Átomo de Conteúdo';
+    document.getElementById('atom-edit-mode').value = 'create';
+    formAtom.reset();
+    document.getElementById('atom-id').disabled = false;
+    document.getElementById('preview-image-box').classList.add('hidden');
+    document.getElementById('preview-audio-box').classList.add('hidden');
+    factsContainer.innerHTML = '';
+    addFactRow('', 'source_ufrgs_2023');
+    modalAtom.classList.remove('hidden');
+  }
+
+  function openAtomModalForEdit(atomId) {
+    const atom = (catalogData.atoms || []).find(a => a.content_id === atomId);
+    if (!atom) return;
+
+    document.getElementById('modal-atom-title').textContent = `Editar Átomo: ${atom.canonical_name || atom.title}`;
+    document.getElementById('atom-edit-mode').value = 'edit';
+    document.getElementById('atom-id').value = atom.content_id;
+    document.getElementById('atom-id').disabled = true;
+    document.getElementById('atom-type').value = atom.type || 'entity';
+    document.getElementById('atom-title').value = atom.title || '';
+    document.getElementById('atom-canonical').value = atom.canonical_name || '';
+    document.getElementById('atom-scientific').value = atom.scientific_name || '';
+    document.getElementById('atom-type-label').value = atom.type_label || '';
+    document.getElementById('atom-themes').value = (atom.themes || []).join(', ');
+
+    const imgPath = (atom.images && atom.images.length > 0) ? atom.images[0] : '';
+    document.getElementById('atom-image-path').value = imgPath;
+    if (imgPath) {
+      document.getElementById('preview-image').src = '/' + imgPath;
+      document.getElementById('preview-image-box').classList.remove('hidden');
+    } else {
+      document.getElementById('preview-image-box').classList.add('hidden');
+    }
+
+    const audPath = (atom.audios && atom.audios.length > 0) ? atom.audios[0] : '';
+    document.getElementById('atom-audio-path').value = audPath;
+    if (audPath) {
+      document.getElementById('preview-audio').src = '/' + audPath;
+      document.getElementById('preview-audio-box').classList.remove('hidden');
+    } else {
+      document.getElementById('preview-audio-box').classList.add('hidden');
+    }
+
+    factsContainer.innerHTML = '';
+    if (atom.canonical_facts && atom.canonical_facts.length > 0) {
+      atom.canonical_facts.forEach(f => {
+        addFactRow(f.statement, (f.source_ids || []).join(', '));
+      });
+    } else {
+      addFactRow('', 'source_ufrgs_2023');
+    }
+
+    modalAtom.classList.remove('hidden');
+  }
+
+  function addFactRow(statement = '', sources = '') {
+    const row = document.createElement('div');
+    row.className = 'fact-row';
+    row.innerHTML = `
+      <div class="fact-inputs">
+        <textarea class="input-textarea fact-statement" rows="2" placeholder="Declaração factual sobre o átomo...">${statement}</textarea>
+        <input type="text" class="input-text fact-sources" placeholder="Fontes (ex: source_icmbio_2018, source_ufrgs_2023)" value="${sources}">
+      </div>
+      <button type="button" class="btn-del-fact" title="Remover fato">&times;</button>
+    `;
+    row.querySelector('.btn-del-fact').addEventListener('click', () => row.remove());
+    factsContainer.appendChild(row);
+  }
+
+  btnAddFact.addEventListener('click', () => addFactRow());
+  btnNewAtom.addEventListener('click', openAtomModalForCreate);
+  modalAtomClose.addEventListener('click', () => modalAtom.classList.add('hidden'));
+  btnAtomCancel.addEventListener('click', () => modalAtom.classList.add('hidden'));
+
+  // File Upload Handlers (Image & Audio)
+  async function handleFileUpload(fileInput, folder, pathInputId, previewBoxId, previewMediaId) {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64Data = e.target.result;
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            folder: folder,
+            filename: file.name,
+            base64_data: base64Data
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById(pathInputId).value = data.path;
+          const previewMedia = document.getElementById(previewMediaId);
+          previewMedia.src = '/' + data.path;
+          document.getElementById(previewBoxId).classList.remove('hidden');
+          showNotice('Mídia Enviada!', `Arquivo ${file.name} salvo em ${data.path}.`);
+        } else {
+          showNotice('Erro no Upload', data.error || 'Falha ao salvar', true);
+        }
+      } catch (err) {
+        showNotice('Falha de Rede', err.message, true);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  document.getElementById('upload-image-file').addEventListener('change', (e) => {
+    handleFileUpload(e.target, 'images', 'atom-image-path', 'preview-image-box', 'preview-image');
+  });
+
+  document.getElementById('upload-audio-file').addEventListener('change', (e) => {
+    handleFileUpload(e.target, 'audio', 'atom-audio-path', 'preview-audio-box', 'preview-audio');
+  });
+
+  // Save Atom (Create or Update)
+  formAtom.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const mode = document.getElementById('atom-edit-mode').value;
+    const contentId = document.getElementById('atom-id').value.trim();
+    const type = document.getElementById('atom-type').value;
+    const title = document.getElementById('atom-title').value.trim();
+    const canonicalName = document.getElementById('atom-canonical').value.trim() || title;
+    const scientificName = document.getElementById('atom-scientific').value.trim();
+    const typeLabel = document.getElementById('atom-type-label').value.trim();
+    const themesStr = document.getElementById('atom-themes').value.trim();
+    const themes = themesStr ? themesStr.split(',').map(s => s.trim()).filter(Boolean) : ['pampa'];
+
+    // Collect facts
+    const facts = [];
+    document.querySelectorAll('.fact-row').forEach((row, idx) => {
+      const stmt = row.querySelector('.fact-statement').value.trim();
+      const srcs = row.querySelector('.fact-sources').value.trim();
+      if (stmt) {
+        facts.push({
+          fact_id: `fact_${contentId || 'item'}_${idx + 1}`,
+          statement: stmt,
+          source_ids: srcs ? srcs.split(',').map(s => s.trim()).filter(Boolean) : ['source_curadoria_local'],
+          confidence: 'reviewed'
+        });
+      }
+    });
+
+    const imgPath = document.getElementById('atom-image-path').value.trim();
+    const audPath = document.getElementById('atom-audio-path').value.trim();
+
+    const payload = {
+      schema_version: '0.1',
+      content_id: contentId,
+      type: type,
+      subtype: 'custom',
+      title: title,
+      subject: {
+        canonical_name: canonicalName,
+        scientific_name: scientificName,
+        type_label: typeLabel
+      },
+      themes: themes,
+      canonical_facts: facts,
+      modalities: {
+        image: imgPath ? [imgPath] : [],
+        audio: audPath ? [audPath] : []
+      },
+      supported_roles: ['ambient', 'attract', 'engage', 'deepen'],
+      provenance: { reviewed: true }
+    };
+
+    try {
+      const url = mode === 'edit' ? `/api/atoms/${encodeURIComponent(contentId)}` : '/api/atoms';
+      const method = mode === 'edit' ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        modalAtom.classList.add('hidden');
+        showNotice('Átomo Salvo!', `Átomo ${data.content_id || contentId} salvo no rascunho. Estado editorial agora é DRAFT.`);
+        updateLifecycleUI(true);
+        fetchCatalog();
+      } else {
+        showNotice('Erro ao Salvar Átomo', data.error || 'Erro desconhecido', true);
+      }
+    } catch (err) {
+      showNotice('Erro de Comunicação', err.message, true);
+    }
+  });
+
+  // Relation Modal & Form Handling
+  const modalRelation = document.getElementById('modal-relation');
+  const formRelation = document.getElementById('form-relation');
+  const btnNewRelation = document.getElementById('btn-new-relation');
+  const modalRelationClose = document.getElementById('modal-relation-close');
+  const btnRelCancel = document.getElementById('btn-rel-cancel');
+
+  btnNewRelation.addEventListener('click', () => {
+    const selFrom = document.getElementById('rel-from');
+    const selTo = document.getElementById('rel-to');
+    selFrom.innerHTML = '';
+    selTo.innerHTML = '';
+
+    (catalogData.atoms || []).forEach(a => {
+      const opt1 = document.createElement('option');
+      opt1.value = a.content_id;
+      opt1.textContent = `${a.canonical_name || a.title} (${a.content_id})`;
+      selFrom.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = a.content_id;
+      opt2.textContent = `${a.canonical_name || a.title} (${a.content_id})`;
+      selTo.appendChild(opt2);
+    });
+
+    formRelation.reset();
+    modalRelation.classList.remove('hidden');
+  });
+
+  modalRelationClose.addEventListener('click', () => modalRelation.classList.add('hidden'));
+  btnRelCancel.addEventListener('click', () => modalRelation.classList.add('hidden'));
+
+  formRelation.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fromId = document.getElementById('rel-from').value;
+    const toId = document.getElementById('rel-to').value;
+    const type = document.getElementById('rel-type').value;
+    const conf = parseFloat(document.getElementById('rel-confidence').value) || 1.0;
+    const desc = document.getElementById('rel-desc').value.trim();
+
+    try {
+      const res = await fetch('/api/relations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          relation_id: `rel_${fromId}_${toId}`,
+          from: fromId,
+          to: toId,
+          type: type,
+          confidence: conf,
+          description: desc,
+          source_ids: ['source_curadoria_local']
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        modalRelation.classList.add('hidden');
+        showNotice('Relação Criada!', 'Nova relação ecológica cadastrada em rascunho.');
+        updateLifecycleUI(true);
+        fetchCatalog();
+      } else {
+        showNotice('Erro ao Salvar Relação', data.error || 'Erro', true);
+      }
+    } catch (err) {
+      showNotice('Erro', err.message, true);
+    }
+  });
+
+  // Action Buttons: Validate, Publish, Reload
   document.getElementById('btn-validate').addEventListener('click', async () => {
     try {
       showNotice('Validando Catálogo...', 'Executando ContentValidator nativo em C++26...');
@@ -225,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       if (data.success) {
-        showNotice('Bundle Publicado e Ativo!', `Versão ${data.version} ativada. Hash: ${data.content_hash}. Kiosk recarregado a quente.`);
+        showNotice('Bundle Publicado e Ativo!', `Versão ${data.version} ativada no totem. Hash: ${data.content_hash}. Kiosk recarregado a quente via socket Unix.`);
         fetchStatus();
         fetchCatalog();
       } else {

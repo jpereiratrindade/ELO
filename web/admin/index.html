@@ -62,6 +62,10 @@
             <span id="stat-atoms" class="stat-value">—</span>
           </div>
           <div class="stat-box">
+            <span class="stat-label">Relações</span>
+            <span id="stat-relations" class="stat-value">—</span>
+          </div>
+          <div class="stat-box">
             <span class="stat-label">Receitas</span>
             <span id="stat-recipes" class="stat-value">—</span>
           </div>
@@ -75,27 +79,27 @@
           <span id="lifecycle-current-name" class="lifecycle-active-name">ACTIVE (No Totem)</span>
         </div>
         <div class="lifecycle-steps">
-          <div class="step-item step-completed" data-step="draft">
+          <div id="step-draft" class="step-item step-completed" data-step="draft">
             <div class="step-circle">1</div>
             <span class="step-text">DRAFT</span>
           </div>
-          <div class="step-line step-line-active"></div>
-          <div class="step-item step-completed" data-step="valid">
+          <div id="line-draft" class="step-line step-line-active"></div>
+          <div id="step-valid" class="step-item step-completed" data-step="valid">
             <div class="step-circle">2</div>
             <span class="step-text">VALID</span>
           </div>
-          <div class="step-line step-line-active"></div>
-          <div class="step-item step-completed" data-step="previewed">
+          <div id="line-valid" class="step-line step-line-active"></div>
+          <div id="step-previewed" class="step-item step-completed" data-step="previewed">
             <div class="step-circle">3</div>
             <span class="step-text">PREVIEWED</span>
           </div>
-          <div class="step-line step-line-active"></div>
-          <div class="step-item step-completed" data-step="published">
+          <div id="line-previewed" class="step-line step-line-active"></div>
+          <div id="step-published" class="step-item step-completed" data-step="published">
             <div class="step-circle">4</div>
             <span class="step-text">PUBLISHED</span>
           </div>
-          <div class="step-line step-line-active"></div>
-          <div class="step-item step-current" data-step="active">
+          <div id="line-published" class="step-line step-line-active"></div>
+          <div id="step-active" class="step-item step-current" data-step="active">
             <div class="step-circle">5</div>
             <span class="step-text">ACTIVE</span>
           </div>
@@ -131,6 +135,7 @@
     <!-- Navigation Tabs -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="tab-atoms">Átomos de Conteúdo</button>
+      <button class="tab-btn" data-tab="tab-relations">Relações Ecológicas</button>
       <button class="tab-btn" data-tab="tab-recipes">Receitas de Experiência</button>
       <button class="tab-btn" data-tab="tab-history">Histórico & Rollback</button>
       <button class="tab-btn" data-tab="tab-ipc">Control Plane & Socket</button>
@@ -138,27 +143,53 @@
 
     <!-- Tab 1: Atoms Grid -->
     <section id="tab-atoms" class="tab-pane active">
-      <div class="pane-header">
-        <h3 class="pane-title">Entidades e Átomos Canônicos</h3>
-        <p class="pane-subtitle">Unidades atômicas de conhecimento com proveniência e fatos canônicos verificados</p>
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Entidades e Átomos Canônicos</h3>
+          <p class="pane-subtitle">Unidades atômicas de conhecimento com proveniência e fatos canônicos verificados</p>
+        </div>
+        <button id="btn-new-atom" class="btn btn-primary btn-sm-action">
+          + Novo Átomo de Conteúdo
+        </button>
       </div>
       <div id="atoms-grid" class="atoms-grid">
         <!-- Rendered by app.js -->
       </div>
     </section>
 
-    <!-- Tab 2: Recipes Grid -->
+    <!-- Tab 2: Relations Grid -->
+    <section id="tab-relations" class="tab-pane">
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Relações Ecológicas e Narrativas</h3>
+          <p class="pane-subtitle">Vínculos de habitat, predação, polinização e processos ecossistêmicos</p>
+        </div>
+        <button id="btn-new-relation" class="btn btn-primary btn-sm-action">
+          + Nova Relação
+        </button>
+      </div>
+      <div id="relations-grid" class="relations-grid">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Tab 3: Recipes Grid -->
     <section id="tab-recipes" class="tab-pane">
-      <div class="pane-header">
-        <h3 class="pane-title">Receitas de Interação Semântica</h3>
-        <p class="pane-subtitle">Coreografias de micro-experiências interativas com passos, perguntas e revelações</p>
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Receitas de Interação Semântica</h3>
+          <p class="pane-subtitle">Coreografias de micro-experiências interativas com passos, perguntas e revelações</p>
+        </div>
+        <button id="btn-new-recipe" class="btn btn-primary btn-sm-action">
+          + Nova Receita
+        </button>
       </div>
       <div id="recipes-grid" class="recipes-grid">
         <!-- Rendered by app.js -->
       </div>
     </section>
 
-    <!-- Tab 3: History & Rollback -->
+    <!-- Tab 4: History & Rollback -->
     <section id="tab-history" class="tab-pane">
       <div class="pane-header">
         <h3 class="pane-title">Histórico de Publicações e Bundles Selados</h3>
@@ -183,7 +214,7 @@
       </div>
     </section>
 
-    <!-- Tab 4: Control Plane IPC -->
+    <!-- Tab 5: Control Plane IPC -->
     <section id="tab-ipc" class="tab-pane">
       <div class="pane-header">
         <h3 class="pane-title">Control Plane Local (Unix Domain Socket)</h3>
@@ -214,6 +245,149 @@
       </div>
     </section>
   </main>
+
+  <!-- Modal: Átomo CRUD -->
+  <div id="modal-atom" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-atom-title" class="modal-title">Novo Átomo de Conteúdo</h3>
+        <button id="modal-atom-close" class="modal-close">&times;</button>
+      </div>
+      <form id="form-atom" class="modal-body">
+        <input type="hidden" id="atom-edit-mode" value="create">
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="atom-id">Identificador Único (Content ID)</label>
+            <input type="text" id="atom-id" class="input-text" placeholder="ex: species_graxaim_003">
+            <span class="form-hint">Gerado automaticamente se deixado vazio</span>
+          </div>
+          <div class="form-group">
+            <label for="atom-type">Tipo Semântico</label>
+            <select id="atom-type" class="input-select">
+              <option value="entity">Entity (Espécie / Indivíduo / Objeto)</option>
+              <option value="concept">Concept (Conceito Ecológico)</option>
+              <option value="place">Place (Lugar / Habitat / Bioma)</option>
+              <option value="phenomenon">Phenomenon (Fenômeno Natural)</option>
+              <option value="question">Question (Provocação / Pergunta)</option>
+              <option value="challenge">Challenge (Desafio Interativo)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="atom-title">Título de Apresentação</label>
+            <input type="text" id="atom-title" class="input-text" required placeholder="ex: Graxaim-do-campo">
+          </div>
+          <div class="form-group">
+            <label for="atom-canonical">Nome Canônico</label>
+            <input type="text" id="atom-canonical" class="input-text" placeholder="ex: Graxaim-do-campo">
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="atom-scientific">Nome Científico / Subtítulo</label>
+            <input type="text" id="atom-scientific" class="input-text" placeholder="ex: Lycalopex gymnocercus">
+          </div>
+          <div class="form-group">
+            <label for="atom-type-label">Rótulo Curatorial</label>
+            <input type="text" id="atom-type-label" class="input-text" placeholder="ex: Mamífero canídeo campestre">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="atom-themes">Temas Ecológicos (separados por vírgula)</label>
+          <input type="text" id="atom-themes" class="input-text" placeholder="pampa, biodiversidade, fauna, mamiferos">
+        </div>
+
+        <!-- Fatos Canônicos -->
+        <div class="form-section-title-row">
+          <h4 class="form-section-title">Fatos Canônicos & Fontes de Autoridade</h4>
+          <button type="button" id="btn-add-fact" class="btn btn-outline btn-sm">+ Adicionar Fato</button>
+        </div>
+        <div id="facts-container" class="facts-container">
+          <!-- Dynamically injected fact rows -->
+        </div>
+
+        <!-- Mídias e Assets -->
+        <h4 class="form-section-title" style="margin-top: 16px;">Mídias e Arquivos Físicos (Assets)</h4>
+        <div class="form-row-2">
+          <div class="form-group asset-upload-box">
+            <label>Imagem Científica / Ilustração</label>
+            <input type="file" id="upload-image-file" accept="image/*" class="input-file">
+            <input type="text" id="atom-image-path" class="input-text" placeholder="assets/images/exemplo.png">
+            <div id="preview-image-box" class="preview-box hidden">
+              <img id="preview-image" src="" alt="Prévia">
+            </div>
+          </div>
+          <div class="form-group asset-upload-box">
+            <label>Canto / Paisagem Sonora (Áudio)</label>
+            <input type="file" id="upload-audio-file" accept="audio/*" class="input-file">
+            <input type="text" id="atom-audio-path" class="input-text" placeholder="assets/audio/canto.wav">
+            <div id="preview-audio-box" class="preview-box hidden">
+              <audio id="preview-audio" controls></audio>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-atom-cancel" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Átomo (Rascunho)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Relação CRUD -->
+  <div id="modal-relation" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Nova Relação Ecológica</h3>
+        <button id="modal-relation-close" class="modal-close">&times;</button>
+      </div>
+      <form id="form-relation" class="modal-body">
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="rel-from">Átomo de Origem (From)</label>
+            <select id="rel-from" class="input-select" required></select>
+          </div>
+          <div class="form-group">
+            <label for="rel-to">Átomo de Destino (To)</label>
+            <select id="rel-to" class="input-select" required></select>
+          </div>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="rel-type">Tipo de Vínculo</label>
+            <select id="rel-type" class="input-select">
+              <option value="inhabits">Habita / Ocorre em (inhabits)</option>
+              <option value="depends_on">Depende de (depends_on)</option>
+              <option value="predates">Preda / Alimenta-se (predates)</option>
+              <option value="pollinates">Poliniza / Dispersa (pollinates)</option>
+              <option value="threatens">Ameaça / Degrada (threatens)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="rel-confidence">Grau de Confiança (0.0 a 1.0)</label>
+            <input type="number" id="rel-confidence" class="input-text" min="0.1" max="1.0" step="0.05" value="1.0">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="rel-desc">Descrição / Evidência Ecológica</label>
+          <textarea id="rel-desc" class="input-textarea" rows="3" placeholder="Explicação científica sobre o vínculo entre os dois átomos..."></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-rel-cancel" class="btn btn-secondary">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Salvar Relação</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <footer class="studio-footer">
     <p>ELO Content Studio · Arquitetura Constitucional ELO-ADMIN-001 & ELO-PUBLISHING-001 · GPL-3.0</p>
