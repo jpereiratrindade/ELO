@@ -359,6 +359,38 @@ core::Result<void> ExperienceEngine::start_recipe(const std::string& recipe_id) 
 
 std::vector<content::PresentationAction> ExperienceEngine::active_presentation_actions() const {
     if (!recipe_active_ || !active_atom_ || !content_catalog_) {
+        if (active_atom_) {
+            std::string title = active_atom_->title.empty() ? active_atom_->subject.canonical_name : active_atom_->title;
+            std::string text;
+            if (!active_atom_->canonical_facts.empty()) {
+                text = active_atom_->canonical_facts.front().statement;
+            } else if (active_variant_ && !active_variant_->presentation.text.empty()) {
+                text = active_variant_->presentation.text;
+            }
+
+            std::string asset_path;
+            if (!active_atom_->assets.images.empty()) {
+                asset_path = active_atom_->assets.images.front();
+            } else if (!active_atom_->assets.audios.empty()) {
+                asset_path = active_atom_->assets.audios.front();
+            } else if (active_variant_ && !active_variant_->presentation.media_refs.empty()) {
+                asset_path = active_variant_->presentation.media_refs.front();
+            }
+
+            std::vector<std::string> options;
+            if (active_variant_ && !active_variant_->presentation.options.empty()) {
+                options = active_variant_->presentation.options;
+            }
+
+            return {content::PresentationAction{
+                .type = content::PresentationActionType::ShowText,
+                .title = std::move(title),
+                .text = std::move(text),
+                .asset_path = std::move(asset_path),
+                .options = std::move(options),
+                .target_content_id = active_atom_->content_id
+            }};
+        }
         if (active_variant_) {
             return {content::PresentationAction{
                 .type = content::PresentationActionType::ShowText,
@@ -367,16 +399,6 @@ std::vector<content::PresentationAction> ExperienceEngine::active_presentation_a
                 .asset_path = active_variant_->presentation.media_refs.empty() ? "" : active_variant_->presentation.media_refs.front(),
                 .options = active_variant_->presentation.options,
                 .target_content_id = active_variant_->content_id
-            }};
-        }
-        if (active_atom_) {
-            return {content::PresentationAction{
-                .type = content::PresentationActionType::ShowText,
-                .title = active_atom_->title.empty() ? active_atom_->subject.canonical_name : active_atom_->title,
-                .text = active_atom_->canonical_facts.empty() ? "" : active_atom_->canonical_facts.front().statement,
-                .asset_path = active_atom_->assets.images.empty() ? "" : active_atom_->assets.images.front(),
-                .options = {},
-                .target_content_id = active_atom_->content_id
             }};
         }
         return {};

@@ -98,6 +98,12 @@ int main() {
     auto fixture_cat = elo::test::create_test_content_fixture() / "catalog";
     if (catalog->load_from_directory(fixture_cat.string())) {
         engine->set_content_catalog(catalog);
+        auto sel_res = engine->select_contextual_content(elo::content::ContentRole::Ambient, "");
+        TEST_ASSERT(sel_res.has_value(), "Content selection succeeds");
+        if (engine->active_content_atom() && !engine->active_content_atom()->canonical_facts.empty()) {
+            TEST_ASSERT(model.contentText() == QString::fromStdString(engine->active_content_atom()->canonical_facts.front().statement),
+                        "Atom canonical fact from admin is primary authority for text presentation");
+        }
         model.startRecipe(QStringLiteral("discover_by_sound"));
         TEST_ASSERT(model.isRecipeActive(), "Recipe starts correctly");
         TEST_ASSERT(!model.contentOptions().isEmpty(), "Step presents interactive choice");

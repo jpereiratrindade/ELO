@@ -77,15 +77,15 @@ QString KioskPresentationModel::contentTitle() const {
 
 QString KioskPresentationModel::contentText() const {
     if (!engine_) return QString();
-    auto actions = engine_->active_presentation_actions();
-    if (!actions.empty()) {
-        return QString::fromStdString(actions.front().text);
-    }
-    if (engine_->active_content_variant()) {
-        return QString::fromStdString(engine_->active_content_variant()->presentation.text);
-    }
     if (engine_->active_content_atom() && !engine_->active_content_atom()->canonical_facts.empty()) {
         return QString::fromStdString(engine_->active_content_atom()->canonical_facts.front().statement);
+    }
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty() && !actions.front().text.empty()) {
+        return QString::fromStdString(actions.front().text);
+    }
+    if (engine_->active_content_variant() && !engine_->active_content_variant()->presentation.text.empty()) {
+        return QString::fromStdString(engine_->active_content_variant()->presentation.text);
     }
     return QString();
 }
@@ -103,19 +103,27 @@ QString KioskPresentationModel::contentImage() const {
     if (!engine_) return QString();
 
     QString candidate;
-    auto actions = engine_->active_presentation_actions();
-    if (!actions.empty()) {
-        const auto& path = actions.front().asset_path;
-        if (path.ends_with(".png") || path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".webp")) {
-            candidate = QString::fromStdString(path);
-        }
-    }
-    if (candidate.isEmpty() && engine_->active_content_atom()) {
+
+    // 1. Primary authority: Atom's image assets (managed in admin)
+    if (engine_->active_content_atom()) {
         const auto& imgs = engine_->active_content_atom()->assets.images;
         if (!imgs.empty()) {
             candidate = QString::fromStdString(imgs.front());
         }
     }
+
+    // 2. Active presentation actions
+    if (candidate.isEmpty()) {
+        auto actions = engine_->active_presentation_actions();
+        if (!actions.empty()) {
+            const auto& path = actions.front().asset_path;
+            if (path.ends_with(".png") || path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".webp")) {
+                candidate = QString::fromStdString(path);
+            }
+        }
+    }
+
+    // 3. Fallback to active variant
     if (candidate.isEmpty() && engine_->active_content_variant()) {
         for (const auto& media : engine_->active_content_variant()->presentation.media_refs) {
             if (media.ends_with(".png") || media.ends_with(".jpg") || media.ends_with(".jpeg") || media.ends_with(".webp")) {
@@ -124,6 +132,7 @@ QString KioskPresentationModel::contentImage() const {
             }
         }
     }
+
     if (candidate.isEmpty()) return QString();
 
     // Check direct file or search in sovereign system content asset locations

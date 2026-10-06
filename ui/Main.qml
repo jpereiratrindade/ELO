@@ -154,7 +154,7 @@ Window {
                     width: parent.width - 56
                     text: kioskModel.contentText.length > 0
                           ? kioskModel.contentText
-                          : "Aproxime-se. O totem reconhece sua presença e navega automaticamente pelo ecossistema."
+                          : "Aproxime-se. O totem reconhece sua presença e apresenta o acervo automaticamente."
                     font.pixelSize: Math.max(20, Math.min(contentArea.width * 0.016, 23))
                     color: "#38bdf8"
                     horizontalAlignment: Text.AlignHCenter
@@ -370,7 +370,7 @@ Window {
 
                         Text {
                             anchors.centerIn: parent
-                            text: "🌾"
+                            text: "◈"
                             font.pixelSize: 36
                         }
                     }
