@@ -413,7 +413,7 @@ std::filesystem::path resolve_system_content_dir(bool bootstrap_from_seed) {
                << "  \"bundle_id\": \"elo-sovereign-content\",\n"
                << "  \"version\": \"1.0.0\",\n"
                << "  \"title\": \"ELO — Catálogo Soberano\",\n"
-               << "  \"default_theme\": \"pampa\",\n"
+               << "  \"default_theme\": \"geral\",\n"
                << "  \"description\": \"Repositório soberano de conteúdo local.\"\n"
                << "}\n";
         }

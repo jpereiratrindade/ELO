@@ -125,7 +125,7 @@ Window {
             }
         }
 
-        // Estado IDLE: Modo contemplativo e atrativo do Bioma Pampa
+        // Estado IDLE: Modo contemplativo e atrativo
         ColumnLayout {
             anchors.centerIn: parent
             width: Math.min(contentArea.width * 0.94, 1380)
@@ -133,7 +133,7 @@ Window {
             visible: kioskModel.currentState === "IDLE"
 
             Text {
-                text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Bioma Pampa"
+                text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : kioskModel.bundleTitle
                 font.pixelSize: Math.max(38, Math.min(contentArea.width * 0.032, 52))
                 font.bold: true
                 color: "#f8fafc"
@@ -282,13 +282,13 @@ Window {
             spacing: 16
             visible: kioskModel.currentState === "CONTENT_ACTIVE"
 
-            // Cabeçalho da Entidade / Espécie
+            // Cabeçalho do Conteúdo Ativo
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
                 spacing: 8
 
                 Text {
-                    text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Bioma Pampa"
+                    text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : kioskModel.bundleTitle
                     font.pixelSize: Math.max(34, Math.min(contentArea.width * 0.028, 48))
                     font.bold: true
                     color: "#f8fafc"
@@ -384,10 +384,11 @@ Window {
                     }
 
                     Text {
-                        text: "Acervo e Biodiversidade do Pampa"
+                        text: kioskModel.bundleTitle
                         font.pixelSize: 14
                         color: "#64748b"
                         Layout.alignment: Qt.AlignHCenter
+                        visible: kioskModel.bundleTitle.length > 0
                     }
                 }
 

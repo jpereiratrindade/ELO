@@ -591,7 +591,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const scientificName = document.getElementById('atom-scientific').value.trim();
     const typeLabel = document.getElementById('atom-type-label').value.trim();
     const themesStr = document.getElementById('atom-themes').value.trim();
-    const themes = themesStr ? themesStr.split(',').map(s => s.trim()).filter(Boolean) : ['pampa'];
+    const themes = themesStr ? themesStr.split(',').map(s => s.trim()).filter(Boolean) : ['geral'];
 
     // Collect facts
     const facts = [];

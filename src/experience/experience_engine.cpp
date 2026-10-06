@@ -369,6 +369,16 @@ std::vector<content::PresentationAction> ExperienceEngine::active_presentation_a
                 .target_content_id = active_variant_->content_id
             }};
         }
+        if (active_atom_) {
+            return {content::PresentationAction{
+                .type = content::PresentationActionType::ShowText,
+                .title = active_atom_->title.empty() ? active_atom_->subject.canonical_name : active_atom_->title,
+                .text = active_atom_->canonical_facts.empty() ? "" : active_atom_->canonical_facts.front().statement,
+                .asset_path = active_atom_->assets.images.empty() ? "" : active_atom_->assets.images.front(),
+                .options = {},
+                .target_content_id = active_atom_->content_id
+            }};
+        }
         return {};
     }
     const auto* rec = content_catalog_->find_recipe(recipe_state_.recipe_id);

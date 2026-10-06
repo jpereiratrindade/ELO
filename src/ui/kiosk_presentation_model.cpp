@@ -53,6 +53,16 @@ quint32 KioskPresentationModel::kernelGeneration() const {
     return engine_->kernel_view().generation;
 }
 
+QString KioskPresentationModel::bundleTitle() const {
+    if (engine_ && engine_->content_catalog()) {
+        const auto& manifest = engine_->content_catalog()->manifest();
+        if (!manifest.title.empty()) {
+            return QString::fromStdString(manifest.title);
+        }
+    }
+    return QString();
+}
+
 QString KioskPresentationModel::contentTitle() const {
     if (!engine_) return QString();
     auto actions = engine_->active_presentation_actions();
@@ -62,7 +72,7 @@ QString KioskPresentationModel::contentTitle() const {
     if (engine_->active_content_atom()) {
         return QString::fromStdString(engine_->active_content_atom()->title);
     }
-    return QStringLiteral("Bioma Pampa");
+    return bundleTitle();
 }
 
 QString KioskPresentationModel::contentText() const {
@@ -74,7 +84,10 @@ QString KioskPresentationModel::contentText() const {
     if (engine_->active_content_variant()) {
         return QString::fromStdString(engine_->active_content_variant()->presentation.text);
     }
-    return QStringLiteral("Sempre pronto. Sempre incompleto.");
+    if (engine_->active_content_atom() && !engine_->active_content_atom()->canonical_facts.empty()) {
+        return QString::fromStdString(engine_->active_content_atom()->canonical_facts.front().statement);
+    }
+    return QString();
 }
 
 QString KioskPresentationModel::contentMedia() const {
@@ -255,7 +268,7 @@ QString KioskPresentationModel::behaviorStatus() const {
         case experience::SessionState::IDENTITY_SUPPORTED:
             return QStringLiteral("Visitante reconhecido");
         case experience::SessionState::CONTENT_ACTIVE:
-            return QStringLiteral("Modo contemplativo do Pampa • Navegação autônoma");
+            return QStringLiteral("Modo contemplativo • Navegação autônoma");
         case experience::SessionState::SESSION_COMPLETE:
             return QStringLiteral("Concluindo sessão");
         default:
@@ -282,10 +295,6 @@ void KioskPresentationModel::selectContextualContent(const QString& roleStr) {
         emit contentChanged();
         emit stateChanged();
     }
-}
-
-void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
-    selectContextualContent(roleStr);
 }
 
 void KioskPresentationModel::startRecipe(const QString& recipeId) {
@@ -335,14 +344,16 @@ void KioskPresentationModel::chooseOption(const QString& option) {
     if (optTrimmed == QStringLiteral("Próxima Descoberta") ||
         optTrimmed == QStringLiteral("Avançar") ||
         optTrimmed == QStringLiteral("Próximo") ||
-        optTrimmed == QStringLiteral("Explorar mais")) {
+        optTrimmed == QStringLiteral("Avançar Conteúdo")) {
         advanceContent();
         return;
     }
 
-    if (optTrimmed == QStringLiteral("Habitats e Teia Ecológica") ||
-        optTrimmed == QStringLiteral("Aprofundar") ||
-        optTrimmed == QStringLiteral("Ver Relações")) {
+    if (optTrimmed == QStringLiteral("Aprofundar") ||
+        optTrimmed == QStringLiteral("Ver Relações") ||
+        optTrimmed == QStringLiteral("Explorar mais") ||
+        optTrimmed == QStringLiteral("Saiba mais") ||
+        optTrimmed == QStringLiteral("Detalhes")) {
         deepenExperience();
         return;
     }
