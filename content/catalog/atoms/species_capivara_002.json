@@ -1,40 +1,43 @@
 {
-  "schema_version": "0.1",
-  "content_id": "species_capivara_002",
-  "type": "entity",
-  "subtype": "species",
-  "title": "Capivara",
-  "subject": {
-    "canonical_name": "Capivara",
-    "scientific_name": "Hydrochoerus hydrochaeris",
-    "type_label": "Maior roedor do planeta"
-  },
-  "themes": [
-    "pampa",
-    "biodiversity",
-    "wetlands"
-  ],
-  "canonical_facts": [
-    {
-      "fact_id": "fact_capivara_001",
-      "statement": "A capivara é o maior roedor vivo do mundo e vive em grupos sociais nos banhados e margens de rios do Pampa.",
-      "source_ids": ["source_ufrgs_2023"],
-      "confidence": "reviewed"
-    }
-  ],
-  "modalities": {
-    "image": ["assets/images/capivara.png"]
-  },
-  "supported_roles": [
-    "ambient",
-    "attract",
-    "engage",
-    "reveal",
-    "deepen"
-  ],
-  "audiences": ["general", "children"],
-  "relations": ["rel_capivara_inhabits_banhado"],
-  "provenance": {
-    "reviewed": true
-  }
+    "canonical_facts": [
+        {
+            "confidence": "reviewed",
+            "fact_id": "fact_species_capivara_002_1",
+            "source_ids": [
+                "source_ufrgs_2023"
+            ],
+            "statement": "A capivara é o maior roedor vivo do mundo e vive em grupos sociais nos banhados e margens de rios do Pampa."
+        }
+    ],
+    "content_id": "species_capivara_002",
+    "modalities": {
+        "audio": [
+        ],
+        "image": [
+            "assets/images/capivara.png"
+        ]
+    },
+    "provenance": {
+        "reviewed": true
+    },
+    "schema_version": "0.1",
+    "subject": {
+        "canonical_name": "Capivara",
+        "scientific_name": "Hydrochoerus hydrochaeris",
+        "type_label": "Maior roedor do planeta"
+    },
+    "subtype": "custom",
+    "supported_roles": [
+        "ambient",
+        "attract",
+        "engage",
+        "deepen"
+    ],
+    "themes": [
+        "pampa",
+        "biodiversity",
+        "wetlands"
+    ],
+    "title": "Capivara",
+    "type": "entity"
 }

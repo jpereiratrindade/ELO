@@ -30,7 +30,7 @@
   ],
   "modalities": {
     "image": ["assets/images/cardeal_amarelo.png"],
-    "audio": ["assets/audio/canto_cardeal.wav"]
+    "audio": []
   },
   "supported_roles": [
     "ambient",

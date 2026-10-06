@@ -32,30 +32,34 @@ std::vector<PresentationAction> RecipeExecutor::evaluate_step(
 
     const auto& step = recipe.steps[state.current_step_index];
 
-    if (step == "play_audio" && !atom.assets.audios.empty()) {
+    if (step == "play_audio") {
         actions.push_back(PresentationAction{
             .type = PresentationActionType::PlayAudio,
-            .title = "Ouça com atenção...",
-            .asset_path = atom.assets.audios.front()
+            .title = atom.title.empty() ? atom.subject.canonical_name : atom.title,
+            .text = atom.canonical_facts.empty() ? "Paisagem do Pampa e presença viva." : atom.canonical_facts.front().statement,
+            .asset_path = atom.assets.audios.empty() ? "" : atom.assets.audios.front()
         });
     } else if (step == "ask_identification" || step == "ask_choice") {
         actions.push_back(PresentationAction{
             .type = PresentationActionType::AskChoice,
-            .title = "Quem está cantando no Pampa?",
-            .text = "Selecione uma das opções na tela:",
-            .options = {atom.subject.canonical_name, "Quero-quero", "Sabiá-laranjeira"}
+            .title = atom.title.empty() ? atom.subject.canonical_name : atom.title,
+            .text = atom.canonical_facts.empty() ? "Conheça mais sobre esta forma de vida e seu papel ecológico:" : atom.canonical_facts.front().statement,
+            .asset_path = atom.assets.images.empty() ? "" : atom.assets.images.front(),
+            .options = {atom.subject.canonical_name.empty() ? "Conhecer" : atom.subject.canonical_name, "Habitats e Teia Ecológica", "Próxima Descoberta"}
         });
     } else if (step == "reveal_image" && !atom.assets.images.empty()) {
         actions.push_back(PresentationAction{
             .type = PresentationActionType::ShowImage,
-            .title = atom.subject.canonical_name,
+            .title = atom.title.empty() ? atom.subject.canonical_name : atom.title,
+            .text = atom.canonical_facts.empty() ? "" : atom.canonical_facts.front().statement,
             .asset_path = atom.assets.images.front()
         });
     } else if (step == "reveal_name" || step == "reveal") {
         actions.push_back(PresentationAction{
             .type = PresentationActionType::Reveal,
             .title = atom.subject.canonical_name,
-            .text = atom.subject.scientific_name.empty() ? "" : "(" + atom.subject.scientific_name + ")"
+            .text = atom.canonical_facts.empty() ? (atom.subject.scientific_name.empty() ? "" : "(" + atom.subject.scientific_name + ")") : atom.canonical_facts.front().statement,
+            .asset_path = atom.assets.images.empty() ? "" : atom.assets.images.front()
         });
     } else if (step == "show_micro_fact" && !atom.canonical_facts.empty()) {
         actions.push_back(PresentationAction{

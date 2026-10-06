@@ -5,11 +5,11 @@
     "role": "ambient",
     "audience": "general",
     "interaction": "none",
-    "duration_hint_seconds": 6,
+    "duration_hint_seconds": 8,
     "presentation": {
       "title": "Cardeal-amarelo",
-      "text": "O canto raro que desperta os campos do Pampa.",
-      "media": ["assets/images/cardeal_amarelo.png", "assets/audio/canto_cardeal.wav"]
+      "text": "A presença viva e rara que habita os campos do Pampa.",
+      "media": ["assets/images/cardeal_amarelo.png"]
     }
   },
   {
@@ -17,14 +17,13 @@
     "content_id": "species_cardeal_001",
     "role": "attract",
     "audience": "general",
-    "interaction": "listen_and_identify",
+    "interaction": "explore",
     "duration_hint_seconds": 10,
     "presentation": {
-      "title": "Quem está cantando?",
-      "text": "Aproxime-se para descobrir a ave rara que vive nas gramíneas do Pampa.",
-      "media": ["assets/audio/canto_cardeal.wav"],
-      "options": ["Cardeal-amarelo", "Quero-quero", "Sabiá-laranjeira"],
-      "correct_option": "Cardeal-amarelo"
+      "title": "Cardeal-amarelo",
+      "text": "Conheça a ave rara dos espinilhos e gramíneas nativas do Pampa gaúcho.",
+      "media": ["assets/images/cardeal_amarelo.png"],
+      "options": ["Cardeal-amarelo", "Campos Sulinos", "Pastejo Tradicional"]
     }
   },
   {
@@ -32,14 +31,13 @@
     "content_id": "species_cardeal_001",
     "role": "engage",
     "audience": "general",
-    "interaction": "choose",
+    "interaction": "explore",
     "duration_hint_seconds": 12,
     "presentation": {
-      "title": "Desafio do Pampa",
-      "text": "Você reconhece o canto desta ave símbolo dos nossos campos?",
-      "media": ["assets/audio/canto_cardeal.wav"],
-      "options": ["Cardeal-amarelo", "Quero-quero", "Sabiá-laranjeira"],
-      "correct_option": "Cardeal-amarelo"
+      "title": "Vida no Pampa",
+      "text": "Uma joia alada ameaçada de extinção que depende do cuidado com o campo nativo.",
+      "media": ["assets/images/cardeal_amarelo.png"],
+      "options": ["Cardeal-amarelo", "Teia Ecológica", "Próxima Descoberta"]
     }
   },
   {
@@ -51,7 +49,7 @@
     "duration_hint_seconds": 8,
     "presentation": {
       "title": "Cardeal-amarelo (Gubernatrix cristata)",
-      "text": "Exatamente! Uma joia alada ameaçada de extinção que depende do cuidado com o campo nativo.",
+      "text": "Espécie campestre de extrema relevância bioindicadora dos ecossistemas preservados.",
       "media": ["assets/images/cardeal_amarelo.png"]
     }
   },
@@ -63,7 +61,7 @@
     "interaction": "follow_relation",
     "duration_hint_seconds": 15,
     "presentation": {
-      "title": "Onde ele habita?",
+      "title": "Habitat: Campos Sulinos",
       "text": "O Cardeal-amarelo vive nos Campos Sulinos, onde encontra abrigo e sementes nativas.",
       "media": ["assets/images/campos_sulinos.png"]
     }

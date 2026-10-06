@@ -2,9 +2,12 @@
 
 #ifdef ELO_HAS_QT
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QProcess>
 #include <QTimer>
+#include <QUrl>
 #endif
 #include <algorithm>
 
@@ -82,6 +85,72 @@ QString KioskPresentationModel::contentMedia() const {
     return QString();
 }
 
+QString KioskPresentationModel::contentImage() const {
+    if (!engine_) return QString();
+
+    QString candidate;
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty()) {
+        const auto& path = actions.front().asset_path;
+        if (path.ends_with(".png") || path.ends_with(".jpg") || path.ends_with(".jpeg") || path.ends_with(".webp")) {
+            candidate = QString::fromStdString(path);
+        }
+    }
+    if (candidate.isEmpty() && engine_->active_content_atom()) {
+        const auto& imgs = engine_->active_content_atom()->assets.images;
+        if (!imgs.empty()) {
+            candidate = QString::fromStdString(imgs.front());
+        }
+    }
+    if (candidate.isEmpty() && engine_->active_content_variant()) {
+        for (const auto& media : engine_->active_content_variant()->presentation.media_refs) {
+            if (media.ends_with(".png") || media.ends_with(".jpg") || media.ends_with(".jpeg") || media.ends_with(".webp")) {
+                candidate = QString::fromStdString(media);
+                break;
+            }
+        }
+    }
+    if (candidate.isEmpty()) return QString();
+
+    // Check direct file or search in content asset locations
+    if (QFile::exists(candidate)) {
+        return QUrl::fromLocalFile(QFileInfo(candidate).absoluteFilePath()).toString();
+    }
+    for (const auto& prefix : {"content/", "../content/", "../../content/", "content/assets/images/", "assets/images/"}) {
+        QString testPath = QString::fromUtf8(prefix) + candidate;
+        if (QFile::exists(testPath)) {
+            return QUrl::fromLocalFile(QFileInfo(testPath).absoluteFilePath()).toString();
+        }
+        if (candidate.startsWith(QStringLiteral("assets/"))) {
+            QString testSub = QString::fromUtf8(prefix) + candidate.mid(7);
+            if (QFile::exists(testSub)) {
+                return QUrl::fromLocalFile(QFileInfo(testSub).absoluteFilePath()).toString();
+            }
+        }
+    }
+
+    // Default local file path mapping
+    QString resolved = QDir::current().filePath(QStringLiteral("content/") + candidate);
+    return QUrl::fromLocalFile(resolved).toString();
+}
+
+bool KioskPresentationModel::hasImage() const {
+    QString imgUrl = contentImage();
+    if (imgUrl.isEmpty()) return false;
+    QUrl url(imgUrl);
+    return QFile::exists(url.toLocalFile());
+}
+
+QString KioskPresentationModel::contentScientificName() const {
+    if (!engine_ || !engine_->active_content_atom()) return QString();
+    return QString::fromStdString(engine_->active_content_atom()->subject.scientific_name);
+}
+
+QString KioskPresentationModel::contentTypeLabel() const {
+    if (!engine_ || !engine_->active_content_atom()) return QString();
+    return QString::fromStdString(engine_->active_content_atom()->subject.type_label);
+}
+
 QString KioskPresentationModel::contentAudio() const {
     if (!engine_) return QString();
     auto actions = engine_->active_presentation_actions();
@@ -135,6 +204,10 @@ QStringList KioskPresentationModel::contentOptions() const {
     return QStringList();
 }
 
+QStringList KioskPresentationModel::explorationPaths() const {
+    return contentOptions();
+}
+
 bool KioskPresentationModel::isRecipeActive() const {
     return engine_ && engine_->is_recipe_active();
 }
@@ -170,10 +243,7 @@ QString KioskPresentationModel::behaviorStatus() const {
         case experience::SessionState::IDENTITY_SUPPORTED:
             return QStringLiteral("Visitante reconhecido");
         case experience::SessionState::CONTENT_ACTIVE:
-            if (!contentOptions().isEmpty()) {
-                return QStringLiteral("Toque para escolher ou aguarde o avanço automático");
-            }
-            return QStringLiteral("Apresentando narrativa do Pampa");
+            return QStringLiteral("Modo contemplativo do Pampa • Navegação autônoma");
         case experience::SessionState::SESSION_COMPLETE:
             return QStringLiteral("Concluindo sessão");
         default:
@@ -217,7 +287,9 @@ void KioskPresentationModel::startRecipe(const QString& recipeId) {
         emit contentChanged();
         emit stateChanged();
         auto audio = contentAudio();
-        playSound(audio.isEmpty() ? QStringLiteral("content/assets/audio/canto_cardeal.wav") : audio);
+        if (!audio.isEmpty()) {
+            playSound(audio);
+        }
     }
 }
 
@@ -225,12 +297,16 @@ void KioskPresentationModel::chooseOption(const QString& option) {
     if (engine_) {
         if (engine_->is_recipe_active()) {
             engine_->advance_recipe(option.toStdString());
+        } else {
+            advanceContent();
         }
         resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
         auto audio = contentAudio();
-        playSound(audio.isEmpty() ? QStringLiteral("content/assets/audio/canto_cardeal.wav") : audio);
+        if (!audio.isEmpty()) {
+            playSound(audio);
+        }
     }
 }
 
@@ -326,7 +402,6 @@ void KioskPresentationModel::onFacePresenceChanged(bool present) {
             behavior_progress_ = 0.0;
             greeting_title_ = QStringLiteral("Reconhecendo presença");
             greeting_message_ = QStringLiteral("Comparando somente a identidade facial local");
-            playSound(QStringLiteral("content/assets/audio/presence_chime.wav"));
             engine_->on_presence_detected();
             engine_->begin_automatic_continuity();
             emit recognitionVisualStateChanged(false);
@@ -377,7 +452,6 @@ void KioskPresentationModel::tick(double delta_seconds) {
                 state_duration_ = 0.0;
                 behavior_progress_ = 0.0;
                 selectContextualContent(QStringLiteral("attract"));
-                playSound(QStringLiteral("content/assets/audio/pampa_ambient.wav"));
             }
             break;
         }
@@ -424,18 +498,18 @@ void KioskPresentationModel::tick(double delta_seconds) {
 
             const auto opts = contentOptions();
             if (!opts.isEmpty()) {
-                // Pergunta / opções: 8.5s para visitante tocar ou observar
-                constexpr double kQuestionStepDuration = 8.5;
-                behavior_progress_ = std::clamp(state_duration_ / kQuestionStepDuration, 0.0, 1.0);
+                // Modo exploratório / opções táteis de navegação ecológica: 8.5s
+                constexpr double kExplorationStepDuration = 8.5;
+                behavior_progress_ = std::clamp(state_duration_ / kExplorationStepDuration, 0.0, 1.0);
                 emit behaviorProgressChanged();
-                if (state_duration_ >= kQuestionStepDuration) {
+                if (state_duration_ >= kExplorationStepDuration) {
                     state_duration_ = 0.0;
                     behavior_progress_ = 0.0;
                     chooseOption(opts.first());
                 }
             } else {
-                // Conteúdo / revelação / texto narrativo: 6.5s de leitura
-                constexpr double kReadingStepDuration = 6.5;
+                // Modo contemplativo narrativo: 7.0s
+                constexpr double kReadingStepDuration = 7.0;
                 behavior_progress_ = std::clamp(state_duration_ / kReadingStepDuration, 0.0, 1.0);
                 emit behaviorProgressChanged();
                 if (state_duration_ >= kReadingStepDuration) {

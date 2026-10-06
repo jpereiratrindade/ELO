@@ -272,96 +272,216 @@ Window {
             }
         }
 
-        // Estado de Conteúdo Ativo: Navegação Autônoma e Toque sem Mouse
+        // Estado de Conteúdo Ativo: Modo Contemplativo, Fotografia Hero e Navegação Autônoma
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(parent.width * 0.85, 840)
-            spacing: 20
+            width: Math.min(parent.width * 0.90, 880)
+            spacing: 16
             visible: kioskModel.currentState === "CONTENT_ACTIVE"
 
-            // Título do Conteúdo / Receita
-            Text {
-                text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Experiência do Pampa"
-                font.pixelSize: 34
-                font.bold: true
-                color: "#f8fafc"
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
+            // Cabeçalho da Entidade / Espécie
+            ColumnLayout {
+                Layout.alignment: Qt.AlignHCenter
+                spacing: 6
+
+                Text {
+                    text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Bioma Pampa"
+                    font.pixelSize: 36
+                    font.bold: true
+                    color: "#f8fafc"
+                    Layout.alignment: Qt.AlignHCenter
+                    horizontalAlignment: Text.AlignHCenter
+                }
+
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 10
+                    visible: kioskModel.contentScientificName.length > 0 || kioskModel.contentTypeLabel.length > 0
+
+                    Text {
+                        visible: kioskModel.contentScientificName.length > 0
+                        text: kioskModel.contentScientificName
+                        font.pixelSize: 17
+                        font.italic: true
+                        color: "#38bdf8"
+                    }
+
+                    Rectangle {
+                        visible: kioskModel.contentTypeLabel.length > 0
+                        height: 24
+                        width: typeLabelText.implicitWidth + 18
+                        radius: 12
+                        color: "#0f172a"
+                        border.color: "#334155"
+                        border.width: 1
+
+                        Text {
+                            id: typeLabelText
+                            anchors.centerIn: parent
+                            text: kioskModel.contentTypeLabel
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: "#94a3b8"
+                        }
+                    }
+                }
             }
 
-            // Bloco de Texto / Narrativa
+            // Cartão de Mídia Visual (Fotografia Científica Hero)
             Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: contentDescText.implicitHeight + (kioskModel.contentAudio.length > 0 ? 64 : 48)
-                color: "#1e293b"
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: Math.min(parent.width * 0.92, 760)
+                Layout.preferredHeight: 320
+                radius: 16
+                color: "#0b1329"
+                border.color: "#1e293b"
+                border.width: 1
+                clip: true
+
+                // Imagem carregada
+                Image {
+                    id: heroImage
+                    anchors.fill: parent
+                    anchors.margins: 8
+                    fillMode: Image.PreserveAspectFit
+                    source: kioskModel.contentImage
+                    visible: kioskModel.hasImage
+                    smooth: true
+                    asynchronous: true
+                }
+
+                // Placeholder estético e contemplativo quando a imagem ainda não está em disco
+                ColumnLayout {
+                    anchors.centerIn: parent
+                    spacing: 12
+                    visible: !kioskModel.hasImage
+
+                    Rectangle {
+                        Layout.alignment: Qt.AlignHCenter
+                        width: 72
+                        height: 72
+                        radius: 36
+                        color: "#1e293b"
+                        border.color: "#38bdf8"
+                        border.width: 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "🌾"
+                            font.pixelSize: 32
+                        }
+                    }
+
+                    Text {
+                        text: kioskModel.contentTitle
+                        font.pixelSize: 20
+                        font.bold: true
+                        color: "#e2e8f0"
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+
+                    Text {
+                        text: "Acervo e Biodiversidade do Pampa"
+                        font.pixelSize: 13
+                        color: "#64748b"
+                        Layout.alignment: Qt.AlignHCenter
+                    }
+                }
+
+                // Indicador sonoro sutil (caso haja áudio autêntico)
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.margins: 14
+                    height: 28
+                    width: audioLabelText.implicitWidth + 30
+                    radius: 14
+                    color: "#cc090d16"
+                    border.color: "#059669"
+                    border.width: 1
+                    visible: kioskModel.contentAudio.length > 0
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 6
+
+                        Text {
+                            text: "●"
+                            font.pixelSize: 10
+                            color: "#10b981"
+                        }
+                        Text {
+                            id: audioLabelText
+                            text: "Paisagem Sonora"
+                            font.pixelSize: 11
+                            font.bold: true
+                            color: "#34d399"
+                        }
+                    }
+                }
+            }
+
+            // Bloco de Narrativa Ecológica
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: Math.min(parent.width * 0.92, 760)
+                Layout.preferredHeight: contentDescText.implicitHeight + 36
+                color: "#131d36"
                 radius: 12
-                border.color: "#334155"
+                border.color: "#1e293b"
                 border.width: 1
 
                 Text {
                     id: contentDescText
                     anchors.centerIn: parent
-                    anchors.verticalCenterOffset: kioskModel.contentAudio.length > 0 ? -8 : 0
-                    width: parent.width - 48
+                    width: parent.width - 44
                     text: kioskModel.contentText
-                    font.pixelSize: 20
-                    color: "#38bdf8"
+                    font.pixelSize: 18
+                    color: "#e2e8f0"
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
-                    lineHeight: 1.3
-                }
-
-                RowLayout {
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 10
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    spacing: 6
-                    visible: kioskModel.contentAudio.length > 0
-
-                    Text {
-                        text: "●"
-                        font.pixelSize: 10
-                        color: "#34d399"
-                    }
-                    Text {
-                        text: "Áudio do Pampa em reprodução"
-                        font.pixelSize: 12
-                        font.bold: true
-                        color: "#34d399"
-                    }
+                    lineHeight: 1.35
                 }
             }
 
-            // Opções interativas táteis da narrativa (somente quando houver escolha)
-            ColumnLayout {
+            // Trilhas de Exploração e Relações Ecológicas (Chips Horizontais, NÃO formato quiz)
+            RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.fillWidth: true
-                spacing: 14
+                spacing: 12
                 visible: kioskModel.contentOptions.length > 0
 
                 Repeater {
                     model: kioskModel.contentOptions
 
                     Rectangle {
-                        Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.min(parent.width * 0.82, 520)
-                        Layout.preferredHeight: 58
-                        radius: 12
-                        color: optArea.pressed ? "#0284c7" : (optArea.containsMouse ? "#334155" : "#1e293b")
-                        border.color: optArea.containsMouse ? "#38bdf8" : "#475569"
+                        Layout.preferredWidth: Math.max(chipText.implicitWidth + 36, 140)
+                        Layout.preferredHeight: 44
+                        radius: 22
+                        color: chipArea.pressed ? "#0284c7" : (chipArea.containsMouse ? "#1e293b" : "#0f172a")
+                        border.color: chipArea.containsMouse ? "#38bdf8" : "#334155"
                         border.width: 1
 
-                        Text {
+                        RowLayout {
                             anchors.centerIn: parent
-                            text: modelData
-                            font.pixelSize: 18
-                            font.bold: true
-                            color: "#f8fafc"
+                            spacing: 6
+
+                            Text {
+                                text: "✦"
+                                font.pixelSize: 12
+                                color: "#38bdf8"
+                            }
+
+                            Text {
+                                id: chipText
+                                text: modelData
+                                font.pixelSize: 15
+                                font.bold: true
+                                color: "#f8fafc"
+                            }
                         }
 
                         MouseArea {
-                            id: optArea
+                            id: chipArea
                             anchors.fill: parent
                             hoverEnabled: true
                             onClicked: kioskModel.chooseOption(modelData)
@@ -372,7 +492,8 @@ Window {
 
             // Barra de Ritmo e Progresso Comportamental
             ColumnLayout {
-                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: Math.min(parent.width * 0.92, 760)
                 spacing: 6
 
                 RowLayout {
@@ -380,16 +501,14 @@ Window {
 
                     Text {
                         text: kioskModel.behaviorStatus
-                        font.pixelSize: 13
+                        font.pixelSize: 12
                         color: "#94a3b8"
                     }
 
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        text: kioskModel.contentOptions.length > 0
-                              ? "Toque para escolher ou aguarde o avanço"
-                              : "Navegação autônoma por ritmo natural"
+                        text: "Navegação contínua • Toque na tela para explorar"
                         font.pixelSize: 12
                         color: "#64748b"
                     }
@@ -397,7 +516,7 @@ Window {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 6
+                    Layout.preferredHeight: 5
                     radius: 3
                     color: "#1e293b"
                     border.color: "#334155"

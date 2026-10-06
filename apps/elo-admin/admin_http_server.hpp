@@ -49,6 +49,7 @@ private:
     std::unique_ptr<QTcpServer> tcp_server_;
     content::BundlePublisher publisher_;
     bool draft_modified_{false};
+    std::unordered_map<QTcpSocket*, QByteArray> client_buffers_{};
 };
 
 } // namespace elo::admin

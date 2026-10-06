@@ -75,7 +75,10 @@ void AdminHttpServer::onNewConnection() {
     while (tcp_server_->hasPendingConnections()) {
         auto* socket = tcp_server_->nextPendingConnection();
         connect(socket, &QTcpSocket::readyRead, this, &AdminHttpServer::onClientReadyRead);
-        connect(socket, &QTcpSocket::disconnected, socket, &QTcpSocket::deleteLater);
+        connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
+            client_buffers_.erase(socket);
+            socket->deleteLater();
+        });
     }
 }
 
@@ -83,7 +86,35 @@ void AdminHttpServer::onClientReadyRead() {
     auto* socket = qobject_cast<QTcpSocket*>(sender());
     if (!socket) return;
 
-    QByteArray requestData = socket->readAll();
+    auto& buf = client_buffers_[socket];
+    buf.append(socket->readAll());
+
+    int headerEnd = buf.indexOf("\r\n\r\n");
+    if (headerEnd == -1) {
+        return; // Wait for full HTTP headers
+    }
+
+    int contentLength = 0;
+    QByteArray headerBytes = buf.left(headerEnd);
+    int clIdx = headerBytes.indexOf("Content-Length:");
+    if (clIdx == -1) {
+        clIdx = headerBytes.indexOf("content-length:");
+    }
+    if (clIdx != -1) {
+        int clEnd = headerBytes.indexOf("\r\n", clIdx);
+        if (clEnd != -1) {
+            QByteArray clVal = headerBytes.mid(clIdx + 15, clEnd - (clIdx + 15)).trimmed();
+            contentLength = clVal.toInt();
+        }
+    }
+
+    int totalExpected = headerEnd + 4 + contentLength;
+    if (buf.size() < totalExpected) {
+        return; // Wait for the remaining body chunks
+    }
+
+    QByteArray requestData = buf.left(totalExpected);
+    buf.remove(0, totalExpected);
     handleHttpRequest(socket, requestData);
 }
 

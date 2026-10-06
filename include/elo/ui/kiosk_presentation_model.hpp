@@ -34,8 +34,13 @@ class KioskPresentationModel : public QObject {
     Q_PROPERTY(QString contentTitle READ contentTitle NOTIFY contentChanged)
     Q_PROPERTY(QString contentText READ contentText NOTIFY contentChanged)
     Q_PROPERTY(QString contentMedia READ contentMedia NOTIFY contentChanged)
+    Q_PROPERTY(QString contentImage READ contentImage NOTIFY contentChanged)
+    Q_PROPERTY(bool hasImage READ hasImage NOTIFY contentChanged)
+    Q_PROPERTY(QString contentScientificName READ contentScientificName NOTIFY contentChanged)
+    Q_PROPERTY(QString contentTypeLabel READ contentTypeLabel NOTIFY contentChanged)
     Q_PROPERTY(QString contentAudio READ contentAudio NOTIFY contentChanged)
     Q_PROPERTY(QStringList contentOptions READ contentOptions NOTIFY contentChanged)
+    Q_PROPERTY(QStringList explorationPaths READ explorationPaths NOTIFY contentChanged)
     Q_PROPERTY(bool isRecipeActive READ isRecipeActive NOTIFY contentChanged)
     Q_PROPERTY(QString selectionReason READ selectionReason NOTIFY contentChanged)
     Q_PROPERTY(qreal behaviorProgress READ behaviorProgress NOTIFY behaviorProgressChanged)
@@ -68,8 +73,13 @@ public:
     [[nodiscard]] QString contentTitle() const;
     [[nodiscard]] QString contentText() const;
     [[nodiscard]] QString contentMedia() const;
+    [[nodiscard]] QString contentImage() const;
+    [[nodiscard]] bool hasImage() const;
+    [[nodiscard]] QString contentScientificName() const;
+    [[nodiscard]] QString contentTypeLabel() const;
     [[nodiscard]] QString contentAudio() const;
     [[nodiscard]] QStringList contentOptions() const;
+    [[nodiscard]] QStringList explorationPaths() const;
     [[nodiscard]] bool isRecipeActive() const;
     [[nodiscard]] QString selectionReason() const;
     [[nodiscard]] qreal behaviorProgress() const noexcept { return behavior_progress_; }
