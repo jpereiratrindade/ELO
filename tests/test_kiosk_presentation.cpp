@@ -1,5 +1,6 @@
 #include "elo/storage/in_memory_storage.hpp"
 #include "elo/ui/kiosk_presentation_model.hpp"
+#include "test_content_fixtures.hpp"
 
 #include <QVector>
 
@@ -94,7 +95,8 @@ int main() {
 
     // Test autonomous option progression in decoupled catalog recipes (no mouse)
     auto catalog = std::make_shared<elo::content::ContentCatalog>();
-    if (catalog->load_from_directory("content/catalog")) {
+    auto fixture_cat = elo::test::create_test_content_fixture() / "catalog";
+    if (catalog->load_from_directory(fixture_cat.string())) {
         engine->set_content_catalog(catalog);
         model.startRecipe(QStringLiteral("discover_by_sound"));
         TEST_ASSERT(model.isRecipeActive(), "Recipe starts correctly");

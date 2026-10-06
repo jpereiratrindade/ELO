@@ -37,7 +37,8 @@ std::vector<PresentationAction> RecipeExecutor::evaluate_step(
             .type = PresentationActionType::PlayAudio,
             .title = atom.title.empty() ? atom.subject.canonical_name : atom.title,
             .text = atom.canonical_facts.empty() ? "Paisagem do Pampa e presença viva." : atom.canonical_facts.front().statement,
-            .asset_path = atom.assets.audios.empty() ? "" : atom.assets.audios.front()
+            .asset_path = atom.assets.audios.empty() ? "" : atom.assets.audios.front(),
+            .options = {atom.subject.canonical_name.empty() ? "Conhecer" : atom.subject.canonical_name, "Campos Sulinos", "Pastejo Tradicional"}
         });
     } else if (step == "ask_identification" || step == "ask_choice") {
         actions.push_back(PresentationAction{

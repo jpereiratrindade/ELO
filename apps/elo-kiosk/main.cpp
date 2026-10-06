@@ -92,6 +92,9 @@ int main(int argc, char* argv[]) {
     auto system_content = elo::content::resolve_system_content_dir(true);
 
     auto resolve_active_catalog = [](const std::filesystem::path& base_dir) -> std::filesystem::path {
+        if (std::filesystem::exists(base_dir / "catalog" / "atoms")) {
+            return base_dir / "catalog";
+        }
         if (std::filesystem::exists(base_dir / "current" / "catalog")) {
             return base_dir / "current" / "catalog";
         }

@@ -122,17 +122,12 @@ QString KioskPresentationModel::contentImage() const {
     QString sysPath = QString::fromStdString(sys_content.string());
 
     const QStringList searchPrefixes = {
-        sysPath + QStringLiteral("/current/"),
-        sysPath + QStringLiteral("/"),
-        sysPath + QStringLiteral("/current/assets/"),
         sysPath + QStringLiteral("/assets/"),
-        sysPath + QStringLiteral("/current/assets/images/"),
         sysPath + QStringLiteral("/assets/images/"),
-        QStringLiteral("content/"),
-        QStringLiteral("../content/"),
-        QStringLiteral("../../content/"),
-        QStringLiteral("content/assets/images/"),
-        QStringLiteral("assets/images/")
+        sysPath + QStringLiteral("/current/assets/"),
+        sysPath + QStringLiteral("/current/assets/images/"),
+        sysPath + QStringLiteral("/"),
+        sysPath + QStringLiteral("/current/")
     };
 
     for (const auto& prefix : searchPrefixes) {
@@ -148,9 +143,7 @@ QString KioskPresentationModel::contentImage() const {
         }
     }
 
-    // Default local file path mapping in sovereign system directory
-    QString resolved = QDir(sysPath).filePath(candidate);
-    return QUrl::fromLocalFile(resolved).toString();
+    return QString();
 }
 
 bool KioskPresentationModel::hasImage() const {

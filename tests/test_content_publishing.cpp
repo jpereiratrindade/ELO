@@ -1,6 +1,8 @@
 #include "elo/content/content_bundle.hpp"
 #include "elo/system/control_socket.hpp"
 
+#include "test_content_fixtures.hpp"
+
 #include <QCoreApplication>
 #include <cassert>
 #include <chrono>
@@ -18,12 +20,8 @@
     } while (0)
 
 static std::filesystem::path resolve_content_dir() {
-    for (const auto& candidate : {"content", "../content", "../../content"}) {
-        if (std::filesystem::exists(candidate) && std::filesystem::exists(std::filesystem::path(candidate) / "manifest.json")) {
-            return candidate;
-        }
-    }
-    return "content";
+    static std::filesystem::path fixture_dir = elo::test::create_test_content_fixture();
+    return fixture_dir;
 }
 
 void test_content_bundle_and_hash() {

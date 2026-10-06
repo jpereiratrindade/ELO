@@ -3,6 +3,8 @@
 #include "elo/content/content_selector.hpp"
 #include "elo/content/recipe_executor.hpp"
 
+#include "test_content_fixtures.hpp"
+
 #include <cassert>
 #include <iostream>
 #include <filesystem>
@@ -15,20 +17,16 @@
         } \
     } while (0)
 
-static std::filesystem::path resolve_content_dir() {
-    for (const auto& candidate : {"content/catalog", "../content/catalog", "../../content/catalog"}) {
-        if (std::filesystem::exists(candidate)) {
-            return candidate;
-        }
-    }
-    return "content/catalog";
+static std::filesystem::path get_fixture_catalog_dir() {
+    static std::filesystem::path fixture_dir = elo::test::create_test_content_fixture();
+    return fixture_dir / "catalog";
 }
 
 void test_content_catalog_and_validation() {
     std::cout << "[TEST] ContentCatalog and ContentValidator...\n";
     elo::content::ContentCatalog catalog;
 
-    std::filesystem::path content_dir = resolve_content_dir();
+    std::filesystem::path content_dir = get_fixture_catalog_dir();
     auto load_res = catalog.load_from_directory(content_dir);
     if (!load_res.has_value()) {
         std::cerr << "Load error: " << load_res.error().to_string() << '\n';
@@ -63,7 +61,7 @@ void test_content_catalog_and_validation() {
 void test_content_selector_and_recipes() {
     std::cout << "[TEST] ContentSelector and RecipeExecutor...\n";
     elo::content::ContentCatalog catalog;
-    std::filesystem::path content_dir = resolve_content_dir();
+    std::filesystem::path content_dir = get_fixture_catalog_dir();
     (void)catalog.load_from_directory(content_dir);
 
     elo::content::ContentSelector selector(12345);

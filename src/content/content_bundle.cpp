@@ -397,26 +397,25 @@ std::filesystem::path resolve_system_content_dir(bool bootstrap_from_seed) {
     std::error_code ec;
     std::filesystem::create_directories(target_dir, ec);
 
-    // 3. Bootstrap from template seed if target is empty (does not have manifest.json)
-    if (bootstrap_from_seed && !std::filesystem::exists(target_dir / "manifest.json", ec)) {
-        std::filesystem::path seed_dir;
-        for (const auto& candidate : {"content", "../content", "../../content", "/usr/share/elo/content"}) {
-            if (std::filesystem::exists(std::filesystem::path(candidate) / "manifest.json", ec)) {
-                seed_dir = candidate;
-                break;
-            }
-        }
-        if (!seed_dir.empty()) {
-            std::cout << "[ELO][content] Bootstrapping initial system content storage from seed: "
-                      << seed_dir << " -> " << target_dir << '\n';
-            for (const auto& item : {"manifest.json", "catalog", "assets", "sources"}) {
-                auto src_item = seed_dir / item;
-                if (std::filesystem::exists(src_item, ec)) {
-                    auto dst_item = target_dir / item;
-                    std::filesystem::copy(src_item, dst_item,
-                                          std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
-                }
-            }
+    // 3. Initialize default clean manifest and catalog layout if target is empty
+    if (!std::filesystem::exists(target_dir / "manifest.json", ec)) {
+        std::filesystem::create_directories(target_dir / "catalog" / "atoms", ec);
+        std::filesystem::create_directories(target_dir / "catalog" / "relations", ec);
+        std::filesystem::create_directories(target_dir / "catalog" / "recipes", ec);
+        std::filesystem::create_directories(target_dir / "catalog" / "variants", ec);
+        std::filesystem::create_directories(target_dir / "assets" / "images", ec);
+        std::filesystem::create_directories(target_dir / "assets" / "audio", ec);
+        std::filesystem::create_directories(target_dir / "sources", ec);
+
+        std::ofstream mf(target_dir / "manifest.json");
+        if (mf.is_open()) {
+            mf << "{\n"
+               << "  \"bundle_id\": \"elo-sovereign-content\",\n"
+               << "  \"version\": \"1.0.0\",\n"
+               << "  \"title\": \"ELO — Catálogo Soberano\",\n"
+               << "  \"default_theme\": \"pampa\",\n"
+               << "  \"description\": \"Repositório soberano de conteúdo local.\"\n"
+               << "}\n";
         }
     }
 

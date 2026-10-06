@@ -512,7 +512,52 @@ void AdminHttpServer::handleMediaRoute(QTcpSocket* socket, const QString& method
             }
         }
 
+        // Limpeza de referências em variants.json
+        QString variantsPath = QString::fromStdString((content_root_ / "catalog" / "variants" / "variants.json").string());
+        if (QFile::exists(variantsPath)) {
+            QFile vf(variantsPath);
+            if (vf.open(QIODevice::ReadOnly)) {
+                auto doc = QJsonDocument::fromJson(vf.readAll());
+                vf.close();
+                if (doc.isArray()) {
+                    auto arr = doc.array();
+                    bool varModified = false;
+                    for (int i = 0; i < arr.size(); ++i) {
+                        if (arr[i].isObject()) {
+                            auto vObj = arr[i].toObject();
+                            auto pres = vObj.value(QStringLiteral("presentation")).toObject();
+                            auto mediaArr = pres.value(QStringLiteral("media")).toArray();
+                            QJsonArray newMediaArr;
+                            bool subMod = false;
+                            for (const auto& m : mediaArr) {
+                                QString p = m.toString();
+                                if (p == relAssetPath || p == requestedPath || p.endsWith(filenameOnly)) {
+                                    subMod = true;
+                                    varModified = true;
+                                } else {
+                                    newMediaArr.append(m);
+                                }
+                            }
+                            if (subMod) {
+                                pres[QStringLiteral("media")] = newMediaArr;
+                                vObj[QStringLiteral("presentation")] = pres;
+                                arr[i] = vObj;
+                            }
+                        }
+                    }
+                    if (varModified && vf.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                        vf.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+                        vf.close();
+                    }
+                }
+            }
+        }
+
         draft_modified_ = true;
+
+        // Notifica o totem imediatamente via IPC control plane
+        system::ControlClient client;
+        (void)client.send_reload();
 
         QJsonObject resp;
         resp[QStringLiteral("success")] = true;
