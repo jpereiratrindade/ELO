@@ -73,7 +73,10 @@ Window {
         anchors.bottom: footerBar.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.margins: 40
+        anchors.leftMargin: 32
+        anchors.rightMargin: 32
+        anchors.topMargin: 20
+        anchors.bottomMargin: 20
 
         // Discrete operational preview: explains what the totem sees but
         // is never the primary content of the experience.
@@ -125,13 +128,13 @@ Window {
         // Estado IDLE: Modo contemplativo e atrativo do Bioma Pampa
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(parent.width * 0.85, 840)
-            spacing: 20
+            width: Math.min(contentArea.width * 0.94, 1380)
+            spacing: 24
             visible: kioskModel.currentState === "IDLE"
 
             Text {
                 text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Bioma Pampa"
-                font.pixelSize: 42
+                font.pixelSize: Math.max(38, Math.min(contentArea.width * 0.032, 52))
                 font.bold: true
                 color: "#f8fafc"
                 Layout.alignment: Qt.AlignHCenter
@@ -139,35 +142,35 @@ Window {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: idleDescText.implicitHeight + 36
+                Layout.preferredHeight: idleDescText.implicitHeight + 44
                 color: "#1e293b"
-                radius: 12
+                radius: 14
                 border.color: "#334155"
                 border.width: 1
 
                 Text {
                     id: idleDescText
                     anchors.centerIn: parent
-                    width: parent.width - 48
+                    width: parent.width - 56
                     text: kioskModel.contentText.length > 0
                           ? kioskModel.contentText
                           : "Aproxime-se. O totem reconhece sua presença e navega automaticamente pelo ecossistema."
-                    font.pixelSize: 20
+                    font.pixelSize: Math.max(20, Math.min(contentArea.width * 0.016, 23))
                     color: "#38bdf8"
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
-                    lineHeight: 1.3
+                    lineHeight: 1.35
                 }
             }
 
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 12
+                spacing: 16
 
                 Rectangle {
-                    width: 220
-                    height: 36
-                    radius: 18
+                    width: 240
+                    height: 42
+                    radius: 21
                     color: "#0f172a"
                     border.color: "#38bdf8"
                     border.width: 1
@@ -175,24 +178,24 @@ Window {
                     Text {
                         anchors.centerIn: parent
                         text: "● Aproxime-se do totem"
-                        font.pixelSize: 13
+                        font.pixelSize: 14
                         font.bold: true
                         color: "#38bdf8"
                     }
                 }
 
                 Rectangle {
-                    width: 240
-                    height: 36
-                    radius: 18
+                    width: 260
+                    height: 42
+                    radius: 21
                     color: "#0f172a"
                     border.color: "#334155"
                     border.width: 1
 
                     Text {
                         anchors.centerIn: parent
-                        text: "Autônomo • Não requer mouse"
-                        font.pixelSize: 12
+                        text: "Autônomo • Detecção por presença"
+                        font.pixelSize: 13
                         color: "#94a3b8"
                     }
                 }
@@ -209,8 +212,8 @@ Window {
         // Estado de Presença e Reconhecimento Facial
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(parent.width * 0.75, 760)
-            spacing: 22
+            width: Math.min(contentArea.width * 0.90, 1100)
+            spacing: 24
             visible: kioskModel.currentState === "PRESENCE_DETECTED" ||
                      kioskModel.currentState === "BIOMETRIC_SESSION" ||
                      kioskModel.currentState === "IDENTITY_UNKNOWN" ||
@@ -221,14 +224,14 @@ Window {
             BusyIndicator {
                 running: !kioskModel.recognitionResolved
                 visible: running
-                Layout.preferredWidth: 56
-                Layout.preferredHeight: 56
+                Layout.preferredWidth: 64
+                Layout.preferredHeight: 64
                 Layout.alignment: Qt.AlignHCenter
             }
 
             Text {
                 text: kioskModel.greetingTitle
-                font.pixelSize: 38
+                font.pixelSize: Math.max(36, Math.min(contentArea.width * 0.028, 46))
                 font.bold: true
                 color: kioskModel.recognitionResolved ? "#f8fafc" : "#cbd5e1"
                 horizontalAlignment: Text.AlignHCenter
@@ -238,7 +241,7 @@ Window {
 
             Text {
                 text: kioskModel.greetingMessage
-                font.pixelSize: 19
+                font.pixelSize: Math.max(18, Math.min(contentArea.width * 0.015, 22))
                 color: kioskModel.recognitionResolved ? "#34d399" : "#94a3b8"
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
@@ -248,9 +251,9 @@ Window {
             // Barra de ritmo comportamental de acolhimento
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 320
-                Layout.preferredHeight: 4
-                radius: 2
+                Layout.preferredWidth: 380
+                Layout.preferredHeight: 5
+                radius: 3
                 color: "#1e293b"
 
                 Rectangle {
@@ -258,7 +261,7 @@ Window {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: parent.width * kioskModel.behaviorProgress
-                    radius: 2
+                    radius: 3
                     color: "#38bdf8"
                 }
             }
@@ -266,7 +269,7 @@ Window {
             Text {
                 visible: kioskModel.recognitionResolved
                 text: kioskModel.activePerson
-                font.pixelSize: 12
+                font.pixelSize: 13
                 color: "#64748b"
                 Layout.alignment: Qt.AlignHCenter
             }
@@ -275,18 +278,18 @@ Window {
         // Estado de Conteúdo Ativo: Modo Contemplativo, Fotografia Hero e Navegação Autônoma
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(parent.width * 0.90, 880)
+            width: Math.min(contentArea.width * 0.96, 1540)
             spacing: 16
             visible: kioskModel.currentState === "CONTENT_ACTIVE"
 
             // Cabeçalho da Entidade / Espécie
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 6
+                spacing: 8
 
                 Text {
                     text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Bioma Pampa"
-                    font.pixelSize: 36
+                    font.pixelSize: Math.max(34, Math.min(contentArea.width * 0.028, 48))
                     font.bold: true
                     color: "#f8fafc"
                     Layout.alignment: Qt.AlignHCenter
@@ -295,22 +298,22 @@ Window {
 
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter
-                    spacing: 10
+                    spacing: 12
                     visible: kioskModel.contentScientificName.length > 0 || kioskModel.contentTypeLabel.length > 0
 
                     Text {
                         visible: kioskModel.contentScientificName.length > 0
                         text: kioskModel.contentScientificName
-                        font.pixelSize: 17
+                        font.pixelSize: Math.max(16, Math.min(contentArea.width * 0.013, 20))
                         font.italic: true
                         color: "#38bdf8"
                     }
 
                     Rectangle {
                         visible: kioskModel.contentTypeLabel.length > 0
-                        height: 24
-                        width: typeLabelText.implicitWidth + 18
-                        radius: 12
+                        height: 28
+                        width: typeLabelText.implicitWidth + 24
+                        radius: 14
                         color: "#0f172a"
                         border.color: "#334155"
                         border.width: 1
@@ -319,7 +322,7 @@ Window {
                             id: typeLabelText
                             anchors.centerIn: parent
                             text: kioskModel.contentTypeLabel
-                            font.pixelSize: 11
+                            font.pixelSize: 12
                             font.bold: true
                             color: "#94a3b8"
                         }
@@ -330,19 +333,19 @@ Window {
             // Cartão de Mídia Visual (Fotografia Científica Hero)
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Math.min(parent.width * 0.92, 760)
-                Layout.preferredHeight: 320
-                radius: 16
-                color: "#0b1329"
-                border.color: "#1e293b"
-                border.width: 1
+                Layout.preferredWidth: Math.min(parent.width, 1460)
+                Layout.preferredHeight: Math.max(380, Math.min(contentArea.height * 0.52, 540))
+                radius: 20
+                color: "#080e1e"
+                border.color: "#334155"
+                border.width: 1.5
                 clip: true
 
                 // Imagem carregada
                 Image {
                     id: heroImage
                     anchors.fill: parent
-                    anchors.margins: 8
+                    anchors.margins: 10
                     fillMode: Image.PreserveAspectFit
                     source: kioskModel.contentImage
                     visible: kioskModel.hasImage
@@ -358,9 +361,9 @@ Window {
 
                     Rectangle {
                         Layout.alignment: Qt.AlignHCenter
-                        width: 72
-                        height: 72
-                        radius: 36
+                        width: 76
+                        height: 76
+                        radius: 38
                         color: "#1e293b"
                         border.color: "#38bdf8"
                         border.width: 1
@@ -368,13 +371,13 @@ Window {
                         Text {
                             anchors.centerIn: parent
                             text: "🌾"
-                            font.pixelSize: 32
+                            font.pixelSize: 36
                         }
                     }
 
                     Text {
                         text: kioskModel.contentTitle
-                        font.pixelSize: 20
+                        font.pixelSize: 22
                         font.bold: true
                         color: "#e2e8f0"
                         Layout.alignment: Qt.AlignHCenter
@@ -382,7 +385,7 @@ Window {
 
                     Text {
                         text: "Acervo e Biodiversidade do Pampa"
-                        font.pixelSize: 13
+                        font.pixelSize: 14
                         color: "#64748b"
                         Layout.alignment: Qt.AlignHCenter
                     }
@@ -424,57 +427,57 @@ Window {
             // Bloco de Narrativa Ecológica
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Math.min(parent.width * 0.92, 760)
-                Layout.preferredHeight: contentDescText.implicitHeight + 36
+                Layout.preferredWidth: Math.min(parent.width, 1460)
+                Layout.preferredHeight: contentDescText.implicitHeight + 42
                 color: "#131d36"
-                radius: 12
+                radius: 16
                 border.color: "#1e293b"
                 border.width: 1
 
                 Text {
                     id: contentDescText
                     anchors.centerIn: parent
-                    width: parent.width - 44
+                    width: parent.width - 64
                     text: kioskModel.contentText
-                    font.pixelSize: 18
+                    font.pixelSize: Math.max(18, Math.min(contentArea.width * 0.013, 22))
                     color: "#e2e8f0"
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
-                    lineHeight: 1.35
+                    lineHeight: 1.4
                 }
             }
 
             // Trilhas de Exploração e Relações Ecológicas (Chips Horizontais, NÃO formato quiz)
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 12
+                spacing: 16
                 visible: kioskModel.contentOptions.length > 0
 
                 Repeater {
                     model: kioskModel.contentOptions
 
                     Rectangle {
-                        Layout.preferredWidth: Math.max(chipText.implicitWidth + 36, 140)
-                        Layout.preferredHeight: 44
-                        radius: 22
+                        Layout.preferredWidth: Math.max(chipText.implicitWidth + 44, 160)
+                        Layout.preferredHeight: 50
+                        radius: 25
                         color: chipArea.pressed ? "#0284c7" : (chipArea.containsMouse ? "#1e293b" : "#0f172a")
                         border.color: chipArea.containsMouse ? "#38bdf8" : "#334155"
                         border.width: 1
 
                         RowLayout {
                             anchors.centerIn: parent
-                            spacing: 6
+                            spacing: 8
 
                             Text {
                                 text: "✦"
-                                font.pixelSize: 12
+                                font.pixelSize: 14
                                 color: "#38bdf8"
                             }
 
                             Text {
                                 id: chipText
                                 text: modelData
-                                font.pixelSize: 15
+                                font.pixelSize: 16
                                 font.bold: true
                                 color: "#f8fafc"
                             }
@@ -493,30 +496,30 @@ Window {
             // Barra de Ritmo e Progresso Comportamental
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Math.min(parent.width * 0.92, 760)
-                spacing: 6
+                Layout.preferredWidth: Math.min(parent.width, 1460)
+                spacing: 8
 
                 RowLayout {
                     Layout.fillWidth: true
 
                     Text {
                         text: kioskModel.behaviorStatus
-                        font.pixelSize: 12
+                        font.pixelSize: 13
                         color: "#94a3b8"
                     }
 
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        text: "Navegação contínua • Toque na tela para explorar"
-                        font.pixelSize: 12
+                        text: "Navegação contínua autônoma • Presença ativa"
+                        font.pixelSize: 13
                         color: "#64748b"
                     }
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 5
+                    Layout.preferredHeight: 6
                     radius: 3
                     color: "#1e293b"
                     border.color: "#334155"
