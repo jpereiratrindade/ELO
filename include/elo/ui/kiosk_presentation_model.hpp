@@ -5,9 +5,11 @@
 #ifdef ELO_HAS_QT
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <QVector>
 #endif
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,6 +37,9 @@ class KioskPresentationModel : public QObject {
     Q_PROPERTY(QStringList contentOptions READ contentOptions NOTIFY contentChanged)
     Q_PROPERTY(bool isRecipeActive READ isRecipeActive NOTIFY contentChanged)
     Q_PROPERTY(QString selectionReason READ selectionReason NOTIFY contentChanged)
+    Q_PROPERTY(qreal behaviorProgress READ behaviorProgress NOTIFY behaviorProgressChanged)
+    Q_PROPERTY(bool autoNavigationEnabled READ autoNavigationEnabled WRITE setAutoNavigationEnabled NOTIFY autoNavigationEnabledChanged)
+    Q_PROPERTY(QString behaviorStatus READ behaviorStatus NOTIFY behaviorProgressChanged)
 #else
 class KioskPresentationModel {
 #endif
@@ -65,6 +70,10 @@ public:
     [[nodiscard]] QStringList contentOptions() const;
     [[nodiscard]] bool isRecipeActive() const;
     [[nodiscard]] QString selectionReason() const;
+    [[nodiscard]] qreal behaviorProgress() const noexcept { return behavior_progress_; }
+    [[nodiscard]] bool autoNavigationEnabled() const noexcept { return auto_navigation_enabled_; }
+    void setAutoNavigationEnabled(bool enabled);
+    [[nodiscard]] QString behaviorStatus() const;
 
     Q_INVOKABLE void advanceContent();
     Q_INVOKABLE void selectPampaContent(const QString& role = QStringLiteral("attract"));
@@ -74,6 +83,9 @@ public:
     Q_INVOKABLE void submitSurveyResponse(const QString& questionId, const QString& selectedOption, bool anonymous);
     Q_INVOKABLE void requestForgetMe();
     Q_INVOKABLE void finishSession();
+    Q_INVOKABLE void resetBehaviorTimer();
+
+    void tick(double delta_seconds);
 
 public slots:
     void onCameraFrameReady();
@@ -81,6 +93,7 @@ public slots:
     void onFaceEmbeddingReady(const QVector<float>& embedding, double quality);
     void onVisionStatusChanged(const QString& status);
     void onVisionFailure(const QString& message);
+    void onBehaviorTick();
 
 signals:
     void stateChanged();
@@ -91,6 +104,8 @@ signals:
     void recognitionChanged();
     void biometricAuthorizationChanged(bool authorized);
     void recognitionVisualStateChanged(bool confirmed);
+    void behaviorProgressChanged();
+    void autoNavigationEnabledChanged();
 #else
     [[nodiscard]] std::string currentState() const;
     [[nodiscard]] std::string activePerson() const;
@@ -102,11 +117,16 @@ signals:
     void submitSurveyResponse(const std::string& questionId, const std::string& selectedOption, bool anonymous);
     void requestForgetMe();
     void finishSession();
+    void tick(double delta_seconds);
 #endif
 
 private:
     std::shared_ptr<experience::ExperienceEngine> engine_;
     std::string current_content_{};
+    double state_duration_{0.0};
+    double absence_duration_{0.0};
+    double behavior_progress_{0.0};
+    bool auto_navigation_enabled_{true};
 #ifdef ELO_HAS_QT
     quint64 camera_frame_revision_{0};
     bool face_detected_{false};
@@ -117,6 +137,7 @@ private:
     bool recognition_resolved_{false};
     std::vector<std::vector<float>> pending_embeddings_{};
     double pending_quality_sum_{0.0};
+    QTimer* behavior_timer_{nullptr};
 #endif
 };
 

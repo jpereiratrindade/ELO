@@ -1,12 +1,24 @@
 #include "elo/ui/kiosk_presentation_model.hpp"
 
+#ifdef ELO_HAS_QT
+#include <QCoreApplication>
+#include <QTimer>
+#endif
+#include <algorithm>
+
 namespace elo::ui {
 
 #ifdef ELO_HAS_QT
 
 KioskPresentationModel::KioskPresentationModel(
     std::shared_ptr<experience::ExperienceEngine> engine, QObject* parent)
-    : QObject(parent), engine_{std::move(engine)} {}
+    : QObject(parent), engine_{std::move(engine)} {
+    if (QCoreApplication::instance()) {
+        behavior_timer_ = new QTimer(this);
+        connect(behavior_timer_, &QTimer::timeout, this, &KioskPresentationModel::onBehaviorTick);
+        behavior_timer_->start(100);
+    }
+}
 
 QString KioskPresentationModel::currentState() const {
     if (!engine_) return QStringLiteral("UNAVAILABLE");
@@ -90,11 +102,59 @@ QString KioskPresentationModel::selectionReason() const {
     return QString::fromStdString(engine_->active_selection_reason().explanation);
 }
 
+void KioskPresentationModel::setAutoNavigationEnabled(bool enabled) {
+    if (auto_navigation_enabled_ != enabled) {
+        auto_navigation_enabled_ = enabled;
+        emit autoNavigationEnabledChanged();
+    }
+}
+
+QString KioskPresentationModel::behaviorStatus() const {
+    if (!auto_navigation_enabled_) {
+        return QStringLiteral("Navegação manual");
+    }
+    if (!engine_) {
+        return QString();
+    }
+    switch (engine_->current_state()) {
+        case experience::SessionState::IDLE:
+            return QStringLiteral("Modo ambiente • Rotação contemplativa");
+        case experience::SessionState::PRESENCE_DETECTED:
+        case experience::SessionState::BIOMETRIC_SESSION:
+        case experience::SessionState::IDENTITY_CANDIDATE:
+        case experience::SessionState::IDENTITY_UNCERTAIN:
+        case experience::SessionState::IDENTITY_UNKNOWN:
+            return QStringLiteral("Acolhendo visitante...");
+        case experience::SessionState::IDENTITY_SUPPORTED:
+            return QStringLiteral("Visitante reconhecido");
+        case experience::SessionState::CONTENT_ACTIVE:
+            if (!contentOptions().isEmpty()) {
+                return QStringLiteral("Toque para escolher ou aguarde o avanço automático");
+            }
+            return QStringLiteral("Apresentando narrativa do Pampa");
+        case experience::SessionState::SESSION_COMPLETE:
+            return QStringLiteral("Concluindo sessão");
+        default:
+            return QString();
+    }
+}
+
+void KioskPresentationModel::resetBehaviorTimer() {
+    state_duration_ = 0.0;
+    behavior_progress_ = 0.0;
+    emit behaviorProgressChanged();
+}
+
 void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
     if (engine_) {
         auto role = content::parse_content_role(roleStr.toStdString());
         if (role == content::ContentRole::Unknown) role = content::ContentRole::Attract;
-        (void)engine_->select_contextual_content(role, "pampa");
+        auto res = engine_->select_contextual_content(role, "pampa");
+        if (!res) {
+            advanceContent();
+            return;
+        }
+        resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
     }
@@ -102,7 +162,12 @@ void KioskPresentationModel::selectPampaContent(const QString& roleStr) {
 
 void KioskPresentationModel::startRecipe(const QString& recipeId) {
     if (engine_) {
-        (void)engine_->start_recipe(recipeId.toStdString());
+        auto res = engine_->start_recipe(recipeId.toStdString());
+        if (!res) {
+            advanceContent();
+            return;
+        }
+        resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
     }
@@ -113,6 +178,7 @@ void KioskPresentationModel::chooseOption(const QString& option) {
         if (engine_->is_recipe_active()) {
             engine_->advance_recipe(option.toStdString());
         }
+        resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
     }
@@ -121,6 +187,7 @@ void KioskPresentationModel::chooseOption(const QString& option) {
 void KioskPresentationModel::deepenExperience() {
     if (engine_) {
         (void)engine_->select_contextual_content(content::ContentRole::Deepen, "pampa");
+        resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
     }
@@ -129,6 +196,7 @@ void KioskPresentationModel::deepenExperience() {
 void KioskPresentationModel::advanceContent() {
     if (engine_) {
         current_content_ = engine_->select_next_content();
+        resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
     }
@@ -141,6 +209,7 @@ void KioskPresentationModel::submitSurveyResponse(
                                 : survey::LinkagePolicy::LinkedToIdentity;
         (void)engine_->submit_survey_response(
             questionId.toStdString(), selectedOption.toStdString(), policy);
+        resetBehaviorTimer();
         emit stateChanged();
     }
 }
@@ -157,6 +226,7 @@ void KioskPresentationModel::requestForgetMe() {
         pending_quality_sum_ = 0.0;
         greeting_title_ = QStringLiteral("Identidade local esquecida");
         greeting_message_ = QStringLiteral("A continuidade anterior foi removida deste totem.");
+        resetBehaviorTimer();
         emit contentChanged();
         emit recognitionChanged();
         emit stateChanged();
@@ -174,9 +244,13 @@ void KioskPresentationModel::finishSession() {
         pending_quality_sum_ = 0.0;
         greeting_title_ = QStringLiteral("Reconhecendo presença");
         greeting_message_ = QStringLiteral("Processamento local em andamento");
+        state_duration_ = 0.0;
+        absence_duration_ = 0.0;
+        behavior_progress_ = 0.0;
         emit contentChanged();
         emit recognitionChanged();
         emit stateChanged();
+        emit behaviorProgressChanged();
     }
 }
 
@@ -192,32 +266,148 @@ void KioskPresentationModel::onFacePresenceChanged(bool present) {
 
     face_detected_ = present;
     emit visionChanged();
-    if (present && engine_ && engine_->current_state() == experience::SessionState::IDLE) {
-        recognition_resolved_ = false;
-        pending_embeddings_.clear();
-        pending_quality_sum_ = 0.0;
-        greeting_title_ = QStringLiteral("Reconhecendo presença");
-        greeting_message_ = QStringLiteral("Comparando somente a identidade facial local");
-        engine_->on_presence_detected();
-        engine_->begin_automatic_continuity();
-        emit recognitionVisualStateChanged(false);
-        emit biometricAuthorizationChanged(true);
-        emit recognitionChanged();
-        emit stateChanged();
-    } else if (!present && engine_ &&
-               (engine_->current_state() == experience::SessionState::PRESENCE_DETECTED ||
-                engine_->current_state() == experience::SessionState::BIOMETRIC_SESSION ||
-                engine_->current_state() == experience::SessionState::IDENTITY_CANDIDATE ||
-                engine_->current_state() == experience::SessionState::IDENTITY_UNCERTAIN ||
-                engine_->current_state() == experience::SessionState::IDENTITY_SUPPORTED)) {
-        emit biometricAuthorizationChanged(false);
-        emit recognitionVisualStateChanged(false);
-        engine_->finish_session();
-        recognition_resolved_ = false;
-        pending_embeddings_.clear();
-        pending_quality_sum_ = 0.0;
-        emit recognitionChanged();
-        emit stateChanged();
+    if (present) {
+        absence_duration_ = 0.0;
+        if (engine_ && engine_->current_state() == experience::SessionState::IDLE) {
+            recognition_resolved_ = false;
+            pending_embeddings_.clear();
+            pending_quality_sum_ = 0.0;
+            state_duration_ = 0.0;
+            behavior_progress_ = 0.0;
+            greeting_title_ = QStringLiteral("Reconhecendo presença");
+            greeting_message_ = QStringLiteral("Comparando somente a identidade facial local");
+            engine_->on_presence_detected();
+            engine_->begin_automatic_continuity();
+            emit recognitionVisualStateChanged(false);
+            emit biometricAuthorizationChanged(true);
+            emit recognitionChanged();
+            emit stateChanged();
+            emit behaviorProgressChanged();
+        }
+    } else {
+        absence_duration_ = 0.0;
+    }
+}
+
+void KioskPresentationModel::onBehaviorTick() {
+    tick(0.1);
+}
+
+void KioskPresentationModel::tick(double delta_seconds) {
+    if (!auto_navigation_enabled_ || !engine_) {
+        return;
+    }
+
+    const auto state = engine_->current_state();
+
+    // 1. Ausência contínua do visitante na frente do totem
+    if (!face_detected_) {
+        if (state != experience::SessionState::IDLE) {
+            absence_duration_ += delta_seconds;
+            // Se ausente por 3.5 segundos, encerra a sessão de forma graciosa
+            if (absence_duration_ >= 3.5) {
+                finishSession();
+                return;
+            }
+        }
+    } else {
+        absence_duration_ = 0.0;
+    }
+
+    // 2. Máquina de estados temporal autônoma (sem mouse)
+    state_duration_ += delta_seconds;
+
+    switch (state) {
+        case experience::SessionState::IDLE: {
+            constexpr double kAmbientRotationDuration = 12.0;
+            behavior_progress_ = std::clamp(state_duration_ / kAmbientRotationDuration, 0.0, 1.0);
+            emit behaviorProgressChanged();
+            if (state_duration_ >= kAmbientRotationDuration) {
+                state_duration_ = 0.0;
+                behavior_progress_ = 0.0;
+                selectPampaContent(QStringLiteral("attract"));
+            }
+            break;
+        }
+
+        case experience::SessionState::PRESENCE_DETECTED:
+        case experience::SessionState::BIOMETRIC_SESSION:
+        case experience::SessionState::IDENTITY_CANDIDATE:
+        case experience::SessionState::IDENTITY_UNCERTAIN:
+        case experience::SessionState::IDENTITY_UNKNOWN: {
+            // Acolhimento inicial: se a biometria não resolver em 2.5s, avança para conteúdo
+            // Conforme ELO-EXPERIENCE-001: a biometria nunca é uma barreira de entrada
+            constexpr double kBiometricGracePeriod = 2.5;
+            behavior_progress_ = std::clamp(state_duration_ / kBiometricGracePeriod, 0.0, 1.0);
+            emit behaviorProgressChanged();
+            if (state_duration_ >= kBiometricGracePeriod) {
+                state_duration_ = 0.0;
+                behavior_progress_ = 0.0;
+                startRecipe(QStringLiteral("discover_by_sound"));
+            }
+            break;
+        }
+
+        case experience::SessionState::IDENTITY_SUPPORTED: {
+            // Rosto reconhecido; exibe mensagem de continuidade por 2.0s e inicia o conteúdo
+            constexpr double kGreetingDuration = 2.0;
+            behavior_progress_ = std::clamp(state_duration_ / kGreetingDuration, 0.0, 1.0);
+            emit behaviorProgressChanged();
+            if (state_duration_ >= kGreetingDuration) {
+                state_duration_ = 0.0;
+                behavior_progress_ = 0.0;
+                startRecipe(QStringLiteral("discover_by_sound"));
+            }
+            break;
+        }
+
+        case experience::SessionState::CONTENT_ACTIVE: {
+            const auto opts = contentOptions();
+            if (!opts.isEmpty()) {
+                // Pergunta / opções: 8.5s para visitante tocar ou observar
+                constexpr double kQuestionStepDuration = 8.5;
+                behavior_progress_ = std::clamp(state_duration_ / kQuestionStepDuration, 0.0, 1.0);
+                emit behaviorProgressChanged();
+                if (state_duration_ >= kQuestionStepDuration) {
+                    state_duration_ = 0.0;
+                    behavior_progress_ = 0.0;
+                    // Avanço autônomo: seleciona a primeira opção da pergunta
+                    chooseOption(opts.first());
+                }
+            } else {
+                // Conteúdo / revelação / texto narrativo: 7.0s de ritmo contemplativo
+                constexpr double kReadingStepDuration = 7.0;
+                behavior_progress_ = std::clamp(state_duration_ / kReadingStepDuration, 0.0, 1.0);
+                emit behaviorProgressChanged();
+                if (state_duration_ >= kReadingStepDuration) {
+                    state_duration_ = 0.0;
+                    behavior_progress_ = 0.0;
+                    if (engine_->is_recipe_active() && !engine_->recipe_state().completed) {
+                        engine_->advance_recipe("");
+                        emit contentChanged();
+                        emit stateChanged();
+                    } else {
+                        advanceContent();
+                    }
+                }
+            }
+            break;
+        }
+
+        case experience::SessionState::SESSION_COMPLETE: {
+            constexpr double kCompleteDuration = 3.5;
+            behavior_progress_ = std::clamp(state_duration_ / kCompleteDuration, 0.0, 1.0);
+            emit behaviorProgressChanged();
+            if (state_duration_ >= kCompleteDuration) {
+                state_duration_ = 0.0;
+                behavior_progress_ = 0.0;
+                finishSession();
+            }
+            break;
+        }
+
+        default:
+            break;
     }
 }
 
@@ -276,6 +466,7 @@ void KioskPresentationModel::onFaceEmbeddingReady(
         emit biometricAuthorizationChanged(false);
         emit recognitionVisualStateChanged(true);
         recognition_resolved_ = true;
+        resetBehaviorTimer();
         if (resolution->newly_enrolled) {
             greeting_title_ = QStringLiteral("Bem-vindo ao ELO");
             greeting_message_ = QStringLiteral(
@@ -370,6 +561,15 @@ void KioskPresentationModel::finishSession() {
     if (engine_) {
         engine_->finish_session();
         current_content_.clear();
+    }
+}
+
+void KioskPresentationModel::tick(double delta_seconds) {
+    if (!auto_navigation_enabled_ || !engine_) return;
+    state_duration_ += delta_seconds;
+    if (engine_->current_state() == experience::SessionState::CONTENT_ACTIVE && state_duration_ >= 8.0) {
+        state_duration_ = 0.0;
+        advanceContent();
     }
 }
 

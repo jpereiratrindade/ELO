@@ -69,6 +69,43 @@ int main() {
                     elo::identity::PersonLocalId("person-local://P01"))->size() == 1,
                 "Return refines one derived vector without accumulating photos or templates");
 
+    // Test autonomous progression: greeting advances to content without mouse
+    TEST_ASSERT(model.behaviorProgress() >= 0.0, "Behavior progress starts valid");
+    model.tick(2.1);
+    TEST_ASSERT(model.currentState() == QStringLiteral("CONTENT_ACTIVE"),
+                "Autonomous timer advances from greeting to content without mouse interaction");
+
+    // Test autonomous absence detection: when visitor walks away, session closes gracefully
+    model.onFacePresenceChanged(false);
+    model.tick(1.0);
+    TEST_ASSERT(model.currentState() == QStringLiteral("CONTENT_ACTIVE"),
+                "Brief absence does not immediately drop session");
+    model.tick(3.0); // total 4.0s > 3.5s
+    TEST_ASSERT(model.currentState() == QStringLiteral("IDLE"),
+                "Confirmed absence finishes session and returns to IDLE");
+
+    // Test autonomous presence progression without biometric match (UNKNOWN visitor)
+    model.onFacePresenceChanged(true);
+    TEST_ASSERT(model.currentState() == QStringLiteral("BIOMETRIC_SESSION"),
+                "Visitor approach triggers presence session");
+    model.tick(2.6); // > 2.5s biometric grace period
+    TEST_ASSERT(model.currentState() == QStringLiteral("CONTENT_ACTIVE"),
+                "Non-matched presence autonomously advances to content without blocking");
+
+    // Test autonomous option progression in decoupled catalog recipes (no mouse)
+    auto catalog = std::make_shared<elo::content::ContentCatalog>();
+    if (catalog->load_from_directory("content/catalog")) {
+        engine->set_content_catalog(catalog);
+        model.startRecipe(QStringLiteral("discover_by_sound"));
+        TEST_ASSERT(model.isRecipeActive(), "Recipe starts correctly");
+        TEST_ASSERT(!model.contentOptions().isEmpty(), "Step presents interactive choice");
+        // Simulate waiting in front of the kiosk without mouse/touch
+        model.tick(8.6);
+        TEST_ASSERT(model.behaviorProgress() == 0.0, "Progress resets after autonomous choice");
+        TEST_ASSERT(model.contentTitle() == QStringLiteral("Canto do Cardeal-amarelo"),
+                    "Recipe autonomously advances to reveal step without mouse");
+    }
+
     std::cout << "Automatic kiosk recognition presentation tests passed.\n";
     return 0;
 }

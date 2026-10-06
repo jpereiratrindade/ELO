@@ -11,14 +11,6 @@ Window {
     title: "ELO — Totem de Experiência Presencial"
     color: "#0f172a"
 
-    Timer {
-        interval: 3200
-        running: kioskModel.recognitionResolved &&
-                 kioskModel.currentState === "IDENTITY_SUPPORTED"
-        repeat: false
-        onTriggered: kioskModel.advanceContent()
-    }
-
     Rectangle {
         id: headerBar
         anchors.top: parent.top
@@ -83,7 +75,7 @@ Window {
         anchors.right: parent.right
         anchors.margins: 40
 
-        // Discrete operational preview: it explains what the totem sees but
+        // Discrete operational preview: explains what the totem sees but
         // is never the primary content of the experience.
         Rectangle {
             id: cameraPreview
@@ -101,7 +93,9 @@ Window {
 
             Image {
                 anchors.fill: parent
-                source: "image://camera/live?" + kioskModel.cameraFrameRevision
+                source: kioskModel.cameraFrameRevision > 0
+                        ? ("image://camera/live?" + kioskModel.cameraFrameRevision)
+                        : ""
                 cache: false
                 fillMode: Image.PreserveAspectCrop
                 visible: cameraAvailable && kioskModel.visionOperational &&
@@ -128,37 +122,94 @@ Window {
             }
         }
 
+        // Estado IDLE: Modo contemplativo e atrativo do Bioma Pampa
         ColumnLayout {
             anchors.centerIn: parent
+            width: Math.min(parent.width * 0.85, 840)
             spacing: 20
             visible: kioskModel.currentState === "IDLE"
 
             Text {
-                text: "ELO está pronto"
-                font.pixelSize: 40
+                text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Bioma Pampa"
+                font.pixelSize: 42
                 font.bold: true
                 color: "#f8fafc"
                 Layout.alignment: Qt.AlignHCenter
             }
 
-            Text {
-                text: "Aproxime-se. O reconhecimento acontece automaticamente."
-                font.pixelSize: 19
-                color: "#94a3b8"
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: idleDescText.implicitHeight + 36
+                color: "#1e293b"
+                radius: 12
+                border.color: "#334155"
+                border.width: 1
+
+                Text {
+                    id: idleDescText
+                    anchors.centerIn: parent
+                    width: parent.width - 48
+                    text: kioskModel.contentText.length > 0
+                          ? kioskModel.contentText
+                          : "Aproxime-se. O totem reconhece sua presença e navega automaticamente pelo ecossistema."
+                    font.pixelSize: 20
+                    color: "#38bdf8"
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.3
+                }
+            }
+
+            RowLayout {
                 Layout.alignment: Qt.AlignHCenter
+                spacing: 12
+
+                Rectangle {
+                    width: 220
+                    height: 36
+                    radius: 18
+                    color: "#0f172a"
+                    border.color: "#38bdf8"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "● Aproxime-se do totem"
+                        font.pixelSize: 13
+                        font.bold: true
+                        color: "#38bdf8"
+                    }
+                }
+
+                Rectangle {
+                    width: 240
+                    height: 36
+                    radius: 18
+                    color: "#0f172a"
+                    border.color: "#334155"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Autônomo • Não requer mouse"
+                        font.pixelSize: 12
+                        color: "#94a3b8"
+                    }
+                }
             }
 
             Text {
-                text: "Processamento local • nenhuma fotografia armazenada • somente representação facial vetorial"
+                text: "Processamento local soberano • nenhuma fotografia armazenada • somente representação facial vetorial"
                 font.pixelSize: 13
                 color: "#64748b"
                 Layout.alignment: Qt.AlignHCenter
             }
         }
 
+        // Estado de Presença e Reconhecimento Facial
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(parent.width * 0.72, 760)
+            width: Math.min(parent.width * 0.75, 760)
             spacing: 22
             visible: kioskModel.currentState === "PRESENCE_DETECTED" ||
                      kioskModel.currentState === "BIOMETRIC_SESSION" ||
@@ -177,7 +228,7 @@ Window {
 
             Text {
                 text: kioskModel.greetingTitle
-                font.pixelSize: 40
+                font.pixelSize: 38
                 font.bold: true
                 color: kioskModel.recognitionResolved ? "#f8fafc" : "#cbd5e1"
                 horizontalAlignment: Text.AlignHCenter
@@ -194,6 +245,24 @@ Window {
                 Layout.fillWidth: true
             }
 
+            // Barra de ritmo comportamental de acolhimento
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 320
+                Layout.preferredHeight: 4
+                radius: 2
+                color: "#1e293b"
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: parent.width * kioskModel.behaviorProgress
+                    radius: 2
+                    color: "#38bdf8"
+                }
+            }
+
             Text {
                 visible: kioskModel.recognitionResolved
                 text: kioskModel.activePerson
@@ -203,12 +272,14 @@ Window {
             }
         }
 
+        // Estado de Conteúdo Ativo: Navegação Autônoma e Toque sem Mouse
         ColumnLayout {
             anchors.centerIn: parent
             width: Math.min(parent.width * 0.85, 840)
-            spacing: 24
+            spacing: 20
             visible: kioskModel.currentState === "CONTENT_ACTIVE"
 
+            // Título do Conteúdo / Receita
             Text {
                 text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Experiência do Pampa"
                 font.pixelSize: 34
@@ -219,6 +290,7 @@ Window {
                 Layout.fillWidth: true
             }
 
+            // Bloco de Texto / Narrativa
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: contentDescText.implicitHeight + 48
@@ -240,7 +312,7 @@ Window {
                 }
             }
 
-            // Interactive choice options (touch / click)
+            // Opções táteis para interação sem mouse (touch friendly)
             ColumnLayout {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.fillWidth: true
@@ -252,43 +324,89 @@ Window {
 
                     Button {
                         Layout.alignment: Qt.AlignHCenter
-                        Layout.preferredWidth: Math.min(parent.width * 0.75, 480)
-                        Layout.preferredHeight: 52
+                        Layout.preferredWidth: Math.min(parent.width * 0.82, 500)
+                        Layout.preferredHeight: 56
                         text: modelData
-                        font.pixelSize: 17
+                        font.pixelSize: 18
                         font.bold: true
                         onClicked: kioskModel.chooseOption(modelData)
                     }
                 }
             }
 
+            // Barra de Ritmo e Progresso Comportamental
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+
+                    Text {
+                        text: kioskModel.behaviorStatus
+                        font.pixelSize: 13
+                        color: "#94a3b8"
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    Text {
+                        text: kioskModel.contentOptions.length > 0
+                              ? "Toque para responder ou aguarde o avanço"
+                              : "Avanço automático em ritmo natural"
+                        font.pixelSize: 12
+                        color: "#64748b"
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 6
+                    radius: 3
+                    color: "#1e293b"
+                    border.color: "#334155"
+                    border.width: 1
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * kioskModel.behaviorProgress
+                        radius: 3
+                        color: "#38bdf8"
+                    }
+                }
+            }
+
+            // Ações manuais por toque na tela (sem necessidade de mouse)
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 20
+                spacing: 18
 
                 Button {
                     Layout.preferredWidth: 200
-                    Layout.preferredHeight: 52
+                    Layout.preferredHeight: 50
                     text: "Descobrir Som"
                     onClicked: kioskModel.startRecipe("discover_by_sound")
                 }
 
                 Button {
                     Layout.preferredWidth: 200
-                    Layout.preferredHeight: 52
-                    text: "Aprofundar Relações"
+                    Layout.preferredHeight: 50
+                    text: "Aprofundar"
                     onClicked: kioskModel.deepenExperience()
                 }
 
                 Button {
                     Layout.preferredWidth: 200
-                    Layout.preferredHeight: 52
+                    Layout.preferredHeight: 50
                     text: "Próximo Conteúdo"
                     onClicked: kioskModel.advanceContent()
                 }
             }
         }
 
+        // Conclusão da sessão
         ColumnLayout {
             anchors.centerIn: parent
             spacing: 20
@@ -309,10 +427,27 @@ Window {
                 Layout.alignment: Qt.AlignHCenter
             }
 
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                Layout.preferredWidth: 260
+                Layout.preferredHeight: 4
+                radius: 2
+                color: "#1e293b"
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: parent.width * kioskModel.behaviorProgress
+                    radius: 2
+                    color: "#34d399"
+                }
+            }
+
             Button {
                 Layout.alignment: Qt.AlignHCenter
                 Layout.preferredWidth: 240
-                Layout.preferredHeight: 56
+                Layout.preferredHeight: 54
                 text: "Retornar ao início"
                 onClicked: kioskModel.finishSession()
             }
@@ -334,7 +469,7 @@ Window {
             anchors.rightMargin: 24
 
             Text {
-                text: "Estado: " + kioskModel.currentState
+                text: "Estado: " + kioskModel.currentState + " • " + kioskModel.behaviorStatus
                 font.pixelSize: 12
                 color: "#64748b"
             }
