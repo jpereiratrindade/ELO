@@ -293,7 +293,7 @@ Window {
             // Bloco de Texto / Narrativa
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: contentDescText.implicitHeight + 48
+                Layout.preferredHeight: contentDescText.implicitHeight + (kioskModel.contentAudio.length > 0 ? 64 : 48)
                 color: "#1e293b"
                 radius: 12
                 border.color: "#334155"
@@ -302,6 +302,7 @@ Window {
                 Text {
                     id: contentDescText
                     anchors.centerIn: parent
+                    anchors.verticalCenterOffset: kioskModel.contentAudio.length > 0 ? -8 : 0
                     width: parent.width - 48
                     text: kioskModel.contentText
                     font.pixelSize: 20
@@ -309,6 +310,26 @@ Window {
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     lineHeight: 1.3
+                }
+
+                RowLayout {
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 10
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 6
+                    visible: kioskModel.contentAudio.length > 0
+
+                    Text {
+                        text: "●"
+                        font.pixelSize: 10
+                        color: "#34d399"
+                    }
+                    Text {
+                        text: "Áudio do Pampa em reprodução"
+                        font.pixelSize: 12
+                        font.bold: true
+                        color: "#34d399"
+                    }
                 }
             }
 

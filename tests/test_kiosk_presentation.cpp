@@ -77,10 +77,10 @@ int main() {
 
     // Test autonomous absence detection: when visitor walks away, session closes gracefully
     model.onFacePresenceChanged(false);
-    model.tick(1.0);
+    model.tick(0.8);
     TEST_ASSERT(model.currentState() == QStringLiteral("CONTENT_ACTIVE"),
                 "Brief absence does not immediately drop session");
-    model.tick(3.0); // total 4.0s > 3.5s
+    model.tick(1.0); // total 1.8s > 1.5s
     TEST_ASSERT(model.currentState() == QStringLiteral("IDLE"),
                 "Confirmed absence finishes session and returns to IDLE");
 
@@ -102,8 +102,24 @@ int main() {
         // Simulate waiting in front of the kiosk without mouse/touch
         model.tick(8.6);
         TEST_ASSERT(model.behaviorProgress() == 0.0, "Progress resets after autonomous choice");
-        TEST_ASSERT(model.contentTitle() == QStringLiteral("Canto do Cardeal-amarelo"),
-                    "Recipe autonomously advances to reveal step without mouse");
+        // 5. Ela vai embora
+        model.onFacePresenceChanged(false);
+        model.tick(1.6);
+        TEST_ASSERT(model.currentState() == QStringLiteral("IDLE"),
+                    "Departure gracefully resets kiosk to contemplative ambient IDLE");
+
+        // 6. Retorna depois
+        model.onFacePresenceChanged(true);
+        submit_three_samples(model, {0.21F, 0.40F, 0.59F, 0.80F});
+        TEST_ASSERT(model.currentState() == QStringLiteral("IDENTITY_SUPPORTED"),
+                    "Returning visitor is recognized");
+        TEST_ASSERT(model.greetingTitle() == QStringLiteral("Que bom ver você novamente"),
+                    "Return greeting matches continuity");
+
+        // 7. O ELO continua de onde aquela relação parou
+        model.tick(2.1);
+        TEST_ASSERT(model.currentState() == QStringLiteral("CONTENT_ACTIVE"),
+                    "Kiosk resumes experience for returning visitor");
     }
 
     std::cout << "Automatic kiosk recognition presentation tests passed.\n";

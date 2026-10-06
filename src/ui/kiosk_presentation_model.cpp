@@ -2,6 +2,8 @@
 
 #ifdef ELO_HAS_QT
 #include <QCoreApplication>
+#include <QFile>
+#include <QProcess>
 #include <QTimer>
 #endif
 #include <algorithm>
@@ -78,6 +80,46 @@ QString KioskPresentationModel::contentMedia() const {
         return QString::fromStdString(actions.front().asset_path);
     }
     return QString();
+}
+
+QString KioskPresentationModel::contentAudio() const {
+    if (!engine_) return QString();
+    auto actions = engine_->active_presentation_actions();
+    if (!actions.empty()) {
+        const auto& path = actions.front().asset_path;
+        if (path.ends_with(".wav") || path.ends_with(".ogg") || path.ends_with(".mp3")) {
+            return QString::fromStdString(path);
+        }
+    }
+    if (engine_->active_content_variant()) {
+        for (const auto& media : engine_->active_content_variant()->presentation.media_refs) {
+            if (media.ends_with(".wav") || media.ends_with(".ogg") || media.ends_with(".mp3")) {
+                return QString::fromStdString(media);
+            }
+        }
+    }
+    return QString();
+}
+
+void KioskPresentationModel::playSound(const QString& soundPath) {
+    if (soundPath.isEmpty()) return;
+    QString resolved = soundPath;
+    if (!QFile::exists(resolved)) {
+        for (const auto& prefix : {"", "content/", "../content/", "../../content/", "content/assets/audio/", "assets/audio/"}) {
+            QString cand = QString::fromUtf8(prefix) + soundPath;
+            if (QFile::exists(cand)) {
+                resolved = cand;
+                break;
+            }
+        }
+    }
+    if (!QFile::exists(resolved)) return;
+
+    for (const auto& player : {"pw-play", "paplay", "aplay"}) {
+        if (QProcess::startDetached(QString::fromUtf8(player), {resolved})) {
+            break;
+        }
+    }
 }
 
 QStringList KioskPresentationModel::contentOptions() const {
@@ -170,6 +212,8 @@ void KioskPresentationModel::startRecipe(const QString& recipeId) {
         resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
+        auto audio = contentAudio();
+        playSound(audio.isEmpty() ? QStringLiteral("content/assets/audio/canto_cardeal.wav") : audio);
     }
 }
 
@@ -181,6 +225,8 @@ void KioskPresentationModel::chooseOption(const QString& option) {
         resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
+        auto audio = contentAudio();
+        playSound(audio.isEmpty() ? QStringLiteral("content/assets/audio/canto_cardeal.wav") : audio);
     }
 }
 
@@ -276,6 +322,7 @@ void KioskPresentationModel::onFacePresenceChanged(bool present) {
             behavior_progress_ = 0.0;
             greeting_title_ = QStringLiteral("Reconhecendo presença");
             greeting_message_ = QStringLiteral("Comparando somente a identidade facial local");
+            playSound(QStringLiteral("content/assets/audio/presence_chime.wav"));
             engine_->on_presence_detected();
             engine_->begin_automatic_continuity();
             emit recognitionVisualStateChanged(false);
@@ -300,12 +347,12 @@ void KioskPresentationModel::tick(double delta_seconds) {
 
     const auto state = engine_->current_state();
 
-    // 1. Ausência contínua do visitante na frente do totem
+    // 1. Ausência do visitante diante da câmera
     if (!face_detected_) {
         if (state != experience::SessionState::IDLE) {
             absence_duration_ += delta_seconds;
-            // Se ausente por 3.5 segundos, encerra a sessão de forma graciosa
-            if (absence_duration_ >= 3.5) {
+            // Se o visitante se afastou por 1.5s, conclui a sessão soberanamente
+            if (absence_duration_ >= 1.5) {
                 finishSession();
                 return;
             }
@@ -319,13 +366,14 @@ void KioskPresentationModel::tick(double delta_seconds) {
 
     switch (state) {
         case experience::SessionState::IDLE: {
-            constexpr double kAmbientRotationDuration = 12.0;
+            constexpr double kAmbientRotationDuration = 10.0;
             behavior_progress_ = std::clamp(state_duration_ / kAmbientRotationDuration, 0.0, 1.0);
             emit behaviorProgressChanged();
             if (state_duration_ >= kAmbientRotationDuration) {
                 state_duration_ = 0.0;
                 behavior_progress_ = 0.0;
                 selectPampaContent(QStringLiteral("attract"));
+                playSound(QStringLiteral("content/assets/audio/pampa_ambient.wav"));
             }
             break;
         }
@@ -335,8 +383,6 @@ void KioskPresentationModel::tick(double delta_seconds) {
         case experience::SessionState::IDENTITY_CANDIDATE:
         case experience::SessionState::IDENTITY_UNCERTAIN:
         case experience::SessionState::IDENTITY_UNKNOWN: {
-            // Acolhimento inicial: se a biometria não resolver em 2.5s, avança para conteúdo
-            // Conforme ELO-EXPERIENCE-001: a biometria nunca é uma barreira de entrada
             constexpr double kBiometricGracePeriod = 2.5;
             behavior_progress_ = std::clamp(state_duration_ / kBiometricGracePeriod, 0.0, 1.0);
             emit behaviorProgressChanged();
@@ -349,7 +395,6 @@ void KioskPresentationModel::tick(double delta_seconds) {
         }
 
         case experience::SessionState::IDENTITY_SUPPORTED: {
-            // Rosto reconhecido; exibe mensagem de continuidade por 2.0s e inicia o conteúdo
             constexpr double kGreetingDuration = 2.0;
             behavior_progress_ = std::clamp(state_duration_ / kGreetingDuration, 0.0, 1.0);
             emit behaviorProgressChanged();
@@ -362,6 +407,17 @@ void KioskPresentationModel::tick(double delta_seconds) {
         }
 
         case experience::SessionState::CONTENT_ACTIVE: {
+            // Se a receita foi concluída (ex: tela "Concluído"):
+            if (engine_->is_recipe_active() && engine_->recipe_state().completed) {
+                constexpr double kCompletionReadingDuration = 4.0;
+                behavior_progress_ = std::clamp(state_duration_ / kCompletionReadingDuration, 0.0, 1.0);
+                emit behaviorProgressChanged();
+                if (state_duration_ >= kCompletionReadingDuration) {
+                    finishSession();
+                }
+                break;
+            }
+
             const auto opts = contentOptions();
             if (!opts.isEmpty()) {
                 // Pergunta / opções: 8.5s para visitante tocar ou observar
@@ -371,18 +427,17 @@ void KioskPresentationModel::tick(double delta_seconds) {
                 if (state_duration_ >= kQuestionStepDuration) {
                     state_duration_ = 0.0;
                     behavior_progress_ = 0.0;
-                    // Avanço autônomo: seleciona a primeira opção da pergunta
                     chooseOption(opts.first());
                 }
             } else {
-                // Conteúdo / revelação / texto narrativo: 7.0s de ritmo contemplativo
-                constexpr double kReadingStepDuration = 7.0;
+                // Conteúdo / revelação / texto narrativo: 6.5s de leitura
+                constexpr double kReadingStepDuration = 6.5;
                 behavior_progress_ = std::clamp(state_duration_ / kReadingStepDuration, 0.0, 1.0);
                 emit behaviorProgressChanged();
                 if (state_duration_ >= kReadingStepDuration) {
                     state_duration_ = 0.0;
                     behavior_progress_ = 0.0;
-                    if (engine_->is_recipe_active() && !engine_->recipe_state().completed) {
+                    if (engine_->is_recipe_active()) {
                         engine_->advance_recipe("");
                         emit contentChanged();
                         emit stateChanged();
@@ -399,8 +454,6 @@ void KioskPresentationModel::tick(double delta_seconds) {
             behavior_progress_ = std::clamp(state_duration_ / kCompleteDuration, 0.0, 1.0);
             emit behaviorProgressChanged();
             if (state_duration_ >= kCompleteDuration) {
-                state_duration_ = 0.0;
-                behavior_progress_ = 0.0;
                 finishSession();
             }
             break;

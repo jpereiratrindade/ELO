@@ -19,7 +19,7 @@ constexpr int capture_width = 640;
 constexpr int capture_height = 480;
 constexpr int capture_fps = 15;
 constexpr int frames_required_for_presence = 3;
-constexpr int frames_required_for_absence = 45;
+constexpr int frames_required_for_absence = 10;
 constexpr auto embedding_interval = std::chrono::milliseconds(400);
 
 bool open_camera(const CameraDevice& camera, cv::VideoCapture& capture) {
@@ -54,14 +54,20 @@ cv::Mat best_face(const cv::Mat& faces) {
         return {};
     }
 
-    int best_index = 0;
-    float best_score = faces.at<float>(0, 14);
-    for (int row = 1; row < faces.rows; ++row) {
+    int best_index = -1;
+    float best_score = 0.65F;
+    for (int row = 0; row < faces.rows; ++row) {
         const float score = faces.at<float>(row, 14);
-        if (score > best_score) {
+        const float width = faces.at<float>(row, 2);
+        const float height = faces.at<float>(row, 3);
+        // Filtra ruído e falsos positivos em fundos estáticos
+        if (score >= best_score && width >= 45.0F && height >= 45.0F) {
             best_score = score;
             best_index = row;
         }
+    }
+    if (best_index < 0) {
+        return {};
     }
     return faces.row(best_index);
 }

@@ -124,6 +124,14 @@ void ExperienceEngine::evaluate_biometric_evidence(const biometric::IdentityHypo
     switch (hypothesis.state) {
         case biometric::IdentityState::SUPPORTED:
             active_person_ = hypothesis.resolved_person_id;
+            if (active_person_ && experience_store_) {
+                auto hist = experience_store_->get_history(*active_person_);
+                if (hist) {
+                    for (const auto& item : *hist) {
+                        session_seen_content_.insert(item);
+                    }
+                }
+            }
             transition_to(SessionState::IDENTITY_SUPPORTED, EventType::IDENTITY_EVIDENCE_EVALUATED);
             break;
         case biometric::IdentityState::CANDIDATE:
@@ -276,6 +284,9 @@ core::Result<void> ExperienceEngine::select_contextual_content(
     active_reason_ = res->reason;
     if (active_atom_) {
         session_seen_content_.insert(active_atom_->content_id);
+        if (active_person_ && experience_store_) {
+            (void)experience_store_->record_content_served(*active_person_, active_atom_->content_id);
+        }
         record_jev_event("content.selected", active_atom_->content_id);
     }
     transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
@@ -332,6 +343,9 @@ void ExperienceEngine::advance_recipe(std::string_view user_action) {
     transition_to(SessionState::CONTENT_ACTIVE, EventType::RECIPE_STEP_ADVANCED);
 
     if (recipe_state_.completed) {
+        if (active_person_ && experience_store_) {
+            (void)experience_store_->record_content_served(*active_person_, rec->recipe_id);
+        }
         record_jev_event("recipe.completed", rec->recipe_id);
     }
 }

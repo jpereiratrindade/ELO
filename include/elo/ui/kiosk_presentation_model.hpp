@@ -34,6 +34,7 @@ class KioskPresentationModel : public QObject {
     Q_PROPERTY(QString contentTitle READ contentTitle NOTIFY contentChanged)
     Q_PROPERTY(QString contentText READ contentText NOTIFY contentChanged)
     Q_PROPERTY(QString contentMedia READ contentMedia NOTIFY contentChanged)
+    Q_PROPERTY(QString contentAudio READ contentAudio NOTIFY contentChanged)
     Q_PROPERTY(QStringList contentOptions READ contentOptions NOTIFY contentChanged)
     Q_PROPERTY(bool isRecipeActive READ isRecipeActive NOTIFY contentChanged)
     Q_PROPERTY(QString selectionReason READ selectionReason NOTIFY contentChanged)
@@ -67,6 +68,7 @@ public:
     [[nodiscard]] QString contentTitle() const;
     [[nodiscard]] QString contentText() const;
     [[nodiscard]] QString contentMedia() const;
+    [[nodiscard]] QString contentAudio() const;
     [[nodiscard]] QStringList contentOptions() const;
     [[nodiscard]] bool isRecipeActive() const;
     [[nodiscard]] QString selectionReason() const;
@@ -84,6 +86,7 @@ public:
     Q_INVOKABLE void requestForgetMe();
     Q_INVOKABLE void finishSession();
     Q_INVOKABLE void resetBehaviorTimer();
+    Q_INVOKABLE void playSound(const QString& soundPath);
 
     void tick(double delta_seconds);
 
