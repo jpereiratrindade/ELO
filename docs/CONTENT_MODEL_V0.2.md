@@ -82,8 +82,29 @@ Tabelas principais:
 - `package_atoms(bundle_id, content_id, position)`;
 - `editorial_revisions(sequence, entity_kind, entity_id, operation, occurred_at)`.
 
-Na primeira execução, os JSONs legados são importados automaticamente se o banco estiver vazio. Depois disso, o fluxo é unidirecional: SQLite → snapshot JSON → validação → bundle imutável.
+A compatibilidade legada é incremental: cada categoria ainda ausente no banco (átomos,
+relações, receitas e planos de pacote) pode ser recuperada dos JSONs existentes. Isso
+evita que a presença de átomos no SQLite impeça a descoberta de pacotes publicados
+antes da migração. Depois da importação, o fluxo editorial é unidirecional: SQLite →
+snapshot JSON → validação → bundle imutável.
+
+## Estados e operações do pacote
+
+Um pacote possui três estados complementares, apresentados separadamente no Studio:
+
+- **salvo**: existe como plano editável no SQLite;
+- **publicado**: possui pelo menos uma versão imutável no diretório de bundles;
+- **ativo**: uma versão publicada é o manifesto que o Totem está executando.
+
+Salvar nunca publica nem ativa. **Ativar** gera o snapshot, valida, publica a versão e
+troca o manifesto ativo como uma única operação da API. Uma combinação
+`{bundle_id, version}` já publicada não pode ser sobrescrita com conteúdo diferente;
+é necessário incrementar a versão semântica. Reativar exatamente o mesmo conteúdo é
+permitido. Um plano ativo não pode ser excluído antes da ativação de outro pacote.
 
 ## Publicação e controle remoto
 
-Publicar sempre sela e ativa um pacote. O controle remoto de conteúdo ao vivo (`SHOW_ATOM`) continua operando sobre um átomo do pacote ativo e não altera o snapshot. Uma futura fila remota deve referenciar `{bundle_hash, content_id}` para preservar rastreabilidade.
+Ativar sempre gera, valida e sela uma versão do pacote antes de apontar o Totem para
+ela. O controle remoto de conteúdo ao vivo (`SHOW_ATOM`) continua operando sobre um
+átomo do pacote ativo e não altera o snapshot. Uma futura fila remota deve referenciar
+`{bundle_hash, content_id}` para preservar rastreabilidade.

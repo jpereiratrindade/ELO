@@ -346,17 +346,20 @@ BundlePublishResult BundlePublisher::publish_and_activate(
     // 3. Prepare target folder in bundles/
     std::string target_folder_name = manifest.bundle_id + "-" + manifest.version;
     auto target_dir = bundles_dir() / target_folder_name;
+    const auto nonce = std::to_string(::getpid()) + "-" +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    auto build_dir = staging_dir() / (target_folder_name + ".tmp." + nonce);
 
     std::error_code ec;
-    std::filesystem::remove_all(target_dir, ec);
-    std::filesystem::create_directories(target_dir, ec);
+    std::filesystem::remove_all(build_dir, ec);
+    std::filesystem::create_directories(build_dir, ec);
 
     // Copy canonical bundle constituents (skip bundles/, staging/, current symlink)
     const std::vector<std::string> constituents = {"manifest.json", "catalog", "assets", "sources"};
     for (const auto& item : constituents) {
         auto src_item = candidate_dir / item;
         if (std::filesystem::exists(src_item, ec)) {
-            auto dst_item = target_dir / item;
+            auto dst_item = build_dir / item;
             std::filesystem::copy(src_item, dst_item,
                                   std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing, ec);
             if (ec) {
@@ -368,23 +371,23 @@ BundlePublishResult BundlePublisher::publish_and_activate(
     }
 
     std::string package_error;
-    if (!prune_catalog_to_package(target_dir, manifest.atom_ids, package_error)) {
-        std::filesystem::remove_all(target_dir, ec);
+    if (!prune_catalog_to_package(build_dir, manifest.atom_ids, package_error)) {
+        std::filesystem::remove_all(build_dir, ec);
         res.success = false;
         res.error_message = package_error;
         return res;
     }
 
     // Validate the actual selected package, not only the full authoring catalog.
-    if (!write_manifest(target_dir / "manifest.json", manifest)) {
+    if (!write_manifest(build_dir / "manifest.json", manifest)) {
         res.success = false;
         res.error_message = "Failed to write package manifest";
         return res;
     }
-    ContentBundle sealedCandidate(target_dir);
+    ContentBundle sealedCandidate(build_dir);
     auto sealedReport = sealedCandidate.validate();
     if (!sealedReport.valid) {
-        std::filesystem::remove_all(target_dir, ec);
+        std::filesystem::remove_all(build_dir, ec);
         res.success = false;
         res.error_message = "Selected package failed validation";
         for (const auto& issue : sealedReport.errors) {
@@ -400,10 +403,43 @@ BundlePublishResult BundlePublisher::publish_and_activate(
     }
     manifest.content_hash = *hash_res;
 
+    // Published versions are immutable. Re-activating identical content is safe;
+    // changing an existing version requires an explicit version increment.
+    if (std::filesystem::exists(target_dir, ec)) {
+        const auto existing = read_manifest(target_dir / "manifest.json");
+        std::filesystem::remove_all(build_dir, ec);
+        if (existing.content_hash != manifest.content_hash) {
+            res.success = false;
+            res.error_message = "Bundle " + target_folder_name
+                + " already exists with different content; increment the semantic version";
+            return res;
+        }
+        auto activation = atomic_activate(current_symlink(), target_dir);
+        if (!activation) {
+            res.error_message = activation.error().to_string();
+            return res;
+        }
+        res.success = true;
+        res.bundle_id = existing.bundle_id;
+        res.version = existing.version;
+        res.content_hash = existing.content_hash;
+        res.bundle_path = target_dir;
+        res.current_link = current_symlink();
+        return res;
+    }
+
     // Update sealed manifest with new hash and timestamps
-    if (!write_manifest(target_dir / "manifest.json", manifest)) {
+    if (!write_manifest(build_dir / "manifest.json", manifest)) {
         res.success = false;
         res.error_message = "Failed to write sealed manifest in target bundle";
+        return res;
+    }
+
+    std::filesystem::rename(build_dir, target_dir, ec);
+    if (ec) {
+        const auto renameError = ec.message();
+        std::filesystem::remove_all(build_dir, ec);
+        res.error_message = "Failed to seal immutable bundle: " + renameError;
         return res;
     }
 

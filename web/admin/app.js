@@ -144,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('stat-revision').textContent = '#' + data.active_bundle.curation_revision;
       } else {
         document.getElementById('active-bundle-title').textContent = 'Biodiversidade do Bioma Pampa & Campos Sulinos';
-        document.getElementById('active-bundle-desc').textContent = 'Catálogo soberano local em modo Rascunho Editorial. Clique em "Publicar no Totem" para ativar a primeira versão.';
+        document.getElementById('active-bundle-desc').textContent = 'Catálogo soberano local em modo Rascunho Editorial. Crie e ative um pacote para publicar a primeira versão.';
         document.getElementById('active-bundle-hash').textContent = 'Pronto para publicação determinística';
         document.getElementById('stat-version').textContent = 'v1.0.0';
         document.getElementById('stat-revision').textContent = '#1 (Draft)';
@@ -238,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (list) {
         list.innerHTML = plans.length ? '' : '<div class="empty-state"><strong>Nenhum pacote salvo</strong><p>Crie o primeiro pacote para organizar uma publicação.</p></div>';
         plans.forEach(plan => {
-          const isActive = currentStatus?.active_bundle?.bundle_id === plan.bundle_id;
+          const isActive = !!plan.is_active;
           const item = document.createElement('article');
           item.className = `package-plan-item ${plan.bundle_id === currentId ? 'selected' : ''} ${isActive ? 'active' : ''}`;
           item.innerHTML = `
@@ -246,16 +246,18 @@ document.addEventListener('DOMContentLoaded', () => {
               <span class="package-plan-title">${plan.title || plan.bundle_id}</span>
               ${isActive ? '<span class="badge-pill badge-green" style="font-size:9px;">ATIVO</span>' : ''}
             </div>
-            <div class="package-plan-meta">v${plan.version || '0.1.0'} · ${(plan.atom_ids || []).length} átomos<br>${plan.bundle_id}</div>
+            <div class="package-plan-meta">v${plan.version || '0.1.0'} · ${(plan.atom_ids || []).length} átomos · ${plan.is_published ? 'publicado' : 'não publicado'}<br>${plan.bundle_id}</div>
             <div class="package-plan-actions">
               <button type="button" class="btn btn-secondary btn-edit-package">Editar</button>
               <button type="button" class="btn ${isActive ? 'btn-secondary' : 'btn-primary'} btn-activate-package" ${isActive ? 'disabled' : ''}>${isActive ? 'Em execução' : 'Ativar'}</button>
+              <button type="button" class="btn btn-danger-outline btn-delete-package" ${isActive ? 'disabled' : ''} title="Excluir plano">×</button>
             </div>`;
           item.addEventListener('click', (event) => {
             if (!event.target.closest('button')) loadPackagePlan(plan.bundle_id);
           });
           item.querySelector('.btn-edit-package').addEventListener('click', () => loadPackagePlan(plan.bundle_id));
           item.querySelector('.btn-activate-package').addEventListener('click', () => activatePackagePlan(plan));
+          item.querySelector('.btn-delete-package').addEventListener('click', () => deletePackagePlan(plan));
           list.appendChild(item);
         });
       }
@@ -269,11 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm(`Ativar o pacote "${plan.title || plan.bundle_id}" no Totem?`)) return;
     try {
       showNotice('Ativando pacote…', `Validando e publicando ${plan.title || plan.bundle_id}.`);
-      const saveResponse = await fetch('/api/manifest', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan)
-      });
-      if (!saveResponse.ok) throw new Error((await saveResponse.json()).error || 'Falha ao selecionar pacote');
-      const publishResponse = await fetch('/api/publish', { method: 'POST' });
+      const publishResponse = await fetch(`/api/packages/${encodeURIComponent(plan.bundle_id)}/activate`, { method: 'POST' });
       const result = await publishResponse.json();
       if (!result.success) throw new Error(result.error || 'Falha ao publicar pacote');
       showNotice('Pacote ativo', `${plan.title || plan.bundle_id} foi publicado e ativado no Totem.`);
@@ -281,6 +279,20 @@ document.addEventListener('DOMContentLoaded', () => {
       await fetchPackagePlans(plan.bundle_id);
     } catch (error) {
       showNotice('Falha ao ativar pacote', error.message, true);
+    }
+  }
+
+  async function deletePackagePlan(plan) {
+    if (!plan || plan.is_active || !confirm(`Excluir o plano de pacote "${plan.title || plan.bundle_id}"?\n\nBundles já publicados permanecerão no histórico.`)) return;
+    try {
+      const response = await fetch(`/api/packages/${encodeURIComponent(plan.bundle_id)}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Falha ao excluir pacote');
+      showNotice('Pacote excluído', `${plan.title || plan.bundle_id} foi removido dos planos editoriais.`);
+      hidePackageEditor();
+      await fetchPackagePlans();
+    } catch (error) {
+      showNotice('Falha ao excluir pacote', error.message, true);
     }
   }
 
@@ -1350,7 +1362,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Action Buttons: Validate, Publish, Reload
+  // Action Buttons: Validate, Package Management, Reload
   document.getElementById('btn-validate').addEventListener('click', async () => {
     try {
       showNotice('Validando Catálogo...', 'Executando ContentValidator nativo em C++26...');
@@ -1368,24 +1380,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  document.getElementById('btn-publish').addEventListener('click', async () => {
-    if (!confirm('Deseja empacotar, assinar (SHA-256) e ativar atomicamente este bundle no totem?')) return;
-
-    try {
-      showNotice('Publicando...', 'Gerando bundle, calculando hash e atualizando link atômico...');
-      const res = await fetch('/api/publish', { method: 'POST' });
-      const data = await res.json();
-
-      if (data.success) {
-        showNotice('Bundle Publicado e Ativo!', `Versão ${data.version} ativada no totem. Hash: ${data.content_hash}. Kiosk recarregado a quente via socket Unix.`);
-        fetchStatus();
-        fetchCatalog();
-      } else {
-        showNotice('Falha na Publicação', data.error || 'Erro desconhecido', true);
-      }
-    } catch (err) {
-      showNotice('Erro na Publicação', err.message, true);
-    }
+  document.getElementById('btn-open-packages').addEventListener('click', () => {
+    document.querySelector('[data-tab="tab-bundles"]')?.click();
+    document.getElementById('tab-bundles')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
   document.getElementById('btn-reload').addEventListener('click', async () => {
@@ -1646,7 +1643,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       try {
-        const res = await fetch('/api/manifest', {
+        const res = await fetch('/api/packages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

@@ -1037,11 +1037,89 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
 
     // API: GET /api/packages — reusable editorial package plans
     if (method == QStringLiteral("GET") && path == QStringLiteral("/api/packages")) {
+        const auto active = publisher_.active_bundle();
+        const auto published = publisher_.list_bundles();
+        QJsonArray packageList;
+        for (const auto& value : content_database_->packages()) {
+            auto plan = value.toObject();
+            const QString id = plan.value(QStringLiteral("bundle_id")).toString();
+            QJsonArray versions;
+            for (const auto& bundle : published) {
+                if (QString::fromStdString(bundle.bundle_id) == id) versions.append(QString::fromStdString(bundle.version));
+            }
+            plan[QStringLiteral("published_versions")] = versions;
+            plan[QStringLiteral("is_published")] = !versions.isEmpty();
+            plan[QStringLiteral("is_active")] = active && QString::fromStdString(active->bundle_id) == id;
+            plan[QStringLiteral("active_version")] = plan.value(QStringLiteral("is_active")).toBool()
+                ? QString::fromStdString(active->version) : QString();
+            packageList.append(plan);
+        }
         QJsonObject response;
-        response[QStringLiteral("packages")] = content_database_->packages();
+        response[QStringLiteral("packages")] = packageList;
         response[QStringLiteral("storage")] = QStringLiteral("sqlite");
         response[QStringLiteral("journal_mode")] = content_database_->journal_mode();
         sendJsonResponse(socket, 200, QJsonDocument(response).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/packages")) {
+        const auto document = QJsonDocument::fromJson(body);
+        const auto plan = document.object();
+        const QString id = plan.value(QStringLiteral("bundle_id")).toString().trimmed();
+        if (!document.isObject() || id.isEmpty() || plan.value(QStringLiteral("title")).toString().trimmed().isEmpty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Pacote exige bundle_id e title\"}");
+            return;
+        }
+        content_database_->upsert_package(plan);
+        draft_modified_ = true;
+        QJsonObject response{{QStringLiteral("success"), true}, {QStringLiteral("package"), plan}};
+        sendJsonResponse(socket, 200, QJsonDocument(response).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    if (method == QStringLiteral("DELETE") && path.startsWith(QStringLiteral("/api/packages/"))) {
+        const QString id = sanitize_filename(QUrl::fromPercentEncoding(path.mid(14).toUtf8()));
+        const auto active = publisher_.active_bundle();
+        if (active && QString::fromStdString(active->bundle_id) == id) {
+            sendJsonResponse(socket, 409, "{\"error\":\"O pacote ativo não pode ser excluído. Ative outro pacote primeiro.\"}");
+            return;
+        }
+        const bool removed = content_database_->delete_package(id);
+        sendJsonResponse(socket, removed ? 200 : 404, removed ? "{\"success\":true}" : "{\"error\":\"Pacote não encontrado\"}");
+        return;
+    }
+
+    if (method == QStringLiteral("POST") && path.startsWith(QStringLiteral("/api/packages/"))
+        && path.endsWith(QStringLiteral("/activate"))) {
+        const QString encodedId = path.mid(14, path.size() - 14 - 9);
+        const QString id = sanitize_filename(QUrl::fromPercentEncoding(encodedId.toUtf8()));
+        const auto plan = content_database_->package(id);
+        if (plan.isEmpty()) {
+            sendJsonResponse(socket, 404, "{\"error\":\"Plano de pacote não encontrado\"}");
+            return;
+        }
+        content_database_->export_workspace(content_root_);
+        QSaveFile manifest(QString::fromStdString((content_root_ / "manifest.json").string()));
+        if (!manifest.open(QIODevice::WriteOnly)
+            || manifest.write(QJsonDocument(plan).toJson(QJsonDocument::Indented)) < 0
+            || !manifest.commit()) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Falha ao preparar manifesto do pacote\"}");
+            return;
+        }
+        const auto result = publisher_.publish_and_activate(content_root_, "curator_local");
+        QJsonObject response{{QStringLiteral("success"), result.success}};
+        if (result.success) {
+            draft_modified_ = false;
+            response[QStringLiteral("bundle_id")] = QString::fromStdString(result.bundle_id);
+            response[QStringLiteral("version")] = QString::fromStdString(result.version);
+            response[QStringLiteral("content_hash")] = QString::fromStdString(result.content_hash);
+            system::ControlClient client;
+            response[QStringLiteral("kiosk_notified")] = client.notify_published(
+                QString::fromStdString(result.bundle_id), QString::fromStdString(result.content_hash));
+        } else {
+            response[QStringLiteral("error")] = QString::fromStdString(result.error_message);
+        }
+        sendJsonResponse(socket, result.success ? 200 : 400, QJsonDocument(response).toJson(QJsonDocument::Compact));
         return;
     }
 

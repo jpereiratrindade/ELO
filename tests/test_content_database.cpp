@@ -1,7 +1,9 @@
 #include "elo/content/content_database.hpp"
 
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonObject>
+#include <QFile>
 #include <chrono>
 #include <filesystem>
 #include <iostream>
@@ -23,10 +25,18 @@ int main() {
     CHECK(database.atoms().size() == 1, "upsert does not duplicate accented id");
     CHECK(database.atom("Resili%C3%AAncia").value("title").toString() == "Alterado", "encoded id resolves canonically");
 
+    std::filesystem::create_directories(root / "current");
+    QFile activeManifest(QString::fromStdString((root / "current" / "manifest.json").string()));
+    CHECK(activeManifest.open(QIODevice::WriteOnly), "active legacy manifest opens");
+    activeManifest.write(QJsonDocument(QJsonObject{{"bundle_id", "active-package"}, {"title", "Active package"}, {"version", "1.0.0"}}).toJson());
+    activeManifest.close();
+    database.import_legacy_workspace(root);
+    CHECK(!database.package("active-package").isEmpty(), "incremental migration recovers active package when atoms already exist");
+
     QJsonObject package{{"bundle_id", "package-test"}, {"title", "Package"},
                         {"atom_ids", QJsonArray{QStringLiteral("Resiliência")}}};
     database.upsert_package(package);
-    CHECK(database.packages().size() == 1, "package plan persisted");
+    CHECK(database.packages().size() == 2, "package plan persisted alongside recovered active package");
 
     database.export_workspace(root);
     CHECK(std::filesystem::exists(root / "catalog" / "atoms" / "Resiliência.json"), "JSON snapshot exported");

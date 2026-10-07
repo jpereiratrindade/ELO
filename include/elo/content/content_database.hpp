@@ -36,6 +36,7 @@ public:
     [[nodiscard]] QJsonArray packages() const;
     [[nodiscard]] QJsonObject package(const QString& id) const;
     void upsert_package(const QJsonObject& value);
+    [[nodiscard]] bool delete_package(const QString& id);
 
     [[nodiscard]] QString journal_mode() const;
 

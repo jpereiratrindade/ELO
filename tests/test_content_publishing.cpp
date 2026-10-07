@@ -73,6 +73,15 @@ void test_bundle_publisher_and_atomic_swap() {
     std::cout << "  Bundle activated: " << active->bundle_id << " revision " << active->curation_revision << '\n';
 
     // 2. Publish second revision
+    QFile sourceManifest(QString::fromStdString((source_content / "manifest.json").string()));
+    TEST_ASSERT(sourceManifest.open(QIODevice::ReadOnly), "Source manifest opens for version bump");
+    auto sourceDocument = QJsonDocument::fromJson(sourceManifest.readAll());
+    sourceManifest.close();
+    auto sourceObject = sourceDocument.object();
+    sourceObject[QStringLiteral("version")] = QStringLiteral("0.1.1");
+    TEST_ASSERT(sourceManifest.open(QIODevice::WriteOnly | QIODevice::Truncate), "Source manifest opens for update");
+    sourceManifest.write(QJsonDocument(sourceObject).toJson(QJsonDocument::Indented));
+    sourceManifest.close();
     auto pub_res2 = publisher.publish_and_activate(source_content, "curator_bob");
     TEST_ASSERT(pub_res2.success, "Second publish must succeed");
     auto active2 = publisher.active_bundle();
@@ -80,6 +89,18 @@ void test_bundle_publisher_and_atomic_swap() {
     TEST_ASSERT(active2->curation_revision == 2, "Curation revision incremented to 2");
     TEST_ASSERT(active2->parent_bundle == active->content_hash, "Parent bundle hash points to revision 1");
     std::cout << "  Second bundle activated: revision " << active2->curation_revision << '\n';
+
+    // Same semantic version may never be overwritten with different content.
+    TEST_ASSERT(sourceManifest.open(QIODevice::ReadOnly), "Versioned manifest reopens");
+    sourceDocument = QJsonDocument::fromJson(sourceManifest.readAll());
+    sourceManifest.close();
+    sourceObject = sourceDocument.object();
+    sourceObject[QStringLiteral("atom_ids")] = QJsonArray{QStringLiteral("species_cardeal_001")};
+    TEST_ASSERT(sourceManifest.open(QIODevice::WriteOnly | QIODevice::Truncate), "Versioned manifest changes selection");
+    sourceManifest.write(QJsonDocument(sourceObject).toJson(QJsonDocument::Indented));
+    sourceManifest.close();
+    const auto rejected = publisher.publish_and_activate(source_content, "curator_bob");
+    TEST_ASSERT(!rejected.success, "Published version cannot be overwritten with different content");
 
     // 3. Rollback
     auto bundles = publisher.list_bundles();

@@ -102,15 +102,71 @@ void ContentDatabase::replace_recipes(const QJsonArray& values) { exec(db_,"BEGI
 void ContentDatabase::upsert_package(const QJsonObject& input) {
     const auto id=input.value("bundle_id").toString(); exec(db_,"BEGIN IMMEDIATE;"); try { upsert(db_,"package_plans","bundle_id",id,input,"package"); sqlite3_stmt* s{}; check(sqlite3_prepare_v2(db_,"DELETE FROM package_atoms WHERE bundle_id=?;",-1,&s,nullptr),db_); auto u=id.toUtf8();sqlite3_bind_text(s,1,u.constData(),-1,SQLITE_TRANSIENT);check(sqlite3_step(s),db_);sqlite3_finalize(s); int p=0; for(const auto& x:input.value("atom_ids").toArray()){check(sqlite3_prepare_v2(db_,"INSERT INTO package_atoms(bundle_id,content_id,position) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM content_atoms WHERE content_id=?);",-1,&s,nullptr),db_);auto a=canonical_id(x.toString()).toUtf8();sqlite3_bind_text(s,1,u.constData(),-1,SQLITE_TRANSIENT);sqlite3_bind_text(s,2,a.constData(),-1,SQLITE_TRANSIENT);sqlite3_bind_int(s,3,p++);sqlite3_bind_text(s,4,a.constData(),-1,SQLITE_TRANSIENT);check(sqlite3_step(s),db_);sqlite3_finalize(s);} exec(db_,"COMMIT;"); } catch(...) { exec(db_,"ROLLBACK;"); throw; }
 }
+bool ContentDatabase::delete_package(const QString& id) {
+    sqlite3_stmt* statement{};
+    check(sqlite3_prepare_v2(db_, "DELETE FROM package_plans WHERE bundle_id=?;", -1, &statement, nullptr), db_);
+    const auto utf8 = id.toUtf8();
+    sqlite3_bind_text(statement, 1, utf8.constData(), -1, SQLITE_TRANSIENT);
+    check(sqlite3_step(statement), db_);
+    const bool changed = sqlite3_changes(db_) > 0;
+    sqlite3_finalize(statement);
+    return changed;
+}
 
 void ContentDatabase::import_legacy_workspace(const std::filesystem::path& root) {
-    if (!is_empty()) return;
     try {
-        for(const auto& folder:{"objects","atoms"}) { QDir d(QString::fromStdString((root/"catalog"/folder).string())); for(const auto& i:d.entryInfoList({"*.json"},QDir::Files,QDir::Time|QDir::Reversed)){QFile f(i.absoluteFilePath());if(f.open(QIODevice::ReadOnly)){auto o=parse_object(f.readAll());if(!o.isEmpty())upsert_atom(o);}} }
-        auto load_array=[&](const std::filesystem::path& p){QFile f(QString::fromStdString(p.string()));if(!f.open(QIODevice::ReadOnly))return QJsonArray{};auto d=QJsonDocument::fromJson(f.readAll());return d.isArray()?d.array():QJsonArray{};};
-        replace_relations(load_array(root/"catalog"/"relations"/"relations.json")); replace_recipes(load_array(root/"catalog"/"recipes"/"recipes.json"));
-        QDir p(QString::fromStdString((root/"packages").string())); for(const auto& i:p.entryInfoList({"*.json"},QDir::Files)){QFile f(i.absoluteFilePath());if(f.open(QIODevice::ReadOnly)){auto o=parse_object(f.readAll());if(!o.isEmpty())upsert_package(o);}}
-        QFile m(QString::fromStdString((root/"manifest.json").string())); if(m.open(QIODevice::ReadOnly)){auto o=parse_object(m.readAll());if(!o.isEmpty()&&package(o.value("bundle_id").toString()).isEmpty())upsert_package(o);}
+        if (atoms().isEmpty()) {
+            for (const auto& folder : {"objects", "atoms"}) {
+                QDir directory(QString::fromStdString((root / "catalog" / folder).string()));
+                for (const auto& info : directory.entryInfoList({"*.json"}, QDir::Files, QDir::Time | QDir::Reversed)) {
+                    QFile file(info.absoluteFilePath());
+                    if (file.open(QIODevice::ReadOnly)) {
+                        const auto value = parse_object(file.readAll());
+                        if (!value.isEmpty()) upsert_atom(value);
+                    }
+                }
+            }
+        }
+
+        const auto load_array = [&](const std::filesystem::path& path) {
+            QFile file(QString::fromStdString(path.string()));
+            if (!file.open(QIODevice::ReadOnly)) return QJsonArray{};
+            const auto document = QJsonDocument::fromJson(file.readAll());
+            return document.isArray() ? document.array() : QJsonArray{};
+        };
+        if (relations().isEmpty()) {
+            const auto legacy = load_array(root / "catalog" / "relations" / "relations.json");
+            if (!legacy.isEmpty()) replace_relations(legacy);
+        }
+        if (recipes().isEmpty()) {
+            const auto legacy = load_array(root / "catalog" / "recipes" / "recipes.json");
+            if (!legacy.isEmpty()) replace_recipes(legacy);
+        }
+
+        const auto import_package = [&](QJsonObject value) {
+            const QString id = value.value(QStringLiteral("bundle_id")).toString();
+            if (id.isEmpty() || !package(id).isEmpty()) return;
+            if (value.value(QStringLiteral("atom_ids")).toArray().isEmpty()) {
+                QJsonArray ids;
+                for (const auto& atomValue : atoms()) ids.append(atomValue.toObject().value(QStringLiteral("content_id")));
+                value[QStringLiteral("atom_ids")] = ids;
+            }
+            upsert_package(value);
+        };
+        const auto import_manifest_file = [&](const std::filesystem::path& path) {
+            QFile file(QString::fromStdString(path.string()));
+            if (file.open(QIODevice::ReadOnly)) import_package(parse_object(file.readAll()));
+        };
+
+        QDir plans(QString::fromStdString((root / "packages").string()));
+        for (const auto& info : plans.entryInfoList({"*.json"}, QDir::Files)) import_manifest_file(info.absoluteFilePath().toStdString());
+        import_manifest_file(root / "current" / "manifest.json");
+        import_manifest_file(root / "manifest.json");
+
+        QDir bundles(QString::fromStdString((root / "bundles").string()));
+        for (const auto& directory : bundles.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time)) {
+            import_manifest_file(std::filesystem::path(directory.absoluteFilePath().toStdString()) / "manifest.json");
+        }
     } catch(...) { throw; }
 }
 
