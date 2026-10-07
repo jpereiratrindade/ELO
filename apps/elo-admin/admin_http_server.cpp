@@ -11,6 +11,7 @@
 #include <QProcessEnvironment>
 #include <QThread>
 #include <QUrl>
+#include <QUrlQuery>
 #include <iostream>
 
 namespace elo::admin {
@@ -77,39 +78,52 @@ AdminHttpServer::AdminHttpServer(
                               std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing, ec);
     }
 
-    // Initialize Sovereign Application Profiles
-    app_registry_.register_application(application::ApplicationProfile{
-        .app_id = "app.elo.bioma-pampa",
-        .name = "Biodiversidade do Bioma Pampa & Campos Sulinos",
-        .domain_category = "environmental_sciences",
-        .version = "1.0.0",
-        .description = "Corpus ecológico sobre avifauna, flora campestre e processos ecológicos.",
-        .active_bundle_id = "elo-content-pampa",
-        .tags = {"biodiversidade", "conservacao", "pampa", "ecologia"},
-        .metadata_schema = {{"context", "totem_interativo_ambiental"}, {"audience", "publico_geral"}}
-    });
+    // Initialize Sovereign Application Profiles from persistent storage or default seeds
+    std::string appsPath = (content_root_ / "applications.json").string();
+    if (!app_registry_.load_from_file(appsPath)) {
+        app_registry_.register_application(application::ApplicationProfile{
+            .app_id = "app.elo.bioma-pampa",
+            .name = "Biodiversidade do Bioma Pampa & Campos Sulinos",
+            .domain_category = "environmental_sciences",
+            .version = "1.0.0",
+            .description = "Corpus ecológico sobre avifauna, flora campestre e processos ecológicos.",
+            .active_bundle_id = "elo-content-pampa",
+            .target_audience = "publico_geral",
+            .default_theme = "pampa",
+            .tags = {"biodiversidade", "conservacao", "pampa", "ecologia"},
+            .metadata_schema = {{"context", "totem_interativo_ambiental"}, {"audience", "publico_geral"}},
+            .is_active = true
+        });
 
-    app_registry_.register_application(application::ApplicationProfile{
-        .app_id = "app.elo.patrimonio-historico",
-        .name = "Patrimônio Histórico e Memória Regional",
-        .domain_category = "cultural_heritage",
-        .version = "0.8.0",
-        .description = "Acervo histórico de fotografias antigas, relatos orais e monumentos arquitetônicos.",
-        .active_bundle_id = "elo-content-patrimonio",
-        .tags = {"historia", "memoria", "arquitetura", "patrimonio"},
-        .metadata_schema = {{"context", "museu_historico"}, {"curator", "instituto_memoria"}}
-    });
+        app_registry_.register_application(application::ApplicationProfile{
+            .app_id = "app.elo.patrimonio-historico",
+            .name = "Patrimônio Histórico e Memória Regional",
+            .domain_category = "cultural_heritage",
+            .version = "0.8.0",
+            .description = "Acervo histórico de fotografias antigas, relatos orais e monumentos arquitetônicos.",
+            .active_bundle_id = "elo-content-patrimonio",
+            .target_audience = "comunidade_local",
+            .default_theme = "sepia",
+            .tags = {"historia", "memoria", "arquitetura", "patrimonio"},
+            .metadata_schema = {{"context", "museu_historico"}, {"curator", "instituto_memoria"}},
+            .is_active = false
+        });
 
-    app_registry_.register_application(application::ApplicationProfile{
-        .app_id = "app.elo.galeria-visual",
-        .name = "Galeria de Arte & Expressões Visuais",
-        .domain_category = "fine_arts",
-        .version = "0.9.5",
-        .description = "Exposição imersiva de artes visuais contemporâneas e paisagens sensoriais.",
-        .active_bundle_id = "elo-content-artes",
-        .tags = {"artes_visuais", "fotografia", "estetica", "imersao"},
-        .metadata_schema = {{"context", "espaco_cultural"}, {"layout", "contemplativo"}}
-    });
+        app_registry_.register_application(application::ApplicationProfile{
+            .app_id = "app.elo.galeria-visual",
+            .name = "Galeria de Arte & Expressões Visuais",
+            .domain_category = "fine_arts",
+            .version = "0.9.5",
+            .description = "Exposição imersiva de artes visuais contemporâneas e paisagens sensoriais.",
+            .active_bundle_id = "elo-content-artes",
+            .target_audience = "estudantes_artistas",
+            .default_theme = "minimal_dark",
+            .tags = {"artes_visuais", "fotografia", "estetica", "imersao"},
+            .metadata_schema = {{"context", "espaco_cultural"}, {"layout", "contemplativo"}},
+            .is_active = false
+        });
+        app_registry_.save_to_file(appsPath);
+    }
 
     // Seed aggregate anonymous analytics
     analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "session_start", "");
@@ -1235,9 +1249,16 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
             aObj[QStringLiteral("version")] = QString::fromStdString(app.version);
             aObj[QStringLiteral("description")] = QString::fromStdString(app.description);
             aObj[QStringLiteral("active_bundle_id")] = QString::fromStdString(app.active_bundle_id);
+            aObj[QStringLiteral("target_audience")] = QString::fromStdString(app.target_audience);
+            aObj[QStringLiteral("default_theme")] = QString::fromStdString(app.default_theme);
+            aObj[QStringLiteral("is_active")] = app.is_active;
+            aObj[QStringLiteral("telemetry_enabled")] = app.telemetry_enabled;
+            aObj[QStringLiteral("registered_at")] = static_cast<qint64>(app.registered_at);
+
             QJsonArray tagsArr;
             for (const auto& t : app.tags) tagsArr.append(QString::fromStdString(t));
             aObj[QStringLiteral("tags")] = tagsArr;
+
             QJsonObject metaObj;
             for (const auto& [k, v] : app.metadata_schema) metaObj[QString::fromStdString(k)] = QString::fromStdString(v);
             aObj[QStringLiteral("metadata_schema")] = metaObj;
@@ -1249,8 +1270,42 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         return;
     }
 
-    // API: POST /api/applications
-    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/applications")) {
+    // API: POST /api/applications/activate (Activate Project on Totem)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/applications/activate")) {
+        auto doc = QJsonDocument::fromJson(body);
+        QString appId = doc.object().value(QStringLiteral("app_id")).toString().trimmed();
+        if (appId.isEmpty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"app_id é obrigatório\"}");
+            return;
+        }
+
+        bool ok = app_registry_.activate(appId.toStdString());
+        if (!ok) {
+            sendJsonResponse(socket, 404, "{\"error\":\"Projeto/Aplicação não encontrado\"}");
+            return;
+        }
+
+        std::string appsPath = (content_root_ / "applications.json").string();
+        app_registry_.save_to_file(appsPath);
+
+        // Link active bundle to kiosk if application specifies a bundle
+        auto app = app_registry_.find(appId.toStdString());
+        if (app && !app->active_bundle_id.empty()) {
+            (void)publisher_.rollback_to(app->active_bundle_id);
+            system::ControlClient client;
+            (void)client.send_reload();
+        }
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("message")] = QStringLiteral("Projeto ") + appId + QStringLiteral(" ativado com sucesso no totem.");
+        resp[QStringLiteral("active_app_id")] = appId;
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: POST /api/applications (Create or Update Application Profile)
+    if ((method == QStringLiteral("POST") || method == QStringLiteral("PUT")) && path == QStringLiteral("/api/applications")) {
         auto doc = QJsonDocument::fromJson(body);
         if (doc.isNull() || !doc.isObject()) {
             sendJsonResponse(socket, 400, "{\"error\":\"JSON inválido\"}");
@@ -1258,22 +1313,74 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         }
         auto obj = doc.object();
         application::ApplicationProfile app;
-        app.app_id = obj.value(QStringLiteral("app_id")).toString().toStdString();
-        app.name = obj.value(QStringLiteral("name")).toString().toStdString();
+        app.app_id = obj.value(QStringLiteral("app_id")).toString().trimmed().toStdString();
+        app.name = obj.value(QStringLiteral("name")).toString().trimmed().toStdString();
+        if (app.app_id.empty() || app.name.empty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"app_id e name são campos obrigatórios\"}");
+            return;
+        }
+
         app.domain_category = obj.value(QStringLiteral("domain_category")).toString(QStringLiteral("general")).toStdString();
         app.version = obj.value(QStringLiteral("version")).toString(QStringLiteral("1.0.0")).toStdString();
         app.description = obj.value(QStringLiteral("description")).toString().toStdString();
         app.active_bundle_id = obj.value(QStringLiteral("active_bundle_id")).toString().toStdString();
+        app.target_audience = obj.value(QStringLiteral("target_audience")).toString(QStringLiteral("general")).toStdString();
+        app.default_theme = obj.value(QStringLiteral("default_theme")).toString(QStringLiteral("default")).toStdString();
+        app.is_active = obj.value(QStringLiteral("is_active")).toBool(false);
+        app.telemetry_enabled = obj.value(QStringLiteral("telemetry_enabled")).toBool(true);
         
         for (const auto& tVal : obj.value(QStringLiteral("tags")).toArray()) {
-            app.tags.push_back(tVal.toString().toStdString());
+            QString tStr = tVal.toString().trimmed();
+            if (!tStr.isEmpty()) app.tags.push_back(tStr.toStdString());
+        }
+
+        auto metaObj = obj.value(QStringLiteral("metadata_schema")).toObject();
+        for (auto it = metaObj.begin(); it != metaObj.end(); ++it) {
+            app.metadata_schema[it.key().toStdString()] = it.value().toString().toStdString();
         }
 
         app_registry_.register_application(std::move(app));
+        std::string appsPath = (content_root_ / "applications.json").string();
+        app_registry_.save_to_file(appsPath);
+
         QJsonObject resp;
         resp[QStringLiteral("success")] = true;
-        resp[QStringLiteral("message")] = QStringLiteral("Aplicação registrada com sucesso.");
+        resp[QStringLiteral("message")] = QStringLiteral("Projeto/Aplicação salvo com sucesso.");
         sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: DELETE /api/applications
+    if ((method == QStringLiteral("DELETE") && path.startsWith(QStringLiteral("/api/applications"))) ||
+        (method == QStringLiteral("POST") && path == QStringLiteral("/api/applications/delete"))) {
+        QString targetId;
+        if (!body.isEmpty()) {
+            auto doc = QJsonDocument::fromJson(body);
+            if (doc.isObject()) targetId = doc.object().value(QStringLiteral("app_id")).toString().trimmed();
+        }
+        if (targetId.isEmpty()) {
+            int qIdx = path.indexOf('?');
+            if (qIdx != -1) {
+                QUrlQuery query(path.mid(qIdx + 1));
+                targetId = query.queryItemValue(QStringLiteral("id"));
+            }
+        }
+
+        if (targetId.isEmpty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"app_id não informado para exclusão\"}");
+            return;
+        }
+
+        bool removed = app_registry_.remove(targetId.toStdString());
+        if (removed) {
+            std::string appsPath = (content_root_ / "applications.json").string();
+            app_registry_.save_to_file(appsPath);
+        }
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = removed;
+        resp[QStringLiteral("message")] = removed ? QStringLiteral("Projeto excluído com sucesso.") : QStringLiteral("Projeto não encontrado.");
+        sendJsonResponse(socket, removed ? 200 : 404, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }
 

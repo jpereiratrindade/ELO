@@ -158,7 +158,7 @@ core::Result<identity::PersonLocalId> ExperienceEngine::enroll_local_person(
             "Biometric continuity is not active for this session"));
     }
 
-    auto new_person = identity::PersonLocalId::from_index(next_person_seq_++);
+    auto new_person = identity::PersonLocalId::generate_uuid();
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                    std::chrono::system_clock::now().time_since_epoch())
                    .count();

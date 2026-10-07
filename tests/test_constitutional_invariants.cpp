@@ -163,7 +163,7 @@ void test_exp_002_exp_003_exp_004_continuity() {
                 "Newly enrolled local identity is supported for this session");
     TEST_ASSERT(enrolled_res->resolved_person_id.has_value(), "Enrollment resolved a local id");
     auto p_id = *enrolled_res->resolved_person_id;
-    TEST_ASSERT(p_id.str() == "person-local://P01", "Assigned person-local://P01");
+    TEST_ASSERT(p_id.str().starts_with("person-local://"), "Assigned sovereign person-local UUID");
 
     // Serve content
     auto c1 = engine.select_next_content();
@@ -181,7 +181,7 @@ void test_exp_002_exp_003_exp_004_continuity() {
     TEST_ASSERT(return_hyp.state == elo::biometric::IdentityState::SUPPORTED, "Must be SUPPORTED on return");
     TEST_ASSERT(!return_hyp.newly_enrolled, "Return is not classified as a new enrollment");
     TEST_ASSERT(return_hyp.resolved_person_id.has_value(), "Resolved person present");
-    TEST_ASSERT(return_hyp.resolved_person_id->str() == "person-local://P01", "Matches P01");
+    TEST_ASSERT(return_hyp.resolved_person_id->str() == p_id.str(), "Matches same enrolled person");
     const auto refined_templates = bio_store->get_templates_for(p_id).value();
     TEST_ASSERT(refined_templates.size() == 1,
                 "Successful return keeps one data-minimized vector template");

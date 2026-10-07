@@ -49,10 +49,10 @@ int main() {
                 "Three transient samples resolve the first identity");
     TEST_ASSERT(model.greetingTitle() == QStringLiteral("Bem-vindo ao ELO"),
                 "First observation receives the first-visit greeting");
-    TEST_ASSERT(model.activePerson() == QStringLiteral("person-local://P01"),
+    TEST_ASSERT(model.activePerson().startsWith(QStringLiteral("person-local://")),
                 "First observation creates a local identity");
-    TEST_ASSERT(biometric_store->get_templates_for(
-                    elo::identity::PersonLocalId("person-local://P01"))->size() == 1,
+    auto first_person_id = elo::identity::PersonLocalId(model.activePerson().toStdString());
+    TEST_ASSERT(biometric_store->get_templates_for(first_person_id)->size() == 1,
                 "Only one derived template is persisted on first observation");
 
     model.finishSession();
@@ -64,10 +64,9 @@ int main() {
                 "Returning face is recognized automatically");
     TEST_ASSERT(model.greetingTitle() == QStringLiteral("Que bom ver você novamente"),
                 "Returning observation receives the return greeting");
-    TEST_ASSERT(model.activePerson() == QStringLiteral("person-local://P01"),
+    TEST_ASSERT(model.activePerson() == QString::fromStdString(first_person_id.str()),
                 "Returning observation recovers the same local identity");
-    TEST_ASSERT(biometric_store->get_templates_for(
-                    elo::identity::PersonLocalId("person-local://P01"))->size() == 1,
+    TEST_ASSERT(biometric_store->get_templates_for(first_person_id)->size() == 1,
                 "Return refines one derived vector without accumulating photos or templates");
 
     // Test autonomous progression: greeting advances to content without mouse

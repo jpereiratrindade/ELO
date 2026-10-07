@@ -5,6 +5,7 @@
 #include <format>
 #include <cstdint>
 #include <compare>
+#include <random>
 #include <type_traits>
 
 namespace elo::identity {
@@ -58,6 +59,19 @@ private:
 class PersonLocalId final {
 public:
     explicit PersonLocalId(std::string id) : value_{std::move(id)} {}
+
+    [[nodiscard]] static PersonLocalId generate_uuid() {
+        std::random_device rd;
+        std::mt19937_64 gen(rd());
+        std::uniform_int_distribution<std::uint64_t> dis;
+        std::uint64_t high = dis(gen);
+        std::uint64_t low = dis(gen);
+        high = (high & 0xFFFFFFFFFFFF0FFFULL) | 0x0000000000004000ULL; // version 4
+        low = (low & 0x3FFFFFFFFFFFFFFFULL) | 0x8000000000000000ULL;  // variant 1
+        return PersonLocalId(std::format("person-local://{:08x}-{:04x}-{:04x}-{:04x}-{:012x}",
+            (high >> 32) & 0xFFFFFFFF, (high >> 16) & 0xFFFF, high & 0xFFFF,
+            (low >> 48) & 0xFFFF, low & 0xFFFFFFFFFFFF));
+    }
 
     [[nodiscard]] static PersonLocalId from_index(std::uint64_t idx) {
         return PersonLocalId(std::format("person-local://P{:02d}", idx));

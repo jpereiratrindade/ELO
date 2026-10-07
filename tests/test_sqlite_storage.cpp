@@ -111,8 +111,9 @@ int main() {
         const auto second_identity = engine.identify_or_enroll_local_face(
             {1.0F, 0.0F, 0.0F, 0.0F}, 0.95);
         TEST_ASSERT(second_identity && second_identity->resolved_person_id &&
-                    second_identity->resolved_person_id->str() == "person-local://P02",
-                    "Person id sequence resumes after process restart");
+                    second_identity->resolved_person_id->str().starts_with("person-local://") &&
+                    *second_identity->resolved_person_id != person,
+                    "Distinct person UUID created for second participant");
         TEST_ASSERT(engine.request_forget(*second_identity->resolved_person_id).value_or(false),
                     "Second test identity forgotten");
 

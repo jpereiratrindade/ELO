@@ -184,12 +184,24 @@ Window {
                 }
             }
 
-            Text {
-                visible: kioskModel.recognitionResolved
-                text: kioskModel.activePerson
-                font.pixelSize: 13
-                color: "#64748b"
+            RowLayout {
                 Layout.alignment: Qt.AlignHCenter
+                spacing: 8
+                visible: kioskModel.recognitionResolved
+
+                Rectangle {
+                    width: 8
+                    height: 8
+                    radius: 4
+                    color: "#10b981"
+                }
+
+                Text {
+                    text: "Continuidade de Presença Ativa • Identidade Soberana Local"
+                    font.pixelSize: 13
+                    font.bold: true
+                    color: "#34d399"
+                }
             }
         }
 

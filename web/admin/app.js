@@ -212,12 +212,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  let applicationsData = [];
+
   async function fetchApplications() {
     try {
       const res = await fetch('/api/applications');
       if (!res.ok) return;
       const data = await res.json();
-      renderApplications(data.applications || []);
+      applicationsData = data.applications || [];
+      renderApplications(applicationsData);
     } catch (e) {
       console.warn('Erro ao carregar aplicações:', e);
     }
@@ -229,34 +232,101 @@ document.addEventListener('DOMContentLoaded', () => {
     grid.innerHTML = '';
 
     if (apps.length === 0) {
-      grid.innerHTML = '<p style="color:var(--text-dim); padding:20px;">Nenhuma aplicação registrada.</p>';
+      grid.innerHTML = '<p style="color:var(--text-dim); padding:20px;">Nenhuma aplicação ou projeto registrado ainda.</p>';
       return;
     }
 
     apps.forEach(app => {
       const card = document.createElement('div');
       card.className = 'atom-card';
-      card.style.borderColor = 'rgba(6, 182, 212, 0.3)';
+      if (app.is_active) {
+        card.style.borderColor = 'var(--accent-emerald)';
+        card.style.boxShadow = '0 0 16px rgba(16, 185, 129, 0.2)';
+      } else {
+        card.style.borderColor = 'rgba(6, 182, 212, 0.3)';
+      }
 
       const tagsHtml = (app.tags || []).map(t => `<span class="badge-pill" style="font-size:10px; margin-right:4px;">#${t}</span>`).join('');
       const metaHtml = Object.entries(app.metadata_schema || {}).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`).join('');
+      const statusBadge = app.is_active
+        ? `<span class="badge-pill badge-green" style="font-weight: bold;">★ PROJETO ATIVO NO TOTEM</span>`
+        : `<span class="badge-pill" style="opacity: 0.7;">INATIVO</span>`;
 
       card.innerHTML = `
-        <div class="atom-header">
+        <div class="atom-header" style="align-items: flex-start;">
           <div>
-            <h4 class="atom-title">${app.name}</h4>
+            <div style="margin-bottom: 6px;">${statusBadge}</div>
+            <h4 class="atom-title" style="font-size: 1.15rem; color: var(--text-main);">${app.name}</h4>
             <div class="atom-scientific"><code>${app.app_id}</code> · v${app.version}</div>
           </div>
           <span class="atom-type-badge" style="background: rgba(6,182,212,0.15); color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);">${app.domain_category}</span>
         </div>
-        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 12px 0;">${app.description}</p>
-        <div style="font-size: 0.8rem; color: var(--text-dim); background: var(--bg-surface); padding: 10px; border-radius: var(--radius-sm); margin-bottom: 12px;">
-          <div><strong>Bundle Ativo:</strong> <code>${app.active_bundle_id || 'Nenhum'}</code></div>
+        <p style="font-size: 0.88rem; color: var(--text-muted); margin: 12px 0; line-height: 1.5;">${app.description || 'Sem descrição curatorial.'}</p>
+        <div style="font-size: 0.82rem; color: var(--text-dim); background: var(--bg-surface); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 14px; border: 1px solid var(--border-subtle);">
+          <div><strong>Pacote Vinculado:</strong> <code>${app.active_bundle_id || 'Nenhum'}</code></div>
+          <div><strong>Público-Alvo:</strong> ${app.target_audience || 'general'} | <strong>Tema:</strong> ${app.default_theme || 'default'}</div>
           ${metaHtml}
         </div>
-        <div style="margin-top: 8px;">${tagsHtml}</div>
+        <div style="margin-bottom: 14px;">${tagsHtml}</div>
+        <div class="atom-actions" style="display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
+          ${!app.is_active ? `<button class="btn btn-sm btn-primary btn-activate-app" data-id="${app.app_id}">⭐ Ativar no Totem</button>` : `<span class="badge-pill badge-green" style="font-size: 11px;">✓ Em Execução</span>`}
+          <button class="btn btn-sm btn-secondary btn-edit-app" data-id="${app.app_id}">✏️ Editar</button>
+          <button class="btn btn-sm btn-danger-outline btn-delete-app" data-id="${app.app_id}">🗑️ Excluir</button>
+        </div>
       `;
       grid.appendChild(card);
+    });
+
+    // Event listeners para os botões dos cards
+    grid.querySelectorAll('.btn-activate-app').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const appId = btn.getAttribute('data-id');
+        try {
+          showNotice('Ativando Projeto...', `Configurando projeto ${appId} como ativo no Totem...`);
+          const res = await fetch('/api/applications/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ app_id: appId })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Projeto Ativado!', data.message || `Projeto ${appId} ativado no Totem.`);
+            fetchApplications();
+            fetchStatus();
+          } else {
+            showNotice('Erro ao Ativar', data.error || 'Falha na ativação', true);
+          }
+        } catch (err) {
+          showNotice('Erro de Comunicação', err.message, true);
+        }
+      });
+    });
+
+    grid.querySelectorAll('.btn-edit-app').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const appId = btn.getAttribute('data-id');
+        openAppModalForEdit(appId);
+      });
+    });
+
+    grid.querySelectorAll('.btn-delete-app').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const appId = btn.getAttribute('data-id');
+        if (!confirm(`Deseja realmente EXCLUIR o projeto "${appId}"?`)) return;
+
+        try {
+          const res = await fetch(`/api/applications?id=${encodeURIComponent(appId)}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (data.success) {
+            showNotice('Projeto Excluído', `Projeto ${appId} removido com sucesso.`);
+            fetchApplications();
+          } else {
+            showNotice('Erro ao Excluir', data.error || 'Falha', true);
+          }
+        } catch (err) {
+          showNotice('Erro de Comunicação', err.message, true);
+        }
+      });
     });
   }
 
@@ -911,6 +981,112 @@ document.addEventListener('DOMContentLoaded', () => {
       showNotice('Erro', err.message, true);
     }
   });
+
+  // Application / Project Modal & Form Handling
+  const modalApp = document.getElementById('modal-app');
+  const formApp = document.getElementById('form-app');
+  const btnNewApp = document.getElementById('btn-new-app');
+  const modalAppClose = document.getElementById('modal-app-close');
+  const btnAppCancel = document.getElementById('btn-app-cancel');
+
+  function populateAppBundleOptions(selectedBundleId) {
+    const sel = document.getElementById('app-bundle');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">(Nenhum pacote vinculado)</option>';
+    if (currentStatus && currentStatus.bundles) {
+      currentStatus.bundles.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.bundle_id;
+        opt.textContent = `${b.title || b.bundle_id} (v${b.version})`;
+        if (b.bundle_id === selectedBundleId) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    }
+  }
+
+  function openAppModalForCreate() {
+    if (!modalApp) return;
+    document.getElementById('modal-app-title').textContent = 'Novo Projeto / Aplicação';
+    document.getElementById('app-edit-mode').value = 'create';
+    formApp.reset();
+    document.getElementById('app-id').disabled = false;
+    document.getElementById('app-version').value = '1.0.0';
+    populateAppBundleOptions(currentStatus && currentStatus.active_bundle ? currentStatus.active_bundle.bundle_id : '');
+    modalApp.classList.remove('hidden');
+  }
+
+  function openAppModalForEdit(appId) {
+    const app = applicationsData.find(a => a.app_id === appId);
+    if (!app || !modalApp) return;
+
+    document.getElementById('modal-app-title').textContent = `Editar Projeto: ${app.name}`;
+    document.getElementById('app-edit-mode').value = 'edit';
+    document.getElementById('app-id').value = app.app_id;
+    document.getElementById('app-id').disabled = true;
+    document.getElementById('app-name').value = app.name || '';
+    document.getElementById('app-domain').value = app.domain_category || 'environmental_sciences';
+    document.getElementById('app-version').value = app.version || '1.0.0';
+    document.getElementById('app-theme').value = app.default_theme || '';
+    document.getElementById('app-desc').value = app.description || '';
+    document.getElementById('app-tags').value = (app.tags || []).join(', ');
+    document.getElementById('app-active').checked = !!app.is_active;
+
+    populateAppBundleOptions(app.active_bundle_id);
+    modalApp.classList.remove('hidden');
+  }
+
+  if (btnNewApp) btnNewApp.addEventListener('click', openAppModalForCreate);
+  if (modalAppClose) modalAppClose.addEventListener('click', () => modalApp.classList.add('hidden'));
+  if (btnAppCancel) btnAppCancel.addEventListener('click', () => modalApp.classList.add('hidden'));
+
+  if (formApp) {
+    formApp.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const appId = document.getElementById('app-id').value.trim();
+      const name = document.getElementById('app-name').value.trim();
+      const domain = document.getElementById('app-domain').value;
+      const version = document.getElementById('app-version').value.trim() || '1.0.0';
+      const bundleId = document.getElementById('app-bundle').value;
+      const theme = document.getElementById('app-theme').value.trim();
+      const desc = document.getElementById('app-desc').value.trim();
+      const tagsStr = document.getElementById('app-tags').value.trim();
+      const isActive = document.getElementById('app-active').checked;
+
+      const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+      const payload = {
+        app_id: appId,
+        name: name,
+        domain_category: domain,
+        version: version,
+        active_bundle_id: bundleId,
+        default_theme: theme,
+        description: desc,
+        tags: tags,
+        is_active: isActive,
+        telemetry_enabled: true
+      };
+
+      try {
+        const res = await fetch('/api/applications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          modalApp.classList.add('hidden');
+          showNotice('Projeto Salvo!', `Projeto "${name}" (${appId}) salvo com sucesso.`);
+          fetchApplications();
+          if (isActive) fetchStatus();
+        } else {
+          showNotice('Erro ao Salvar Projeto', data.error || 'Erro', true);
+        }
+      } catch (err) {
+        showNotice('Falha de Rede', err.message, true);
+      }
+    });
+  }
 
   // Action Buttons: Validate, Publish, Reload
   document.getElementById('btn-validate').addEventListener('click', async () => {
