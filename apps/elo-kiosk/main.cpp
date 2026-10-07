@@ -52,6 +52,35 @@ std::optional<elo::perception::CameraDevice> configured_totem_camera(
 } // namespace
 
 int main(int argc, char* argv[]) {
+    // Intelligent platform backend detection for embedded appliances (e.g. Raspberry Pi 5 / TTY console)
+    bool has_platform_arg = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "-platform" || std::string(argv[i]) == "--platform") {
+            has_platform_arg = true;
+            break;
+        }
+    }
+
+    if (!has_platform_arg && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
+        const bool has_wayland = !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
+        const bool has_x11 = !qEnvironmentVariableIsEmpty("DISPLAY");
+
+        if (!has_wayland && !has_x11) {
+            // Running directly from a Linux TTY / console / headless DRM framebuffer (e.g., Raspberry Pi 5)
+            if (std::filesystem::exists("/dev/dri/card0") || std::filesystem::exists("/dev/dri/card1")) {
+                std::cout << "[ELO] No X11/Wayland display server detected. Selecting EGLFS (Direct KMS/DRM) backend...\n";
+                qputenv("QT_QPA_PLATFORM", "eglfs");
+                qputenv("QT_QPA_EGLFS_ALWAYS_SET_MODE", "1");
+                qputenv("QT_QPA_EGLFS_KMS_ATOMIC", "1");
+            } else if (std::filesystem::exists("/dev/fb0")) {
+                std::cout << "[ELO] No DRM KMS card found, selecting LinuxFB (framebuffer) backend...\n";
+                qputenv("QT_QPA_PLATFORM", "linuxfb");
+            } else {
+                std::cout << "[ELO] Warning: No display server or framebuffer detected. Attempting default platform...\n";
+            }
+        }
+    }
+
     QGuiApplication app(argc, argv);
     app.setApplicationName("ELO Kiosk");
     app.setOrganizationName("ELO Project");
