@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ELO Kiosk Launcher — Hardware Backend Resolver for Raspberry Pi 5
+# ELO Kiosk Launcher — Hardware Backend Resolver for Raspberry Pi & Linux
 # ==============================================================================
 set -e
 
@@ -13,17 +13,13 @@ else
     chmod 0700 "${XDG_RUNTIME_DIR}"
 fi
 
-# Auto-detect display session
-if [ -n "$WAYLAND_DISPLAY" ]; then
-    export QT_QPA_PLATFORM="wayland"
-elif [ -n "$DISPLAY" ]; then
-    export QT_QPA_PLATFORM="xcb"
-else
-    # Embedded Direct KMS/DRM mode on Raspberry Pi 5
-    export QT_QPA_PLATFORM="eglfs"
-    export QT_QPA_EGLFS_ALWAYS_SET_MODE=1
-    export QT_QPA_EGLFS_KMS_ATOMIC=1
-    export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+# Detect active Wayland/X11 sockets if environment is not set
+if [ -z "$WAYLAND_DISPLAY" ] && [ -S "${XDG_RUNTIME_DIR}/wayland-0" ]; then
+    export WAYLAND_DISPLAY="wayland-0"
+fi
+if [ -z "$DISPLAY" ] && [ -S "/tmp/.X11-unix/X0" ]; then
+    export DISPLAY=":0"
 fi
 
 exec /usr/local/bin/elo-kiosk "$@"
+
