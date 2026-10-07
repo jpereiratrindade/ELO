@@ -1212,11 +1212,23 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     // API: POST /api/kiosk/start (Launch Kiosk Process)
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/start")) {
         QString bin = resolve_kiosk_bin();
-        bool launched = QProcess::startDetached(bin, {});
+        QProcess proc;
+        proc.setProgram(bin);
+        proc.setWorkingDirectory(QDir::currentPath());
+
+        // Forward environment to child process
+        auto env = QProcessEnvironment::systemEnvironment();
+        proc.setProcessEnvironment(env);
+
+        qint64 pid = 0;
+        bool launched = proc.startDetached(&pid);
+        std::cout << "[ELO][admin] Launching kiosk binary: " << bin.toStdString() << " (PID=" << pid << ", launched=" << (launched ? "yes" : "no") << ")\n";
+
         QJsonObject resp;
         resp[QStringLiteral("success")] = launched;
         resp[QStringLiteral("message")] = launched ? QStringLiteral("Totem iniciado com sucesso.") : QStringLiteral("Falha ao iniciar processo do Totem.");
         resp[QStringLiteral("binary")] = bin;
+        resp[QStringLiteral("pid")] = pid;
         sendJsonResponse(socket, launched ? 200 : 500, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }
@@ -1229,11 +1241,20 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         QThread::msleep(500);
 
         QString bin = resolve_kiosk_bin();
-        bool launched = QProcess::startDetached(bin, {});
+        QProcess proc;
+        proc.setProgram(bin);
+        proc.setWorkingDirectory(QDir::currentPath());
+        proc.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+
+        qint64 pid = 0;
+        bool launched = proc.startDetached(&pid);
+        std::cout << "[ELO][admin] Restarting kiosk binary: " << bin.toStdString() << " (PID=" << pid << ")\n";
+
         QJsonObject resp;
         resp[QStringLiteral("success")] = launched;
         resp[QStringLiteral("message")] = launched ? QStringLiteral("Totem reiniciado com sucesso.") : QStringLiteral("Falha ao reiniciar Totem.");
         resp[QStringLiteral("binary")] = bin;
+        resp[QStringLiteral("pid")] = pid;
         sendJsonResponse(socket, launched ? 200 : 500, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }

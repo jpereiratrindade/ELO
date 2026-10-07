@@ -20,6 +20,9 @@
 #include <iostream>
 #include <memory>
 #include <optional>
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 namespace {
 
@@ -62,18 +65,57 @@ int main(int argc, char* argv[]) {
     }
 
     if (!has_platform_arg && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
-        const bool has_wayland = !qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY");
-        const bool has_x11 = !qEnvironmentVariableIsEmpty("DISPLAY");
+        // 1. Resolve XDG_RUNTIME_DIR if missing
+        QString runtimeDir = qEnvironmentVariable("XDG_RUNTIME_DIR");
+        if (runtimeDir.isEmpty()) {
+#ifdef __linux__
+            QString defaultRuntime = QStringLiteral("/run/user/") + QString::number(getuid());
+            if (QDir(defaultRuntime).exists()) {
+                runtimeDir = defaultRuntime;
+                qputenv("XDG_RUNTIME_DIR", runtimeDir.toUtf8());
+            }
+#endif
+        }
 
-        if (!has_wayland && !has_x11) {
-            // Running directly from a Linux TTY / console / headless DRM framebuffer (e.g., Raspberry Pi 5)
+        // 2. Discover Wayland session
+        QString waylandEnv = qEnvironmentVariable("WAYLAND_DISPLAY");
+        if (waylandEnv.isEmpty() && !runtimeDir.isEmpty()) {
+            if (QFile::exists(runtimeDir + QStringLiteral("/wayland-0"))) {
+                waylandEnv = QStringLiteral("wayland-0");
+                qputenv("WAYLAND_DISPLAY", "wayland-0");
+            } else if (QFile::exists(runtimeDir + QStringLiteral("/wayland-1"))) {
+                waylandEnv = QStringLiteral("wayland-1");
+                qputenv("WAYLAND_DISPLAY", "wayland-1");
+            }
+        }
+
+        // 3. Discover X11 session
+        QString displayEnv = qEnvironmentVariable("DISPLAY");
+        if (displayEnv.isEmpty()) {
+            if (QFile::exists(QStringLiteral("/tmp/.X11-unix/X0"))) {
+                displayEnv = QStringLiteral(":0");
+                qputenv("DISPLAY", ":0");
+            } else if (QFile::exists(QStringLiteral("/tmp/.X11-unix/X1"))) {
+                displayEnv = QStringLiteral(":1");
+                qputenv("DISPLAY", ":1");
+            }
+        }
+
+        if (!waylandEnv.isEmpty()) {
+            std::cout << "[ELO] Wayland desktop session detected (" << waylandEnv.toStdString() << "). Selecting Wayland backend...\n";
+            qputenv("QT_QPA_PLATFORM", "wayland");
+        } else if (!displayEnv.isEmpty()) {
+            std::cout << "[ELO] X11 desktop session detected (" << displayEnv.toStdString() << "). Selecting XCB backend...\n";
+            qputenv("QT_QPA_PLATFORM", "xcb");
+        } else {
+            // Running directly from a Linux TTY / console / headless DRM framebuffer (e.g., Raspberry Pi 5 Appliance mode)
             if (std::filesystem::exists("/dev/dri/card0") || std::filesystem::exists("/dev/dri/card1")) {
-                std::cout << "[ELO] No X11/Wayland display server detected. Selecting EGLFS (Direct KMS/DRM) backend...\n";
+                std::cout << "[ELO] Embedded TTY console detected. Selecting EGLFS (Direct KMS/DRM) backend...\n";
                 qputenv("QT_QPA_PLATFORM", "eglfs");
                 qputenv("QT_QPA_EGLFS_ALWAYS_SET_MODE", "1");
                 qputenv("QT_QPA_EGLFS_KMS_ATOMIC", "1");
             } else if (std::filesystem::exists("/dev/fb0")) {
-                std::cout << "[ELO] No DRM KMS card found, selecting LinuxFB (framebuffer) backend...\n";
+                std::cout << "[ELO] Selecting LinuxFB (framebuffer) backend...\n";
                 qputenv("QT_QPA_PLATFORM", "linuxfb");
             } else {
                 std::cout << "[ELO] Warning: No display server or framebuffer detected. Attempting default platform...\n";
