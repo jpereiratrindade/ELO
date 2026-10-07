@@ -519,7 +519,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchAnalytics() {
     try {
-      const res = await fetch('/api/analytics/summary');
+      const filter = document.getElementById('analytics-app-filter');
+      if (filter && filter.options.length <= 1) {
+        const applicationsResponse = await fetch('/api/packages');
+        if (applicationsResponse.ok) {
+          const applications = (await applicationsResponse.json()).packages || [];
+          applications.forEach(application => {
+            const option = document.createElement('option');
+            option.value = application.bundle_id;
+            option.textContent = application.title || application.bundle_id;
+            filter.appendChild(option);
+          });
+        }
+      }
+      const applicationId = filter?.value || '';
+      const endpoint = applicationId
+        ? `/api/analytics/summary?application_id=${encodeURIComponent(applicationId)}`
+        : '/api/analytics/summary';
+      const res = await fetch(endpoint);
       if (!res.ok) return;
       const data = await res.json();
 
@@ -1704,6 +1721,7 @@ document.addEventListener('DOMContentLoaded', () => {
       showNotice('Métricas Atualizadas', 'Dados analíticos agregados e grafo de fluxo sincronizados.');
     });
   }
+  document.getElementById('analytics-app-filter')?.addEventListener('change', fetchAnalytics);
 
   // Initial load
   fetchStatus().then(() => fetchManifest()).then(() => fetchPackagePlans());

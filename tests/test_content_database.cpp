@@ -38,6 +38,17 @@ int main() {
     database.upsert_package(package);
     CHECK(database.packages().size() == 2, "package plan persisted alongside recovered active package");
 
+    database.record_analytics_event(QJsonObject{
+        {"application_id", "package-test"}, {"application_version", "1.0.0"},
+        {"event_type", "session_start"}, {"hour_bucket", 3600}
+    });
+    database.record_analytics_event(QJsonObject{
+        {"application_id", "other-application"}, {"application_version", "2.0.0"},
+        {"event_type", "atom_view"}, {"target_atom_id", "Resiliência"}, {"hour_bucket", 3600}
+    });
+    CHECK(database.analytics_events().size() == 2, "analytics events persist in SQLite");
+    CHECK(database.analytics_events("package-test").size() == 1, "analytics events filter by application");
+
     database.export_workspace(root);
     CHECK(std::filesystem::exists(root / "catalog" / "atoms" / "Resiliência.json"), "JSON snapshot exported");
     CHECK(database.delete_atom("Resili%C3%AAncia"), "canonical atom deleted");

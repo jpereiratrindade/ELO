@@ -239,9 +239,13 @@
           <h3 class="pane-title">Telemetria & Análise de Dados Agregados (Zero-PII)</h3>
           <p class="pane-subtitle">Métricas agregadas de engajamento, tempo de permanência (Dwell Time) e matriz de transições sem vínculo a IDs pessoais</p>
         </div>
-        <button id="btn-refresh-analytics" class="btn btn-secondary btn-sm-action">
-          🔄 Atualizar Métricas
-        </button>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <label for="analytics-app-filter" class="sr-only">Filtrar por aplicação</label>
+          <select id="analytics-app-filter" class="input-select" style="min-width:240px;">
+            <option value="">Todas as aplicações</option>
+          </select>
+          <button id="btn-refresh-analytics" class="btn btn-secondary btn-sm-action">🔄 Atualizar Métricas</button>
+        </div>
       </div>
 
       <!-- Analytics KPIs -->

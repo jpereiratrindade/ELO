@@ -140,15 +140,6 @@ AdminHttpServer::AdminHttpServer(
         app_registry_.save_to_file(appsPath);
     }
 
-    // Seed aggregate anonymous analytics
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "session_start", "");
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "place_campos_sulinos_001", "", 9.5);
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "species_cardeal_001", "place_campos_sulinos_001", 12.0);
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "species_capivara_002", "species_cardeal_001", 8.0);
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "phenomenon_pastejo_001", "species_capivara_002", 11.5);
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "session_start", "");
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "place_campos_sulinos_001", "", 14.0);
-    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "recipe_complete", "discover_by_image", "place_campos_sulinos_001", 18.0);
 }
 
 AdminHttpServer::~AdminHttpServer() {
@@ -1519,8 +1510,24 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
 
     // API: GET /api/analytics/summary
     if (method == QStringLiteral("GET") && path.startsWith(QStringLiteral("/api/analytics/summary"))) {
-        auto summary = analytics_engine_.get_summary();
+        const QUrl requestUrl(path);
+        const QString applicationId = QUrlQuery(requestUrl).queryItemValue(QStringLiteral("application_id"));
+        analytics::AnalyticsEngine engine;
+        const auto events = content_database_->analytics_events(applicationId);
+        for (const auto& value : events) {
+            const auto event = value.toObject();
+            engine.record_event(
+                event.value(QStringLiteral("application_id")).toString().toStdString(),
+                event.value(QStringLiteral("application_version")).toString().toStdString(),
+                event.value(QStringLiteral("event_type")).toString().toStdString(),
+                event.value(QStringLiteral("target_atom_id")).toString().toStdString(),
+                event.value(QStringLiteral("source_atom_id")).toString().toStdString(),
+                event.value(QStringLiteral("duration_seconds")).toDouble());
+        }
+        auto summary = engine.get_summary(applicationId.toStdString());
         QJsonObject resp;
+        resp[QStringLiteral("application_id")] = applicationId.isEmpty() ? QStringLiteral("all_applications") : applicationId;
+        resp[QStringLiteral("event_count")] = events.size();
         resp[QStringLiteral("total_sessions")] = static_cast<qint64>(summary.total_sessions);
         resp[QStringLiteral("average_dwell_time_seconds")] = summary.average_dwell_time_seconds;
         resp[QStringLiteral("total_engagement_seconds")] = summary.total_engagement_seconds;

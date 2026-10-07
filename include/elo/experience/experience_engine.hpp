@@ -13,6 +13,7 @@
 #include "elo/core/result.hpp"
 
 #include <memory>
+#include <functional>
 #include <cstdint>
 #include <optional>
 #include <random>
@@ -165,6 +166,7 @@ public:
 
     // JEV Event recording (Section 15, 16)
     void record_jev_event(std::string_view event_name, std::string_view payload = "");
+    void set_analytics_sink(std::function<void(const judgment::JevEvent&)> sink) { analytics_sink_ = std::move(sink); }
 
     // Local randomization for survey eligibility
     [[nodiscard]] bool evaluate_survey_selection(double probability = 0.5);
@@ -190,6 +192,7 @@ private:
     std::shared_ptr<storage::ISurveyStore> survey_store_;
     std::unique_ptr<judgment::JevAdapter> jev_adapter_;
     std::shared_ptr<storage::IJevEventStore> jev_event_store_;
+    std::function<void(const judgment::JevEvent&)> analytics_sink_{};
     std::shared_ptr<content::ContentCatalog> content_catalog_;
     biometric::BiometricMatcher biometric_matcher_;
     content::ContentSelector content_selector_{42};

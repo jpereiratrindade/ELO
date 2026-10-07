@@ -38,6 +38,9 @@ public:
     void upsert_package(const QJsonObject& value);
     [[nodiscard]] bool delete_package(const QString& id);
 
+    void record_analytics_event(const QJsonObject& value);
+    [[nodiscard]] QJsonArray analytics_events(const QString& application_id = {}) const;
+
     [[nodiscard]] QString journal_mode() const;
 
 private:

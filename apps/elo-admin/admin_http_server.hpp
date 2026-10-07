@@ -55,7 +55,6 @@ private:
     content::BundlePublisher publisher_;
     std::unique_ptr<content::ContentDatabase> content_database_;
     application::ApplicationRegistry app_registry_;
-    analytics::AnalyticsEngine analytics_engine_;
     bool draft_modified_{false};
     std::unordered_map<QTcpSocket*, QByteArray> client_buffers_{};
 };

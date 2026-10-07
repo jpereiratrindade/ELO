@@ -82,7 +82,7 @@ core::Result<ente::kernel::view> ExperienceEngine::apply_constitutive_transforma
 }
 
 void ExperienceEngine::record_jev_event(std::string_view event_name, std::string_view payload) {
-    if (!jev_event_store_) {
+    if (!jev_event_store_ && !analytics_sink_) {
         return;
     }
     auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -94,7 +94,8 @@ void ExperienceEngine::record_jev_event(std::string_view event_name, std::string
         .payload = std::string(payload),
         .sequence = next_event_sequence_++
     };
-    (void)jev_event_store_->record_event(ev);
+    if (jev_event_store_) (void)jev_event_store_->record_event(ev);
+    if (analytics_sink_) analytics_sink_(ev);
 }
 
 void ExperienceEngine::on_presence_detected() {

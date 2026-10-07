@@ -91,6 +91,10 @@ public:
                 }
             } else if (ev.event_type == "recipe_complete") {
                 summary.total_recipe_completions++;
+            } else if (ev.event_type == "dwell_tick" && !ev.target_atom_id.empty() && ev.duration_seconds > 0.0) {
+                atom_dwell_sum[ev.target_atom_id] += ev.duration_seconds;
+                atom_dwell_count[ev.target_atom_id]++;
+                summary.total_engagement_seconds += ev.duration_seconds;
             }
 
             // Record navigation transitions

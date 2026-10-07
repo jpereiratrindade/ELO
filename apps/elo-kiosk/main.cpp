@@ -1,6 +1,7 @@
 #include "camera_image_provider.hpp"
 
 #include "elo/content/content_bundle.hpp"
+#include "elo/content/content_database.hpp"
 #include "elo/experience/experience_engine.hpp"
 #include "elo/perception/camera_catalog.hpp"
 #include "elo/perception/vision_service.hpp"
@@ -11,6 +12,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QGuiApplication>
+#include <QJsonObject>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QString>
@@ -163,13 +165,14 @@ int main(int argc, char* argv[]) {
     auto system_content = elo::content::resolve_system_content_dir(true);
 
     auto resolve_active_catalog = [](const std::filesystem::path& base_dir) -> std::filesystem::path {
-        if (std::filesystem::exists(base_dir / "catalog" / "atoms")) {
-            return base_dir / "catalog";
-        }
         if (std::filesystem::exists(base_dir / "current" / "catalog")) {
             return base_dir / "current" / "catalog";
         }
-        if (std::filesystem::exists(base_dir / "catalog")) {
+        std::error_code ec;
+        const auto bundles = base_dir / "bundles";
+        const bool hasPublishedBundles = std::filesystem::exists(bundles, ec)
+            && std::filesystem::directory_iterator(bundles, ec) != std::filesystem::directory_iterator{};
+        if (!hasPublishedBundles && std::filesystem::exists(base_dir / "catalog")) {
             return base_dir / "catalog";
         }
         return {};
@@ -197,6 +200,56 @@ int main(int argc, char* argv[]) {
         nullptr,
         stores.jev_events,
         content_catalog);
+
+    auto analytics_database = std::make_shared<elo::content::ContentDatabase>(
+        system_content / "editorial.sqlite3");
+    struct AnalyticsState {
+        std::string active_atom;
+        std::uint64_t active_since_ms{0};
+    };
+    auto analytics_state = std::make_shared<AnalyticsState>();
+    engine->set_analytics_sink([analytics_database, analytics_state, content_catalog](const elo::judgment::JevEvent& event) {
+        const auto& manifest = content_catalog->manifest();
+        if (manifest.bundle_id.empty()) return;
+        const QString applicationId = QString::fromStdString(manifest.bundle_id);
+        const QString applicationVersion = QString::fromStdString(manifest.version);
+        const qint64 hourBucket = static_cast<qint64>((event.timestamp_ms / 1000 / 3600) * 3600);
+        const auto record = [&](QString type, QString target = {}, QString source = {}, double duration = 0.0) {
+            analytics_database->record_analytics_event(QJsonObject{
+                {"application_id", applicationId},
+                {"application_version", applicationVersion},
+                {"event_type", std::move(type)},
+                {"target_atom_id", std::move(target)},
+                {"source_atom_id", std::move(source)},
+                {"duration_seconds", duration},
+                {"hour_bucket", hourBucket}
+            });
+        };
+        const auto flushDwell = [&]() {
+            if (!analytics_state->active_atom.empty() && analytics_state->active_since_ms > 0
+                && event.timestamp_ms >= analytics_state->active_since_ms) {
+                record("dwell_tick", QString::fromStdString(analytics_state->active_atom), {},
+                       static_cast<double>(event.timestamp_ms - analytics_state->active_since_ms) / 1000.0);
+            }
+        };
+        if (event.event_name == "session.start") {
+            analytics_state->active_atom.clear();
+            analytics_state->active_since_ms = 0;
+            record("session_start");
+        } else if (event.event_name == "content.selected") {
+            flushDwell();
+            record("atom_view", QString::fromStdString(event.payload),
+                   QString::fromStdString(analytics_state->active_atom));
+            analytics_state->active_atom = event.payload;
+            analytics_state->active_since_ms = event.timestamp_ms;
+        } else if (event.event_name == "recipe.completed") {
+            record("recipe_complete", QString::fromStdString(event.payload));
+        } else if (event.event_name == "session.end") {
+            flushDwell();
+            analytics_state->active_atom.clear();
+            analytics_state->active_since_ms = 0;
+        }
+    });
     auto presentation_model = std::make_unique<elo::ui::KioskPresentationModel>(engine);
     presentation_model->selectContextualContent();
 
@@ -234,7 +287,12 @@ int main(int argc, char* argv[]) {
             [content_catalog, system_content, resolve_active_catalog, &presentation_model]() {
                 std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";
                 auto reload_path = resolve_active_catalog(system_content);
-                if (reload_path.empty()) reload_path = system_content / "catalog";
+                if (reload_path.empty()) {
+                    presentation_model->deactivateContent();
+                    content_catalog->clear();
+                    std::cout << "[ELO][kiosk] No active application; content unloaded.\n";
+                    return;
+                }
 
                 auto reload_res = content_catalog->load_from_directory(reload_path.string());
                 if (reload_res) {

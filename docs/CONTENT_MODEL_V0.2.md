@@ -83,6 +83,18 @@ Tabelas principais:
 - `package_plans(bundle_id, document_json, updated_at)`;
 - `package_atoms(bundle_id, content_id, position)`;
 - `editorial_revisions(sequence, entity_kind, entity_id, operation, occurred_at)`.
+- `analytics_events(application_id, application_version, event_type, target_atom_id, source_atom_id, duration_seconds, hour_bucket)`.
+
+## Estatísticas por aplicação
+
+O Kiosk registra eventos agregáveis no SQLite/WAL usando a aplicação e a versão que
+estavam efetivamente carregadas no momento da interação. São registrados início de
+sessão, visualização de átomo, conclusão de roteiro, transições e permanência. O Studio
+permite consultar todas as aplicações ou filtrar uma aplicação específica.
+
+A telemetria não grava `PersonLocalId`, embedding, imagem, nome civil ou outro
+identificador pessoal. O tempo é reduzido a uma faixa horária e os dados permanecem
+locais, preservando a abordagem Zero-PII.
 
 A compatibilidade legada é incremental: cada categoria ainda ausente no banco (átomos,
 relações, receitas e planos de pacote) pode ser recuperada dos JSONs existentes. Isso

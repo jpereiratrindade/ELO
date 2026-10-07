@@ -51,6 +51,8 @@ ContentDatabase::ContentDatabase(const std::filesystem::path& path) {
               "CREATE TABLE IF NOT EXISTS content_recipes(recipe_id TEXT PRIMARY KEY, document_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);"
               "CREATE TABLE IF NOT EXISTS package_plans(bundle_id TEXT PRIMARY KEY, document_json TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);"
               "CREATE TABLE IF NOT EXISTS package_atoms(bundle_id TEXT NOT NULL REFERENCES package_plans(bundle_id) ON DELETE CASCADE, content_id TEXT NOT NULL REFERENCES content_atoms(content_id) ON DELETE CASCADE, position INTEGER NOT NULL, PRIMARY KEY(bundle_id,content_id));"
+              "CREATE TABLE IF NOT EXISTS analytics_events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, application_id TEXT NOT NULL, application_version TEXT NOT NULL, event_type TEXT NOT NULL, target_atom_id TEXT NOT NULL DEFAULT '', source_atom_id TEXT NOT NULL DEFAULT '', duration_seconds REAL NOT NULL DEFAULT 0, hour_bucket INTEGER NOT NULL);"
+              "CREATE INDEX IF NOT EXISTS idx_analytics_application ON analytics_events(application_id,sequence);"
               "CREATE TABLE IF NOT EXISTS editorial_revisions(sequence INTEGER PRIMARY KEY AUTOINCREMENT, entity_kind TEXT NOT NULL, entity_id TEXT NOT NULL, operation TEXT NOT NULL, occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);"
               "CREATE INDEX IF NOT EXISTS idx_package_atoms_content ON package_atoms(content_id);");
 }
@@ -111,6 +113,51 @@ bool ContentDatabase::delete_package(const QString& id) {
     const bool changed = sqlite3_changes(db_) > 0;
     sqlite3_finalize(statement);
     return changed;
+}
+
+void ContentDatabase::record_analytics_event(const QJsonObject& value) {
+    sqlite3_stmt* statement{};
+    check(sqlite3_prepare_v2(db_,
+        "INSERT INTO analytics_events(application_id,application_version,event_type,target_atom_id,source_atom_id,duration_seconds,hour_bucket) VALUES(?,?,?,?,?,?,?);",
+        -1, &statement, nullptr), db_);
+    const auto app = value.value("application_id").toString().toUtf8();
+    const auto version = value.value("application_version").toString().toUtf8();
+    const auto type = value.value("event_type").toString().toUtf8();
+    const auto target = value.value("target_atom_id").toString().toUtf8();
+    const auto source = value.value("source_atom_id").toString().toUtf8();
+    sqlite3_bind_text(statement, 1, app.constData(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 2, version.constData(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 3, type.constData(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 4, target.constData(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 5, source.constData(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_double(statement, 6, value.value("duration_seconds").toDouble());
+    sqlite3_bind_int64(statement, 7, value.value("hour_bucket").toInteger());
+    check(sqlite3_step(statement), db_);
+    sqlite3_finalize(statement);
+}
+
+QJsonArray ContentDatabase::analytics_events(const QString& application_id) const {
+    const char* sql = application_id.isEmpty()
+        ? "SELECT application_id,application_version,event_type,target_atom_id,source_atom_id,duration_seconds,hour_bucket FROM analytics_events ORDER BY sequence;"
+        : "SELECT application_id,application_version,event_type,target_atom_id,source_atom_id,duration_seconds,hour_bucket FROM analytics_events WHERE application_id=? ORDER BY sequence;";
+    sqlite3_stmt* statement{};
+    check(sqlite3_prepare_v2(db_, sql, -1, &statement, nullptr), db_);
+    const auto app = application_id.toUtf8();
+    if (!application_id.isEmpty()) sqlite3_bind_text(statement, 1, app.constData(), -1, SQLITE_TRANSIENT);
+    QJsonArray result;
+    while (sqlite3_step(statement) == SQLITE_ROW) {
+        QJsonObject value;
+        value["application_id"] = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(statement, 0)));
+        value["application_version"] = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(statement, 1)));
+        value["event_type"] = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(statement, 2)));
+        value["target_atom_id"] = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(statement, 3)));
+        value["source_atom_id"] = QString::fromUtf8(reinterpret_cast<const char*>(sqlite3_column_text(statement, 4)));
+        value["duration_seconds"] = sqlite3_column_double(statement, 5);
+        value["hour_bucket"] = static_cast<qint64>(sqlite3_column_int64(statement, 6));
+        result.append(value);
+    }
+    sqlite3_finalize(statement);
+    return result;
 }
 
 void ContentDatabase::import_legacy_workspace(const std::filesystem::path& root) {
