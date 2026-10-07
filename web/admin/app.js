@@ -927,7 +927,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalRelationClose = document.getElementById('modal-relation-close');
   const btnRelCancel = document.getElementById('btn-rel-cancel');
 
-  btnNewRelation.addEventListener('click', () => {
+  btnNewRelation?.addEventListener('click', () => {
     const selFrom = document.getElementById('rel-from');
     const selTo = document.getElementById('rel-to');
     selFrom.innerHTML = '';
@@ -949,10 +949,10 @@ document.addEventListener('DOMContentLoaded', () => {
     modalRelation.classList.remove('hidden');
   });
 
-  modalRelationClose.addEventListener('click', () => modalRelation.classList.add('hidden'));
-  btnRelCancel.addEventListener('click', () => modalRelation.classList.add('hidden'));
+  modalRelationClose?.addEventListener('click', () => modalRelation?.classList.add('hidden'));
+  btnRelCancel?.addEventListener('click', () => modalRelation?.classList.add('hidden'));
 
-  formRelation.addEventListener('submit', async (e) => {
+  formRelation?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const fromId = document.getElementById('rel-from').value;
     const toId = document.getElementById('rel-to').value;
