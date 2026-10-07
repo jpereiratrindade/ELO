@@ -23,14 +23,14 @@
       </div>
     </div>
     <div class="header-right">
-      <div id="kiosk-status-pill" class="status-pill status-checking">
+      <div id="kiosk-status-pill" class="status-pill status-offline">
         <span class="status-dot"></span>
-        <span id="kiosk-status-text">Kiosk: Verificando...</span>
+        <span id="kiosk-status-text">Kiosk: OFFLINE</span>
       </div>
       <div id="kiosk-power-controls" style="display: flex; gap: 6px; align-items: center;">
-        <button id="btn-kiosk-start" class="btn btn-sm btn-primary" style="display:none; padding: 4px 10px; font-size: 11px;" title="Iniciar processo do Totem">▶️ Iniciar Totem</button>
-        <button id="btn-kiosk-restart" class="btn btn-sm btn-secondary" style="display:none; padding: 4px 10px; font-size: 11px;" title="Reiniciar processo do Totem">🔄 Reiniciar</button>
-        <button id="btn-kiosk-stop" class="btn btn-sm btn-danger-outline" style="display:none; padding: 4px 10px; font-size: 11px;" title="Encerrar processo do Totem">⏹️ Encerrar</button>
+        <button id="btn-kiosk-start" class="btn btn-sm btn-primary" style="display:inline-flex; padding: 5px 12px; font-size: 12px; font-weight:600;" title="Iniciar processo do Totem">▶️ Iniciar Totem</button>
+        <button id="btn-kiosk-restart" class="btn btn-sm btn-secondary" style="display:none; padding: 5px 12px; font-size: 12px;" title="Reiniciar processo do Totem">🔄 Reiniciar</button>
+        <button id="btn-kiosk-stop" class="btn btn-sm btn-danger-outline" style="display:none; padding: 5px 12px; font-size: 12px;" title="Encerrar processo do Totem">⏹️ Encerrar</button>
       </div>
       <div id="kiosk-live-pill" class="status-pill status-live-content" style="display:none;">
         <span class="status-icon">📺</span>
@@ -118,11 +118,15 @@
 
       <!-- Action Toolbar -->
       <div class="action-toolbar">
+        <button id="btn-kiosk-start-main" class="btn btn-primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Iniciar Totem (Kiosk)
+        </button>
         <button id="btn-validate" class="btn btn-secondary">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
           Validar Catálogo (C++)
         </button>
-        <button id="btn-publish" class="btn btn-primary">
+        <button id="btn-publish" class="btn btn-secondary">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
           Publicar no Totem (Atômico)
         </button>

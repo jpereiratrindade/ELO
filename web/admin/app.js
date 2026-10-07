@@ -1355,7 +1355,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  ['btn-kiosk-start', 'btn-ipc-start'].forEach(id => {
+  ['btn-kiosk-start', 'btn-kiosk-start-main', 'btn-ipc-start'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('click', () => performKioskAction('start', 'Iniciar Totem'));
   });
