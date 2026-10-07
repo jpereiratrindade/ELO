@@ -4,6 +4,9 @@
 #include <QFileInfo>
 #include <QProcessEnvironment>
 #include <iostream>
+#ifdef __linux__
+#include <unistd.h>
+#endif
 
 namespace elo::system {
 
@@ -14,22 +17,32 @@ QString resolve_control_socket_path() {
         return custom;
     }
 
-    // Try /run/elo/control.sock
-    QDir runElo(QStringLiteral("/run/elo"));
-    if (runElo.exists() || QDir(QStringLiteral("/run")).exists()) {
-        if (QDir().mkpath(QStringLiteral("/run/elo"))) {
-            return QStringLiteral("/run/elo/control.sock");
-        }
-    }
-
-    // Fallback to XDG_RUNTIME_DIR
+    // 1. Prefer user runtime directory (/run/user/<uid>/elo-control.sock)
     QString xdg = env.value(QStringLiteral("XDG_RUNTIME_DIR"));
+    if (xdg.isEmpty()) {
+#ifdef __linux__
+        QString defaultXdg = QStringLiteral("/run/user/") + QString::number(getuid());
+        if (QDir(defaultXdg).exists()) {
+            xdg = defaultXdg;
+        }
+#endif
+    }
     if (!xdg.isEmpty() && QDir(xdg).exists()) {
         return QDir(xdg).filePath(QStringLiteral("elo-control.sock"));
     }
 
-    // Default to /tmp
+    // 2. Try /run/elo (only if writable)
+    QFileInfo runElo(QStringLiteral("/run/elo"));
+    if (runElo.exists() && runElo.isWritable()) {
+        return QStringLiteral("/run/elo/control.sock");
+    }
+
+    // 3. Fallback to /tmp with user-specific socket name
+#ifdef __linux__
+    return QStringLiteral("/tmp/elo-control-") + QString::number(getuid()) + QStringLiteral(".sock");
+#else
     return QStringLiteral("/tmp/elo-control.sock");
+#endif
 }
 
 ControlServer::ControlServer(const QString& socket_path, QObject* parent)
