@@ -127,6 +127,7 @@ int main(int argc, char* argv[]) {
         stores.jev_events,
         content_catalog);
     auto presentation_model = std::make_unique<elo::ui::KioskPresentationModel>(engine);
+    presentation_model->selectContextualContent();
 
     auto control_server = std::make_unique<elo::system::ControlServer>();
     if (control_server->start()) {

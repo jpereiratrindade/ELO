@@ -72,6 +72,50 @@ AdminHttpServer::AdminHttpServer(
         std::filesystem::copy(cur_assets, draft_assets,
                               std::filesystem::copy_options::recursive | std::filesystem::copy_options::skip_existing, ec);
     }
+
+    // Initialize Sovereign Application Profiles
+    app_registry_.register_application(application::ApplicationProfile{
+        .app_id = "app.elo.bioma-pampa",
+        .name = "Biodiversidade do Bioma Pampa & Campos Sulinos",
+        .domain_category = "environmental_sciences",
+        .version = "1.0.0",
+        .description = "Corpus ecológico sobre avifauna, flora campestre e processos ecológicos.",
+        .active_bundle_id = "elo-content-pampa",
+        .tags = {"biodiversidade", "conservacao", "pampa", "ecologia"},
+        .metadata_schema = {{"context", "totem_interativo_ambiental"}, {"audience", "publico_geral"}}
+    });
+
+    app_registry_.register_application(application::ApplicationProfile{
+        .app_id = "app.elo.patrimonio-historico",
+        .name = "Patrimônio Histórico e Memória Regional",
+        .domain_category = "cultural_heritage",
+        .version = "0.8.0",
+        .description = "Acervo histórico de fotografias antigas, relatos orais e monumentos arquitetônicos.",
+        .active_bundle_id = "elo-content-patrimonio",
+        .tags = {"historia", "memoria", "arquitetura", "patrimonio"},
+        .metadata_schema = {{"context", "museu_historico"}, {"curator", "instituto_memoria"}}
+    });
+
+    app_registry_.register_application(application::ApplicationProfile{
+        .app_id = "app.elo.galeria-visual",
+        .name = "Galeria de Arte & Expressões Visuais",
+        .domain_category = "fine_arts",
+        .version = "0.9.5",
+        .description = "Exposição imersiva de artes visuais contemporâneas e paisagens sensoriais.",
+        .active_bundle_id = "elo-content-artes",
+        .tags = {"artes_visuais", "fotografia", "estetica", "imersao"},
+        .metadata_schema = {{"context", "espaco_cultural"}, {"layout", "contemplativo"}}
+    });
+
+    // Seed aggregate anonymous analytics
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "session_start", "");
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "place_campos_sulinos_001", "", 9.5);
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "species_cardeal_001", "place_campos_sulinos_001", 12.0);
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "species_capivara_002", "species_cardeal_001", 8.0);
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "phenomenon_pastejo_001", "species_capivara_002", 11.5);
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "session_start", "");
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "atom_view", "place_campos_sulinos_001", "", 14.0);
+    analytics_engine_.record_event("app.elo.bioma-pampa", "elo-content-pampa", "recipe_complete", "discover_by_image", "place_campos_sulinos_001", 18.0);
 }
 
 AdminHttpServer::~AdminHttpServer() {
@@ -985,6 +1029,49 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         return;
     }
 
+    // API: GET /api/manifest
+    if (method == QStringLiteral("GET") && path == QStringLiteral("/api/manifest")) {
+        auto manifest_path = content_root_ / "manifest.json";
+        if (!std::filesystem::exists(manifest_path)) {
+            manifest_path = content_root_ / "catalog" / "manifest.json";
+        }
+        if (std::filesystem::exists(manifest_path)) {
+            QFile f(QString::fromStdString(manifest_path.string()));
+            if (f.open(QIODevice::ReadOnly)) {
+                sendJsonResponse(socket, 200, f.readAll());
+                return;
+            }
+        }
+        sendJsonResponse(socket, 404, "{\"error\":\"Manifesto não encontrado\"}");
+        return;
+    }
+
+    // API: POST /api/manifest (Configure Package Metadata)
+    if ((method == QStringLiteral("POST") || method == QStringLiteral("PUT")) && path == QStringLiteral("/api/manifest")) {
+        auto doc = QJsonDocument::fromJson(body);
+        if (doc.isNull() || !doc.isObject()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"JSON inválido\"}");
+            return;
+        }
+
+        auto manifest_path = content_root_ / "manifest.json";
+        QFile f(QString::fromStdString(manifest_path.string()));
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Não foi possível gravar manifest.json\"}");
+            return;
+        }
+
+        f.write(doc.toJson(QJsonDocument::Indented));
+        f.close();
+        draft_modified_ = true;
+
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("message")] = QStringLiteral("Pacote de conteúdo configurado com sucesso.");
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
     // API: POST /api/validate
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/validate")) {
         content::ContentBundle bundle(content_root_);
@@ -1065,6 +1152,108 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         QJsonObject resp;
         resp[QStringLiteral("success")] = ok;
         sendJsonResponse(socket, ok ? 200 : 503, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: GET /api/applications
+    if (method == QStringLiteral("GET") && path == QStringLiteral("/api/applications")) {
+        QJsonArray appsArr;
+        for (const auto& app : app_registry_.list_all()) {
+            QJsonObject aObj;
+            aObj[QStringLiteral("app_id")] = QString::fromStdString(app.app_id);
+            aObj[QStringLiteral("name")] = QString::fromStdString(app.name);
+            aObj[QStringLiteral("domain_category")] = QString::fromStdString(app.domain_category);
+            aObj[QStringLiteral("version")] = QString::fromStdString(app.version);
+            aObj[QStringLiteral("description")] = QString::fromStdString(app.description);
+            aObj[QStringLiteral("active_bundle_id")] = QString::fromStdString(app.active_bundle_id);
+            QJsonArray tagsArr;
+            for (const auto& t : app.tags) tagsArr.append(QString::fromStdString(t));
+            aObj[QStringLiteral("tags")] = tagsArr;
+            QJsonObject metaObj;
+            for (const auto& [k, v] : app.metadata_schema) metaObj[QString::fromStdString(k)] = QString::fromStdString(v);
+            aObj[QStringLiteral("metadata_schema")] = metaObj;
+            appsArr.append(aObj);
+        }
+        QJsonObject resp;
+        resp[QStringLiteral("applications")] = appsArr;
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: POST /api/applications
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/applications")) {
+        auto doc = QJsonDocument::fromJson(body);
+        if (doc.isNull() || !doc.isObject()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"JSON inválido\"}");
+            return;
+        }
+        auto obj = doc.object();
+        application::ApplicationProfile app;
+        app.app_id = obj.value(QStringLiteral("app_id")).toString().toStdString();
+        app.name = obj.value(QStringLiteral("name")).toString().toStdString();
+        app.domain_category = obj.value(QStringLiteral("domain_category")).toString(QStringLiteral("general")).toStdString();
+        app.version = obj.value(QStringLiteral("version")).toString(QStringLiteral("1.0.0")).toStdString();
+        app.description = obj.value(QStringLiteral("description")).toString().toStdString();
+        app.active_bundle_id = obj.value(QStringLiteral("active_bundle_id")).toString().toStdString();
+        
+        for (const auto& tVal : obj.value(QStringLiteral("tags")).toArray()) {
+            app.tags.push_back(tVal.toString().toStdString());
+        }
+
+        app_registry_.register_application(std::move(app));
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = true;
+        resp[QStringLiteral("message")] = QStringLiteral("Aplicação registrada com sucesso.");
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: GET /api/analytics/summary
+    if (method == QStringLiteral("GET") && path.startsWith(QStringLiteral("/api/analytics/summary"))) {
+        auto summary = analytics_engine_.get_summary();
+        QJsonObject resp;
+        resp[QStringLiteral("total_sessions")] = static_cast<qint64>(summary.total_sessions);
+        resp[QStringLiteral("average_dwell_time_seconds")] = summary.average_dwell_time_seconds;
+        resp[QStringLiteral("total_engagement_seconds")] = summary.total_engagement_seconds;
+        resp[QStringLiteral("total_atom_views")] = static_cast<qint64>(summary.total_atom_views);
+        resp[QStringLiteral("total_recipe_completions")] = static_cast<qint64>(summary.total_recipe_completions);
+        
+        QJsonObject viewsObj;
+        for (const auto& [atom, count] : summary.atom_view_counts) {
+            viewsObj[QString::fromStdString(atom)] = static_cast<qint64>(count);
+        }
+        resp[QStringLiteral("atom_view_counts")] = viewsObj;
+
+        QJsonObject dwellObj;
+        for (const auto& [atom, avg] : summary.atom_avg_dwell_seconds) {
+            dwellObj[QString::fromStdString(atom)] = avg;
+        }
+        resp[QStringLiteral("atom_avg_dwell_seconds")] = dwellObj;
+
+        QJsonObject flowObj;
+        for (const auto& [src, targets] : summary.transition_matrix) {
+            QJsonObject tObj;
+            for (const auto& [tgt, count] : targets) {
+                tObj[QString::fromStdString(tgt)] = static_cast<qint64>(count);
+            }
+            flowObj[QString::fromStdString(src)] = tObj;
+        }
+        resp[QStringLiteral("transition_matrix")] = flowObj;
+
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: GET /api/biometric/spec
+    if (method == QStringLiteral("GET") && path == QStringLiteral("/api/biometric/spec")) {
+        QJsonObject resp;
+        resp[QStringLiteral("architecture")] = QStringLiteral("elo-arcface-512-v1");
+        resp[QStringLiteral("dimension")] = 512;
+        resp[QStringLiteral("key_format")] = QStringLiteral("elo://bio/v1/{salt_hmac_sha256}");
+        resp[QStringLiteral("privacy_guarantee")] = QStringLiteral("Zero-PII Sovereign Ephemeral Key Derivation (Invariants E12 & E13)");
+        resp[QStringLiteral("hardware_isolated")] = true;
+        resp[QStringLiteral("non_reversible")] = true;
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }
 

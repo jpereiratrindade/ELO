@@ -2,6 +2,9 @@
 
 #include "elo/content/content_bundle.hpp"
 #include "elo/system/control_socket.hpp"
+#include "elo/application/application_registry.hpp"
+#include "elo/analytics/analytics_engine.hpp"
+#include "elo/biometric/biometric_key.hpp"
 
 #include <QByteArray>
 #include <QObject>
@@ -49,6 +52,8 @@ private:
     quint16 port_{8080};
     std::unique_ptr<QTcpServer> tcp_server_;
     content::BundlePublisher publisher_;
+    application::ApplicationRegistry app_registry_;
+    analytics::AnalyticsEngine analytics_engine_;
     bool draft_modified_{false};
     std::unordered_map<QTcpSocket*, QByteArray> client_buffers_{};
 };

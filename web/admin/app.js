@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target) {
         target.classList.add('active');
         if (target.id === 'tab-media') fetchMedia();
+        if (target.id === 'tab-bundles') fetchManifest();
+        if (target.id === 'tab-apps') fetchApplications();
+        if (target.id === 'tab-analytics') fetchAnalytics();
       }
     });
   });
@@ -137,8 +140,168 @@ document.addEventListener('DOMContentLoaded', () => {
       renderAtoms(data.atoms || []);
       renderRelations(data.relations || []);
       renderRecipes(data.recipes || []);
+      renderPackageAtoms(data.atoms || []);
     } catch (err) {
       console.warn('Erro ao carregar catálogo:', err);
+    }
+  }
+
+  async function fetchManifest() {
+    try {
+      const res = await fetch('/api/manifest');
+      if (!res.ok) return;
+      const m = await res.json();
+      if (document.getElementById('pkg-title')) document.getElementById('pkg-title').value = m.title || '';
+      if (document.getElementById('pkg-id')) document.getElementById('pkg-id').value = m.bundle_id || '';
+      if (document.getElementById('pkg-version')) document.getElementById('pkg-version').value = m.version || '';
+      if (document.getElementById('pkg-theme')) document.getElementById('pkg-theme').value = m.default_theme || '';
+      if (document.getElementById('pkg-desc')) document.getElementById('pkg-desc').value = m.description || '';
+    } catch (e) {
+      console.warn('Erro ao carregar manifesto:', e);
+    }
+  }
+
+  function renderPackageAtoms(atoms) {
+    const list = document.getElementById('pkg-atoms-list');
+    const badge = document.getElementById('pkg-atoms-count-badge');
+    if (!list) return;
+    list.innerHTML = '';
+    if (badge) badge.textContent = `${atoms.length} Átomos`;
+
+    if (atoms.length === 0) {
+      list.innerHTML = '<p style="color:var(--text-dim); padding:10px;">Nenhum átomo cadastrado neste pacote ainda.</p>';
+      return;
+    }
+
+    atoms.forEach(a => {
+      const item = document.createElement('div');
+      item.style.cssText = 'background: var(--bg-surface); padding: 10px 14px; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-subtle);';
+      item.innerHTML = `
+        <div>
+          <strong style="color: var(--text-main); font-size: 0.9rem;">${a.canonical_name || a.title}</strong>
+          <div style="color: var(--text-dim); font-size: 0.75rem;">${a.type_label || a.type} · <code>${a.content_id}</code></div>
+        </div>
+        <span class="badge-pill" style="font-size: 10px;">${a.type}</span>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  async function fetchApplications() {
+    try {
+      const res = await fetch('/api/applications');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderApplications(data.applications || []);
+    } catch (e) {
+      console.warn('Erro ao carregar aplicações:', e);
+    }
+  }
+
+  function renderApplications(apps) {
+    const grid = document.getElementById('apps-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (apps.length === 0) {
+      grid.innerHTML = '<p style="color:var(--text-dim); padding:20px;">Nenhuma aplicação registrada.</p>';
+      return;
+    }
+
+    apps.forEach(app => {
+      const card = document.createElement('div');
+      card.className = 'atom-card';
+      card.style.borderColor = 'rgba(6, 182, 212, 0.3)';
+
+      const tagsHtml = (app.tags || []).map(t => `<span class="badge-pill" style="font-size:10px; margin-right:4px;">#${t}</span>`).join('');
+      const metaHtml = Object.entries(app.metadata_schema || {}).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`).join('');
+
+      card.innerHTML = `
+        <div class="atom-header">
+          <div>
+            <h4 class="atom-title">${app.name}</h4>
+            <div class="atom-scientific"><code>${app.app_id}</code> · v${app.version}</div>
+          </div>
+          <span class="atom-type-badge" style="background: rgba(6,182,212,0.15); color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);">${app.domain_category}</span>
+        </div>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin: 12px 0;">${app.description}</p>
+        <div style="font-size: 0.8rem; color: var(--text-dim); background: var(--bg-surface); padding: 10px; border-radius: var(--radius-sm); margin-bottom: 12px;">
+          <div><strong>Bundle Ativo:</strong> <code>${app.active_bundle_id || 'Nenhum'}</code></div>
+          ${metaHtml}
+        </div>
+        <div style="margin-top: 8px;">${tagsHtml}</div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  async function fetchAnalytics() {
+    try {
+      const res = await fetch('/api/analytics/summary');
+      if (!res.ok) return;
+      const data = await res.json();
+
+      if (document.getElementById('stat-an-sessions')) document.getElementById('stat-an-sessions').textContent = data.total_sessions || 0;
+      if (document.getElementById('stat-an-dwell')) document.getElementById('stat-an-dwell').textContent = `${(data.average_dwell_time_seconds || 0).toFixed(1)}s`;
+      if (document.getElementById('stat-an-views')) document.getElementById('stat-an-views').textContent = data.total_atom_views || 0;
+      if (document.getElementById('stat-an-recipes')) document.getElementById('stat-an-recipes').textContent = data.total_recipe_completions || 0;
+
+      // Render Dwell List
+      const dwellList = document.getElementById('analytics-dwell-list');
+      if (dwellList) {
+        dwellList.innerHTML = '';
+        const entries = Object.entries(data.atom_avg_dwell_seconds || {});
+        if (entries.length === 0) {
+          dwellList.innerHTML = '<p style="color:var(--text-dim); font-size:0.85rem;">Sem dados de permanência agregados ainda.</p>';
+        } else {
+          entries.forEach(([atom, avg]) => {
+            const count = (data.atom_view_counts || {})[atom] || 1;
+            const item = document.createElement('div');
+            item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); padding:10px 14px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);';
+            item.innerHTML = `
+              <div>
+                <strong style="color:var(--text-main); font-size:0.9rem;">${atom}</strong>
+                <div style="color:var(--text-dim); font-size:0.75rem;">${count} visualizações agregadas</div>
+              </div>
+              <span class="badge-pill badge-green">${avg.toFixed(1)}s de contemplação média</span>
+            `;
+            dwellList.appendChild(item);
+          });
+        }
+      }
+
+      // Render Flow Matrix
+      const flowList = document.getElementById('analytics-flow-list');
+      if (flowList) {
+        flowList.innerHTML = '';
+        const matrix = data.transition_matrix || {};
+        const flows = [];
+        for (const [src, targets] of Object.entries(matrix)) {
+          for (const [tgt, count] of Object.entries(targets)) {
+            flows.push({ src, tgt, count });
+          }
+        }
+
+        if (flows.length === 0) {
+          flowList.innerHTML = '<p style="color:var(--text-dim); font-size:0.85rem;">Sem dados de transição agregados ainda.</p>';
+        } else {
+          flows.forEach(f => {
+            const item = document.createElement('div');
+            item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); padding:10px 14px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);';
+            item.innerHTML = `
+              <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
+                <code style="color:var(--text-main);">${f.src}</code>
+                <span style="color:var(--accent-cyan);">➔</span>
+                <code style="color:var(--text-main);">${f.tgt}</code>
+              </div>
+              <span class="badge-pill" style="font-size:10px;">${f.count} transições</span>
+            `;
+            flowList.appendChild(item);
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao carregar analíticas:', e);
     }
   }
 
@@ -944,6 +1107,8 @@ document.addEventListener('DOMContentLoaded', () => {
       reader.readAsDataURL(file);
       directMediaUpload.value = '';
     });
+  }
+
   const btnKioskAdvance = document.getElementById('btn-kiosk-advance');
   if (btnKioskAdvance) {
     btnKioskAdvance.addEventListener('click', async () => {
@@ -965,9 +1130,71 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Package Meta & Publish Actions
+  const btnSavePkg = document.getElementById('btn-save-package-meta');
+  if (btnSavePkg) {
+    btnSavePkg.addEventListener('click', async () => {
+      const title = document.getElementById('pkg-title').value.trim();
+      const bundleId = document.getElementById('pkg-id').value.trim();
+      const version = document.getElementById('pkg-version').value.trim();
+      const theme = document.getElementById('pkg-theme').value.trim();
+      const desc = document.getElementById('pkg-desc').value.trim();
+
+      if (!title || !bundleId || !version) {
+        showNotice('Campos Obrigatórios', 'Preencha Título, ID e Versão do Pacote.', true);
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/manifest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            schema_version: '0.1',
+            bundle_id: bundleId,
+            version: version,
+            title: title,
+            default_theme: theme,
+            description: desc
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showNotice('Pacote Atualizado!', `Metadados do pacote "${title}" (${version}) salvos com sucesso.`);
+          updateLifecycleUI(true);
+          fetchStatus();
+          fetchCatalog();
+        } else {
+          showNotice('Erro ao Salvar', data.error || 'Falha', true);
+        }
+      } catch (err) {
+        showNotice('Falha de Rede', err.message, true);
+      }
+    });
+  }
+
+  const btnPublishPkgDirect = document.getElementById('btn-publish-package-direct');
+  if (btnPublishPkgDirect) {
+    btnPublishPkgDirect.addEventListener('click', () => {
+      const btnPub = document.getElementById('btn-publish');
+      if (btnPub) btnPub.click();
+    });
+  }
+
+  const btnRefreshAnalytics = document.getElementById('btn-refresh-analytics');
+  if (btnRefreshAnalytics) {
+    btnRefreshAnalytics.addEventListener('click', () => {
+      fetchAnalytics();
+      showNotice('Métricas Atualizadas', 'Dados analíticos agregados e grafo de fluxo sincronizados.');
+    });
+  }
+
   // Initial load
   fetchStatus();
   fetchCatalog();
   fetchMedia();
+  fetchManifest();
+  fetchApplications();
+  fetchAnalytics();
   setInterval(fetchStatus, 4000);
 });

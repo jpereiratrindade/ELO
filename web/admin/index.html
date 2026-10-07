@@ -140,12 +140,156 @@
     <!-- Navigation Tabs -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="tab-atoms">Átomos de Conteúdo</button>
+      <button class="tab-btn" data-tab="tab-bundles">📦 Pacotes de Conteúdo</button>
+      <button class="tab-btn" data-tab="tab-apps">📱 Aplicações & Contextos</button>
+      <button class="tab-btn" data-tab="tab-analytics">📊 Análise de Dados (Zero-PII)</button>
       <button class="tab-btn" data-tab="tab-media">Mídias & Assets</button>
-      <button class="tab-btn" data-tab="tab-relations">Relações Ecológicas</button>
-      <button class="tab-btn" data-tab="tab-recipes">Receitas de Experiência</button>
+      <button class="tab-btn" data-tab="tab-relations">Relações</button>
+      <button class="tab-btn" data-tab="tab-recipes">Receitas</button>
       <button class="tab-btn" data-tab="tab-history">Histórico & Rollback</button>
       <button class="tab-btn" data-tab="tab-ipc">Control Plane & Socket</button>
     </div>
+
+    <!-- Tab 0: Content Packages / Bundles Management -->
+    <section id="tab-bundles" class="tab-pane">
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Gestão Curatorial de Pacotes de Conteúdo (Content Bundles)</h3>
+          <p class="pane-subtitle">Estruture, versiona e publique pacotes temáticos soberanos (ex: Bioma Pampa, Mata Atlântica) diretamente no Totem</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button id="btn-save-package-meta" class="btn btn-secondary btn-sm-action">
+            💾 Salvar Pacote
+          </button>
+          <button id="btn-publish-package-direct" class="btn btn-primary btn-sm-action">
+            🚀 Publicar Pacote no Totem
+          </button>
+        </div>
+      </div>
+
+      <div class="bundle-composer-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+        <div class="card-composer" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <h4 style="font-size: 1.1rem; color: var(--text-main); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+            <span>📋 Metadados do Pacote</span>
+            <span id="package-badge-state" class="badge-pill badge-green" style="font-size: 11px;">ATIVO</span>
+          </h4>
+          <form id="form-package-meta">
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label for="pkg-title" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Título do Pacote de Conteúdo</label>
+              <input type="text" id="pkg-title" class="input-text" placeholder="Ex: Bioma Pampa — Campos Sulinos" required style="width: 100%;">
+            </div>
+            <div class="form-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
+              <div class="form-group">
+                <label for="pkg-id" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Identificador do Pacote (ID)</label>
+                <input type="text" id="pkg-id" class="input-text" placeholder="elo-content-pampa" required style="width: 100%;">
+              </div>
+              <div class="form-group">
+                <label for="pkg-version" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Versão Semântica</label>
+                <input type="text" id="pkg-version" class="input-text" placeholder="0.1.0" required style="width: 100%;">
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label for="pkg-theme" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Tema / Bioma Principal</label>
+              <input type="text" id="pkg-theme" class="input-text" placeholder="pampa" required style="width: 100%;">
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
+              <label for="pkg-desc" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Descrição Curatorial da Coleção</label>
+              <textarea id="pkg-desc" class="input-textarea" rows="3" placeholder="Objetivo curatorial do pacote e síntese da experiência..." style="width: 100%;"></textarea>
+            </div>
+          </form>
+        </div>
+
+        <div class="card-composer" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <h4 style="font-size: 1.1rem; color: var(--text-main); margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+            <span>🔬 Átomos Vinculados ao Pacote</span>
+            <span id="pkg-atoms-count-badge" class="badge-pill" style="font-size: 11px;">0 Átomos</span>
+          </h4>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">Todos os átomos ativos neste pacote de conteúdo alimentarão o modo contemplativo e interativo do Totem:</p>
+          <div id="pkg-atoms-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 6px;">
+            <!-- Rendered by app.js -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab: Applications & Domain Contexts -->
+    <section id="tab-apps" class="tab-pane">
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Registro Soberano de Aplicações e Contextos</h3>
+          <p class="pane-subtitle">Motor agnóstico a domínio: registre experiências (Biomas, Museus, Patrimônio Histórico, Artes, Ciência) e associe esquemas de metadados</p>
+        </div>
+        <button id="btn-new-app" class="btn btn-primary btn-sm-action">
+          + Nova Aplicação
+        </button>
+      </div>
+      <div id="apps-grid" class="atoms-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); margin-top: 20px;">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Tab: Zero-PII Data Analytics & Sovereign Metrics -->
+    <section id="tab-analytics" class="tab-pane">
+      <div class="pane-header-row">
+        <div>
+          <h3 class="pane-title">Telemetria & Análise de Dados Agregados (Zero-PII)</h3>
+          <p class="pane-subtitle">Métricas agregadas de engajamento, tempo de permanência (Dwell Time) e matriz de transições sem vínculo a IDs pessoais</p>
+        </div>
+        <button id="btn-refresh-analytics" class="btn btn-secondary btn-sm-action">
+          🔄 Atualizar Métricas
+        </button>
+      </div>
+
+      <!-- Analytics KPIs -->
+      <div class="hero-stats" style="margin-top: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;">
+        <div class="stat-box" style="background: var(--bg-card); padding: 18px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <span class="stat-label">Sessões Totais (Agregadas)</span>
+          <span id="stat-an-sessions" class="stat-value" style="color: var(--accent-emerald);">0</span>
+        </div>
+        <div class="stat-box" style="background: var(--bg-card); padding: 18px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <span class="stat-label">Tempo Médio de Contemplação</span>
+          <span id="stat-an-dwell" class="stat-value" style="color: var(--accent-cyan);">0.0s</span>
+        </div>
+        <div class="stat-box" style="background: var(--bg-card); padding: 18px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <span class="stat-label">Visualizações de Conteúdo</span>
+          <span id="stat-an-views" class="stat-value" style="color: var(--accent-amber);">0</span>
+        </div>
+        <div class="stat-box" style="background: var(--bg-card); padding: 18px; border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <span class="stat-label">Roteiros Concluídos</span>
+          <span id="stat-an-recipes" class="stat-value" style="color: var(--accent-indigo);">0</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px;">
+        <!-- Card: Atom Dwell Time & Views -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <h4 style="font-size: 1.05rem; margin-bottom: 16px; color: var(--text-main);">⏱️ Tempo de Permanência por Átomo</h4>
+          <div id="analytics-dwell-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Rendered by app.js -->
+          </div>
+        </div>
+
+        <!-- Card: Transition Flow Matrix -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
+          <h4 style="font-size: 1.05rem; margin-bottom: 16px; color: var(--text-main);">🔀 Matriz de Fluxo de Exploração (Transições)</h4>
+          <div id="analytics-flow-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Rendered by app.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Biometric Key Sovereign Spec Card -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px; margin-top: 24px;">
+        <h4 style="font-size: 1.05rem; margin-bottom: 12px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+          <span>🛡️ Chaves Biométricas Soberanas & Garantias Constitucionais (E12 & E13)</span>
+          <span class="badge-pill badge-green" style="font-size: 10px;">Zero-PII</span>
+        </h4>
+        <p style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+          As representações faciais são chaves probabilísticas vetoriais (<strong>ArcFace-512</strong>) derivadas com salt criptográfico exclusivo do Kernel do Totem (<code>elo://bio/v1/{hash}</code>). 
+          <strong>Nenhuma imagem de câmera é salva em disco ou transmitida</strong>, garantindo total isolamento por hardware e impossibilitando o cruzamento de identidades entre dispositivos diferentes.
+        </p>
+      </div>
+    </section>
 
     <!-- Tab 1: Atoms Grid -->
     <section id="tab-atoms" class="tab-pane active">
