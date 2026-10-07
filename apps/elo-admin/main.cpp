@@ -8,12 +8,42 @@
 namespace {
 
 std::filesystem::path resolve_web_root() {
-    for (const auto& candidate : {"web/admin", "../web/admin", "../../web/admin", "/usr/share/elo/web/admin"}) {
-        if (QDir(candidate).exists()) {
-            return std::filesystem::canonical(candidate);
+    auto env_root = qEnvironmentVariable("ELO_WEB_ROOT");
+    if (!env_root.isEmpty() && QDir(env_root).exists()) {
+        return std::filesystem::canonical(env_root.toStdString());
+    }
+
+    QString appDir = QCoreApplication::applicationDirPath();
+    QString home = QDir::homePath();
+
+    std::vector<QString> candidates = {
+        QStringLiteral("/usr/local/share/elo/admin"),
+        QStringLiteral("/usr/local/share/elo/web/admin"),
+        QStringLiteral("/usr/share/elo/admin"),
+        QStringLiteral("/usr/share/elo/web/admin"),
+        appDir + QStringLiteral("/../share/elo/admin"),
+        appDir + QStringLiteral("/../share/elo/web/admin"),
+        QStringLiteral("web/admin"),
+        QStringLiteral("../web/admin"),
+        QStringLiteral("../../web/admin"),
+        home + QStringLiteral("/ELO/web/admin"),
+        home + QStringLiteral("/elo/web/admin")
+    };
+
+    for (const auto& candidate : candidates) {
+        if (QDir(candidate).exists() && QFile::exists(QDir(candidate).filePath(QStringLiteral("index.html")))) {
+            return std::filesystem::canonical(candidate.toStdString());
         }
     }
-    return "web/admin";
+
+    // Fallback: check directories even if index.html check is loose
+    for (const auto& candidate : candidates) {
+        if (QDir(candidate).exists()) {
+            return std::filesystem::canonical(candidate.toStdString());
+        }
+    }
+
+    return "/usr/local/share/elo/admin";
 }
 
 } // namespace

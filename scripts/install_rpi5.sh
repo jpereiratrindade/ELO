@@ -96,14 +96,18 @@ $SUDO_CMD ninja -C build install 2>/dev/null || {
     $SUDO_CMD cp build/apps/elo-admin/elo-admin /usr/local/bin/
 }
 
-# Instalar utilitário CLI elo-ctl
+# Instalar utilitário CLI elo-ctl e elo-kiosk-launcher
 $SUDO_CMD cp deploy/scripts/elo-ctl /usr/local/bin/
+$SUDO_CMD cp deploy/scripts/elo-kiosk-launcher /usr/local/bin/
 $SUDO_CMD chmod +x /usr/local/bin/elo-ctl
+$SUDO_CMD chmod +x /usr/local/bin/elo-kiosk-launcher
 $SUDO_CMD chmod +x /usr/local/bin/elo-kiosk
 $SUDO_CMD chmod +x /usr/local/bin/elo-admin
 
 # Instalar arquivos estáticos da web de administração
+$SUDO_CMD mkdir -p /usr/local/share/elo/admin
 $SUDO_CMD mkdir -p /usr/local/share/elo/web/admin
+$SUDO_CMD cp -r web/admin/* /usr/local/share/elo/admin/
 $SUDO_CMD cp -r web/admin/* /usr/local/share/elo/web/admin/
 
 # 6. Inicialização do Espaço de Dados do Usuário (Catálogo Bioma Pampa & Seeds)

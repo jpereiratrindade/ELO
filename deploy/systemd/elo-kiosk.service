@@ -1,23 +1,21 @@
 [Unit]
 Description=ELO Autonomous Offline Kiosk (Totem UI)
-After=network.target elo-admin.service sound.target
+After=network.target elo-admin.service sound.target systemd-user-sessions.service
 Wants=elo-admin.service
 
 [Service]
 Type=simple
 User=%I
-Environment=QT_QPA_PLATFORM=eglfs
-Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
-Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
-Environment=QT_QPA_EGLFS_INTEGRATION=eglfs_kms
-Environment=XDG_RUNTIME_DIR=/run/user/%U
-SupplementaryGroups=video render input audio tty
-WorkingDirectory=/home/%I
-ExecStart=/usr/local/bin/elo-kiosk
-Restart=always
-RestartSec=3s
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
 StandardOutput=journal
 StandardError=journal
+SupplementaryGroups=video render input audio tty
+WorkingDirectory=/home/%I
+ExecStart=/usr/local/bin/elo-kiosk-launcher
+Restart=always
+RestartSec=3s
 
 [Install]
 WantedBy=multi-user.target
