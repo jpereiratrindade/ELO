@@ -4,6 +4,8 @@ build-*/
 *.o
 *.a
 .DS_Store
+.elo-content/
+.elo-runtime/
 content/bundles/
 content/staging/
 content/current

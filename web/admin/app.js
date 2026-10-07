@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target) {
         target.classList.add('active');
         if (target.id === 'tab-media') fetchMedia();
-        if (target.id === 'tab-bundles') { fetchManifest(); fetchPackagePlans(); }
+        if (target.id === 'tab-bundles') fetchManifest().then(() => fetchPackagePlans());
         if (target.id === 'tab-apps') fetchApplications();
         if (target.id === 'tab-analytics') fetchAnalytics();
       }
@@ -200,38 +200,55 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function fetchPackagePlans() {
+  async function fetchPackagePlans(preferredId = '') {
     const select = document.getElementById('pkg-plan-select');
     if (!select) return;
     try {
       const res = await fetch('/api/packages');
       if (!res.ok) return;
       const data = await res.json();
-      const currentId = document.getElementById('pkg-id')?.value || '';
+      const currentId = preferredId || document.getElementById('pkg-id')?.value || '';
+      const plans = data.packages || [];
       select.innerHTML = '<option value="">Novo pacote / manifesto atual</option>';
-      (data.packages || []).forEach(plan => {
+      plans.forEach(plan => {
         const option = document.createElement('option');
         option.value = plan.bundle_id;
         option.textContent = `${plan.title || plan.bundle_id} (v${plan.version || '0.1.0'})`;
         option.selected = plan.bundle_id === currentId;
         select.appendChild(option);
       });
+      select.value = plans.some(plan => plan.bundle_id === currentId) ? currentId : '';
+
+      const list = document.getElementById('pkg-plans-list');
+      if (list) {
+        list.innerHTML = plans.length ? '' : '<span class="form-hint">Nenhum pacote salvo ainda.</span>';
+        plans.forEach(plan => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `btn btn-sm ${plan.bundle_id === currentId ? 'btn-primary' : 'btn-secondary'}`;
+          button.textContent = `📦 ${plan.title || plan.bundle_id} · v${plan.version || '0.1.0'}`;
+          button.addEventListener('click', () => loadPackagePlan(plan.bundle_id));
+          list.appendChild(button);
+        });
+      }
     } catch (e) {
       console.warn('Erro ao listar planos de pacote:', e);
     }
   }
 
-  document.getElementById('pkg-plan-select')?.addEventListener('change', async (event) => {
-    const id = event.target.value;
+  async function loadPackagePlan(id) {
     if (!id) return;
     try {
       const res = await fetch(`/api/packages/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error('Pacote não encontrado');
       applyPackageManifest(await res.json());
+      await fetchPackagePlans(id);
     } catch (e) {
       showNotice('Erro ao carregar pacote', e.message, true);
     }
-  });
+  }
+
+  document.getElementById('pkg-plan-select')?.addEventListener('change', (event) => loadPackagePlan(event.target.value));
 
   function renderPackageAtoms(atoms) {
     const list = document.getElementById('pkg-atoms-list');
@@ -1563,7 +1580,7 @@ document.addEventListener('DOMContentLoaded', () => {
           updateLifecycleUI(true);
           fetchStatus();
           fetchCatalog();
-          fetchPackagePlans();
+          await fetchPackagePlans(bundleId);
           return true;
         } else {
           showNotice('Erro ao Salvar', data.error || 'Falha', true);
@@ -1599,8 +1616,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchStatus();
   fetchCatalog();
   fetchMedia();
-  fetchManifest();
-  fetchPackagePlans();
+  fetchManifest().then(() => fetchPackagePlans());
   fetchApplications();
   fetchAnalytics();
   setInterval(fetchStatus, 4000);
