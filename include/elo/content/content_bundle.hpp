@@ -90,6 +90,9 @@ public:
     /// @brief Atomically rolls back 'current' to an existing bundle in bundles/
     [[nodiscard]] core::Result<void> rollback_to(const std::string& bundle_dir_or_version);
 
+    /// @brief Atomically removes the active bundle pointer without deleting published bundles.
+    [[nodiscard]] core::Result<void> deactivate();
+
     /// @brief Performs atomic symlink swap: current -> target_bundle_path
     static core::Result<void> atomic_activate(
         const std::filesystem::path& current_link,

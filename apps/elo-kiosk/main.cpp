@@ -223,6 +223,13 @@ int main(int argc, char* argv[]) {
                 presentation_model->advanceContent();
             });
 
+        QObject::connect(control_server.get(), &elo::system::ControlServer::contentDeactivated,
+            [content_catalog, &presentation_model]() {
+                std::cout << "[ELO][kiosk] Active content package deactivated\n";
+                presentation_model->deactivateContent();
+                content_catalog->clear();
+            });
+
         QObject::connect(control_server.get(), &elo::system::ControlServer::reloadRequested,
             [content_catalog, system_content, resolve_active_catalog, &presentation_model]() {
                 std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";

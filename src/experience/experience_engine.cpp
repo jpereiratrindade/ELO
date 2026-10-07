@@ -525,4 +525,13 @@ void ExperienceEngine::finish_session() {
     }
 }
 
+void ExperienceEngine::deactivate_content() noexcept {
+    active_atom_ = nullptr;
+    active_variant_ = nullptr;
+    active_reason_ = {};
+    recipe_active_ = false;
+    recipe_state_ = {};
+    session_seen_content_.clear();
+}
+
 } // namespace elo::experience

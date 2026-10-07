@@ -277,6 +277,24 @@ std::optional<BundleManifest> BundlePublisher::active_bundle() const {
     return read_manifest(m_path);
 }
 
+core::Result<void> BundlePublisher::deactivate() {
+    std::error_code ec;
+    const auto current = current_symlink();
+    if (!std::filesystem::exists(std::filesystem::symlink_status(current))) return {};
+
+    const auto nonce = std::to_string(::getpid()) + "." +
+        std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto retired = current.parent_path() / ("current.inactive." + nonce);
+    std::filesystem::rename(current, retired, ec);
+    if (ec) {
+        return std::unexpected(core::make_error(
+            core::ErrorCode::ContentError,
+            "Failed to deactivate current bundle: " + ec.message()));
+    }
+    std::filesystem::remove(retired, ec);
+    return {};
+}
+
 core::Result<void> BundlePublisher::atomic_activate(
     const std::filesystem::path& current_link,
     const std::filesystem::path& target_bundle_path) {

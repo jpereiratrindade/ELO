@@ -30,6 +30,7 @@ public:
 signals:
     void reloadRequested();
     void bundlePublished(const QString& bundleId, const QString& hash);
+    void contentDeactivated();
     void commandReceived(const QString& command);
     void showAtomRequested(const QString& atomId);
     void advanceRequested();
@@ -53,6 +54,7 @@ public:
     [[nodiscard]] bool ping(int timeout_ms = 1000);
     [[nodiscard]] bool send_reload(int timeout_ms = 1000);
     [[nodiscard]] bool notify_published(const QString& bundle_id, const QString& hash, int timeout_ms = 1000);
+    [[nodiscard]] bool notify_deactivated(int timeout_ms = 1000);
     [[nodiscard]] bool show_atom(const QString& atom_id, int timeout_ms = 1000);
     [[nodiscard]] bool advance_content(int timeout_ms = 1000);
     [[nodiscard]] bool shutdown_kiosk(int timeout_ms = 1000);

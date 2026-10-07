@@ -5,9 +5,10 @@
 O ELO mantém duas dimensões independentes:
 
 - **Átomo**: registro canônico, reutilizável, endereçado por `content_id` imutável.
-- **Pacote**: composição editorial versionada que referencia átomos por `atom_ids` e pode ser vinculada a uma `application_id`.
+- **Aplicação**: experiência editorial editável que reúne metadados, configuração de apresentação e referências a átomos por `atom_ids`.
+- **Bundle**: snapshot técnico e imutável gerado ao publicar uma versão da aplicação. Não é um cadastro independente na interface.
 
-Um átomo pode participar de vários pacotes. Editar um pacote não duplica o átomo. Publicar um pacote cria um snapshot imutável somente com os átomos selecionados, suas variantes e as relações internas à seleção.
+Um átomo pode participar de várias aplicações. Editar uma aplicação não duplica o átomo. Publicar uma aplicação cria um bundle somente com os átomos selecionados, suas variantes e as relações internas à seleção.
 
 ## Metadados do átomo
 
@@ -54,18 +55,19 @@ O núcleo v0.2 é independente de domínio:
 
 `subject.scientific_name` permanece somente para compatibilidade com o schema v0.1. Novos domínios devem preferir `subtype`, `summary` e `metadata` para qualificações específicas.
 
-## Metadados do pacote
+## Metadados da aplicação e manifesto técnico
 
 ```json
 {
   "bundle_id": "elo-content-example",
   "version": "1.0.0",
-  "application_id": "app.elo.example",
+  "domain_category": "general",
+  "target_audience": "general",
   "atom_ids": ["record_001", "record_002"]
 }
 ```
 
-`atom_ids` vazio em manifestos v0.1 significa “todos os átomos”, garantindo compatibilidade. Em manifestos v0.2, o Studio grava a seleção explícita.
+O campo técnico `bundle_id` permanece no manifesto para compatibilidade e endereçamento das versões publicadas; na interface ele é apresentado como identificador da aplicação. `atom_ids` vazio em manifestos v0.1 significa “todos os átomos”. Em manifestos v0.2, o Studio grava a seleção explícita.
 
 ## Persistência e banco de dados
 
@@ -88,19 +90,20 @@ evita que a presença de átomos no SQLite impeça a descoberta de pacotes publi
 antes da migração. Depois da importação, o fluxo editorial é unidirecional: SQLite →
 snapshot JSON → validação → bundle imutável.
 
-## Estados e operações do pacote
+## Estados e operações da aplicação
 
-Um pacote possui três estados complementares, apresentados separadamente no Studio:
+Uma aplicação possui três estados complementares, apresentados separadamente no Studio:
 
-- **salvo**: existe como plano editável no SQLite;
+- **salva**: existe como rascunho editável no SQLite;
 - **publicado**: possui pelo menos uma versão imutável no diretório de bundles;
 - **ativo**: uma versão publicada é o manifesto que o Totem está executando.
 
-Salvar nunca publica nem ativa. **Ativar** gera o snapshot, valida, publica a versão e
+Salvar nunca publica nem ativa. **Ativar** gera o bundle, valida, publica a versão e
 troca o manifesto ativo como uma única operação da API. Uma combinação
 `{bundle_id, version}` já publicada não pode ser sobrescrita com conteúdo diferente;
 é necessário incrementar a versão semântica. Reativar exatamente o mesmo conteúdo é
-permitido. Um plano ativo não pode ser excluído antes da ativação de outro pacote.
+permitido. Desativar remove apenas o apontamento de execução: a aplicação e suas versões
+publicadas são preservadas. Uma aplicação ativa não pode ser excluída.
 
 ## Publicação e controle remoto
 

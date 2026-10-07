@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
         target.classList.add('active');
         if (target.id === 'tab-media') fetchMedia();
         if (target.id === 'tab-bundles') fetchManifest().then(() => fetchPackagePlans());
-        if (target.id === 'tab-apps') fetchApplications();
         if (target.id === 'tab-analytics') fetchAnalytics();
       }
     });
@@ -64,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
       stepActive.className = 'step-item step-current';
       lifecycleName.textContent = 'ACTIVE (No Totem)';
       lifecycleName.style.color = 'var(--accent-emerald)';
-      badge.textContent = 'BUNDLE ATIVO';
+      badge.textContent = 'APLICAÇÃO ATIVA';
       badge.style.color = 'var(--accent-emerald)';
       badge.style.borderColor = 'rgba(16, 185, 129, 0.3)';
       badge.style.background = 'rgba(16, 185, 129, 0.15)';
@@ -144,7 +143,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('stat-revision').textContent = '#' + data.active_bundle.curation_revision;
       } else {
         document.getElementById('active-bundle-title').textContent = 'Biodiversidade do Bioma Pampa & Campos Sulinos';
-        document.getElementById('active-bundle-desc').textContent = 'Catálogo soberano local em modo Rascunho Editorial. Crie e ative um pacote para publicar a primeira versão.';
+        document.getElementById('active-bundle-desc').textContent = 'Catálogo soberano local em modo Rascunho Editorial. Crie e ative uma aplicação para publicar a primeira versão.';
         document.getElementById('active-bundle-hash').textContent = 'Pronto para publicação determinística';
         document.getElementById('stat-version').textContent = 'v1.0.0';
         document.getElementById('stat-revision').textContent = '#1 (Draft)';
@@ -186,11 +185,12 @@ document.addEventListener('DOMContentLoaded', () => {
       if (document.getElementById('pkg-version')) document.getElementById('pkg-version').value = m.version || '';
       if (document.getElementById('pkg-theme')) document.getElementById('pkg-theme').value = m.default_theme || '';
       if (document.getElementById('pkg-desc')) document.getElementById('pkg-desc').value = m.description || '';
-      if (document.getElementById('pkg-app-id')) document.getElementById('pkg-app-id').value = m.application_id || '';
+      if (document.getElementById('pkg-domain')) document.getElementById('pkg-domain').value = m.domain_category || '';
+      if (document.getElementById('pkg-audience')) document.getElementById('pkg-audience').value = m.target_audience || '';
       packageAtomIds = new Set(Array.isArray(m.atom_ids) ? m.atom_ids : []);
       selectedPackageId = m.bundle_id || '';
       const heading = document.getElementById('pkg-editor-heading');
-      if (heading) heading.textContent = m.title || 'Novo pacote';
+      if (heading) heading.textContent = m.title || 'Nova aplicação';
       const state = document.getElementById('package-badge-state');
       const isActive = currentStatus?.active_bundle?.bundle_id === selectedPackageId;
       if (state) {
@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const plans = data.packages || [];
       packagePlansData = plans;
       selectedPackageId = currentId;
-      select.innerHTML = '<option value="">Novo pacote / manifesto atual</option>';
+      select.innerHTML = '<option value="">Nova aplicação</option>';
       plans.forEach(plan => {
         const option = document.createElement('option');
         option.value = plan.bundle_id;
@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const count = document.getElementById('pkg-plans-count');
       if (count) count.textContent = plans.length;
       if (list) {
-        list.innerHTML = plans.length ? '' : '<div class="empty-state"><strong>Nenhum pacote salvo</strong><p>Crie o primeiro pacote para organizar uma publicação.</p></div>';
+        list.innerHTML = plans.length ? '' : '<div class="empty-state"><strong>Nenhuma aplicação salva</strong><p>Crie a primeira aplicação e selecione seus conteúdos.</p></div>';
         plans.forEach(plan => {
           const isActive = !!plan.is_active;
           const item = document.createElement('article');
@@ -249,50 +249,66 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="package-plan-meta">v${plan.version || '0.1.0'} · ${(plan.atom_ids || []).length} átomos · ${plan.is_published ? 'publicado' : 'não publicado'}<br>${plan.bundle_id}</div>
             <div class="package-plan-actions">
               <button type="button" class="btn btn-secondary btn-edit-package">Editar</button>
-              <button type="button" class="btn ${isActive ? 'btn-secondary' : 'btn-primary'} btn-activate-package" ${isActive ? 'disabled' : ''}>${isActive ? 'Em execução' : 'Ativar'}</button>
+              <button type="button" class="btn ${isActive ? 'btn-danger-outline' : 'btn-primary'} btn-activate-package">${isActive ? 'Desativar' : 'Ativar'}</button>
               <button type="button" class="btn btn-danger-outline btn-delete-package" ${isActive ? 'disabled' : ''} title="Excluir plano">×</button>
             </div>`;
           item.addEventListener('click', (event) => {
             if (!event.target.closest('button')) loadPackagePlan(plan.bundle_id);
           });
           item.querySelector('.btn-edit-package').addEventListener('click', () => loadPackagePlan(plan.bundle_id));
-          item.querySelector('.btn-activate-package').addEventListener('click', () => activatePackagePlan(plan));
+          item.querySelector('.btn-activate-package').addEventListener('click', () => isActive ? deactivatePackagePlan(plan) : activatePackagePlan(plan));
           item.querySelector('.btn-delete-package').addEventListener('click', () => deletePackagePlan(plan));
           list.appendChild(item);
         });
       }
     } catch (e) {
-      console.warn('Erro ao listar planos de pacote:', e);
+      console.warn('Erro ao listar aplicações:', e);
     }
   }
 
   async function activatePackagePlan(plan) {
     if (!plan || !plan.bundle_id) return;
-    if (!confirm(`Ativar o pacote "${plan.title || plan.bundle_id}" no Totem?`)) return;
+    if (!confirm(`Publicar e ativar a aplicação "${plan.title || plan.bundle_id}" no Totem?`)) return;
     try {
-      showNotice('Ativando pacote…', `Validando e publicando ${plan.title || plan.bundle_id}.`);
+      showNotice('Ativando aplicação…', `Validando e publicando ${plan.title || plan.bundle_id}.`);
       const publishResponse = await fetch(`/api/packages/${encodeURIComponent(plan.bundle_id)}/activate`, { method: 'POST' });
       const result = await publishResponse.json();
-      if (!result.success) throw new Error(result.error || 'Falha ao publicar pacote');
-      showNotice('Pacote ativo', `${plan.title || plan.bundle_id} foi publicado e ativado no Totem.`);
+      if (!result.success) throw new Error(result.error || 'Falha ao publicar a aplicação');
+      showNotice('Aplicação ativa', `${plan.title || plan.bundle_id} foi publicada e ativada no Totem.`);
       await fetchStatus();
       await fetchPackagePlans(plan.bundle_id);
     } catch (error) {
-      showNotice('Falha ao ativar pacote', error.message, true);
+      showNotice('Falha ao ativar aplicação', error.message, true);
+    }
+  }
+
+  async function deactivatePackagePlan(plan) {
+    if (!plan || !plan.bundle_id) return;
+    if (!confirm(`Desativar a aplicação "${plan.title || plan.bundle_id}" no Totem?\n\nEla continuará salva e suas versões permanecerão publicadas.`)) return;
+    try {
+      showNotice('Desativando aplicação…', plan.title || plan.bundle_id);
+      const response = await fetch(`/api/packages/${encodeURIComponent(plan.bundle_id)}/deactivate`, { method: 'POST' });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Falha ao desativar aplicação');
+      showNotice('Aplicação desativada', `${plan.title || plan.bundle_id} continua salva e publicada.`);
+      await fetchStatus();
+      await fetchPackagePlans(plan.bundle_id);
+    } catch (error) {
+      showNotice('Falha ao desativar aplicação', error.message, true);
     }
   }
 
   async function deletePackagePlan(plan) {
-    if (!plan || plan.is_active || !confirm(`Excluir o plano de pacote "${plan.title || plan.bundle_id}"?\n\nBundles já publicados permanecerão no histórico.`)) return;
+    if (!plan || plan.is_active || !confirm(`Excluir a aplicação "${plan.title || plan.bundle_id}"?\n\nVersões já publicadas permanecerão no histórico.`)) return;
     try {
       const response = await fetch(`/api/packages/${encodeURIComponent(plan.bundle_id)}`, { method: 'DELETE' });
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || 'Falha ao excluir pacote');
-      showNotice('Pacote excluído', `${plan.title || plan.bundle_id} foi removido dos planos editoriais.`);
+      if (!response.ok || !result.success) throw new Error(result.error || 'Falha ao excluir aplicação');
+      showNotice('Aplicação excluída', `${plan.title || plan.bundle_id} foi removida.`);
       hidePackageEditor();
       await fetchPackagePlans();
     } catch (error) {
-      showNotice('Falha ao excluir pacote', error.message, true);
+      showNotice('Falha ao excluir aplicação', error.message, true);
     }
   }
 
@@ -300,13 +316,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!id) return;
     try {
       const res = await fetch(`/api/packages/${encodeURIComponent(id)}`);
-      if (!res.ok) throw new Error('Pacote não encontrado');
+      if (!res.ok) throw new Error('Aplicação não encontrada');
       applyPackageManifest(await res.json());
       document.getElementById('pkg-id').disabled = true;
       showPackageEditor();
       await fetchPackagePlans(id);
     } catch (e) {
-      showNotice('Erro ao carregar pacote', e.message, true);
+      showNotice('Erro ao carregar aplicação', e.message, true);
     }
   }
 
@@ -333,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (badge) badge.textContent = `${selectedCount} / ${atoms.length} Átomos`;
 
     if (atoms.length === 0) {
-      list.innerHTML = '<p style="color:var(--text-dim); padding:10px;">Nenhum átomo cadastrado neste pacote ainda.</p>';
+      list.innerHTML = '<p style="color:var(--text-dim); padding:10px;">Nenhum átomo cadastrado nesta aplicação.</p>';
       return;
     }
 
@@ -343,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const item = document.createElement('div');
       item.className = 'package-atom-item';
       item.innerHTML = `
-        <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.size === 0 || packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} no pacote">
+        <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.size === 0 || packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} na aplicação">
         <div>
           <strong style="color: var(--text-main); font-size: 0.9rem;">${a.canonical_name || a.title}</strong>
           <div style="color: var(--text-dim); font-size: 0.75rem;">${a.type_label || a.type} · <code>${a.content_id}</code></div>
@@ -370,7 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
     packageAtomIds = new Set(catalogData.atoms.map(atom => atom.content_id));
     selectedPackageId = '';
     document.getElementById('pkg-id').disabled = false;
-    document.getElementById('pkg-editor-heading').textContent = 'Novo pacote';
+    document.getElementById('pkg-editor-heading').textContent = 'Nova aplicação';
     document.getElementById('package-badge-state').textContent = 'NOVO';
     renderPackageAtoms(catalogData.atoms || []);
     fetchPackagePlans('');
@@ -1635,10 +1651,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const version = document.getElementById('pkg-version').value.trim();
       const theme = document.getElementById('pkg-theme').value.trim();
       const desc = document.getElementById('pkg-desc').value.trim();
-      const applicationId = document.getElementById('pkg-app-id').value.trim();
+      const domainCategory = document.getElementById('pkg-domain').value.trim();
+      const targetAudience = document.getElementById('pkg-audience').value.trim();
 
       if (!title || !bundleId || !version) {
-        showNotice('Campos Obrigatórios', 'Preencha Título, ID e Versão do Pacote.', true);
+        showNotice('Campos Obrigatórios', 'Preencha nome, identificador e versão da aplicação.', true);
         return false;
       }
 
@@ -1653,13 +1670,14 @@ document.addEventListener('DOMContentLoaded', () => {
             title: title,
             default_theme: theme,
             description: desc,
-            application_id: applicationId,
+            domain_category: domainCategory,
+            target_audience: targetAudience,
             atom_ids: packageAtomIds.size ? Array.from(packageAtomIds) : catalogData.atoms.map(a => a.content_id)
           })
         });
         const data = await res.json();
         if (data.success) {
-          showNotice('Pacote Atualizado!', `Metadados do pacote "${title}" (${version}) salvos com sucesso.`);
+          showNotice('Aplicação salva!', `A aplicação "${title}" (${version}) foi salva com sucesso.`);
           updateLifecycleUI(true);
           fetchStatus();
           fetchCatalog();
@@ -1691,7 +1709,6 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchStatus().then(() => fetchManifest()).then(() => fetchPackagePlans());
   fetchCatalog();
   fetchMedia();
-  fetchApplications();
   fetchAnalytics();
   setInterval(fetchStatus, 4000);
 });

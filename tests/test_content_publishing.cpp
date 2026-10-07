@@ -113,6 +113,11 @@ void test_bundle_publisher_and_atomic_swap() {
     TEST_ASSERT(active_after_rb.has_value(), "Active after rollback exists");
     std::cout << "  Rollback verified: current symlink restored.\n";
 
+    const auto deactivate_res = publisher.deactivate();
+    TEST_ASSERT(deactivate_res.has_value(), "Active bundle can be deactivated");
+    TEST_ASSERT(!publisher.active_bundle().has_value(), "No bundle remains active after deactivation");
+    TEST_ASSERT(std::filesystem::exists(pub_res.bundle_path), "Deactivation preserves published bundle");
+
     // Cleanup temp
     std::error_code ec;
     std::filesystem::remove_all(temp_root, ec);
@@ -166,21 +171,27 @@ void test_control_plane_ipc(int argc, char* argv[]) {
     TEST_ASSERT(server.start(), "Server must start on test socket");
 
     bool reload_received = false;
+    bool deactivated_received = false;
     QObject::connect(&server, &elo::system::ControlServer::reloadRequested, [&]() {
         reload_received = true;
+    });
+    QObject::connect(&server, &elo::system::ControlServer::contentDeactivated, [&]() {
+        deactivated_received = true;
     });
 
     bool ping_ok = false;
     bool reload_sent = false;
+    bool deactivated_sent = false;
 
     std::thread client_thread([&]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
         elo::system::ControlClient client(test_sock);
         ping_ok = client.ping(2000);
         reload_sent = client.send_reload(2000);
+        deactivated_sent = client.notify_deactivated(2000);
     });
 
-    for (int i = 0; i < 100 && (!reload_received || !reload_sent); ++i) {
+    for (int i = 0; i < 100 && (!reload_received || !reload_sent || !deactivated_received || !deactivated_sent); ++i) {
         QCoreApplication::processEvents();
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
@@ -190,6 +201,8 @@ void test_control_plane_ipc(int argc, char* argv[]) {
     TEST_ASSERT(ping_ok, "Ping to control server must succeed with PONG");
     TEST_ASSERT(reload_sent, "Send reload must acknowledge");
     TEST_ASSERT(reload_received, "Server must have received and emitted reloadRequested");
+    TEST_ASSERT(deactivated_sent, "Content deactivation must be acknowledged");
+    TEST_ASSERT(deactivated_received, "Server must emit contentDeactivated");
     std::cout << "  Control plane IPC verified: PING/PONG and CONTENT_RELOAD.\n";
     server.stop();
 }

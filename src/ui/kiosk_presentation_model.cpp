@@ -312,6 +312,14 @@ void KioskPresentationModel::selectContextualContent(const QString& roleStr) {
     }
 }
 
+void KioskPresentationModel::deactivateContent() {
+    if (!engine_) return;
+    engine_->deactivate_content();
+    current_content_.clear();
+    emit contentChanged();
+    emit stateChanged();
+}
+
 void KioskPresentationModel::startRecipe(const QString& recipeId) {
     if (engine_) {
         auto res = engine_->start_recipe(recipeId.toStdString());

@@ -112,6 +112,9 @@ void ControlServer::onReadyRead() {
         if (line == QStringLiteral("CONTENT_RELOAD")) {
             emit reloadRequested();
             socket->write("OK RELOAD_ACK\n");
+        } else if (line == QStringLiteral("CONTENT_DEACTIVATED")) {
+            emit contentDeactivated();
+            socket->write("OK DEACTIVATED_ACK\n");
         } else if (line.startsWith(QStringLiteral("SHOW_ATOM "))) {
             QString atomId = line.mid(10).trimmed();
             emit showAtomRequested(atomId);
@@ -162,6 +165,11 @@ bool ControlClient::send_reload(int timeout_ms) {
 
 bool ControlClient::notify_published(const QString& bundle_id, const QString& hash, int timeout_ms) {
     auto reply = send_command(QString("CONTENT_PUBLISHED %1 %2").arg(bundle_id, hash), timeout_ms);
+    return reply.contains(QStringLiteral("OK"));
+}
+
+bool ControlClient::notify_deactivated(int timeout_ms) {
+    auto reply = send_command(QStringLiteral("CONTENT_DEACTIVATED"), timeout_ms);
     return reply.contains(QStringLiteral("OK"));
 }
 

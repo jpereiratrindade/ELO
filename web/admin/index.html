@@ -48,7 +48,7 @@
     <section class="hero-card">
       <div class="hero-main">
         <div class="hero-meta">
-          <div class="bundle-badge" id="bundle-badge">BUNDLE ATIVO</div>
+          <div class="bundle-badge" id="bundle-badge">APLICAÇÃO ATIVA</div>
           <h2 id="active-bundle-title" class="bundle-title">Carregando catálogo...</h2>
           <p id="active-bundle-desc" class="bundle-desc">Buscando manifesto soberano do totem...</p>
           
@@ -128,7 +128,7 @@
         </button>
         <button id="btn-open-packages" class="btn btn-secondary">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-          Gerenciar e Ativar Pacotes
+          Gerenciar Aplicações
         </button>
         <button id="btn-reload" class="btn btn-outline">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67"/></svg>
@@ -149,8 +149,7 @@
     <!-- Navigation Tabs -->
     <div class="tab-nav">
       <button class="tab-btn active" data-tab="tab-atoms">Átomos de Conteúdo</button>
-      <button class="tab-btn" data-tab="tab-bundles">📦 Pacotes de Conteúdo</button>
-      <button class="tab-btn" data-tab="tab-apps">📱 Aplicações & Contextos</button>
+      <button class="tab-btn" data-tab="tab-bundles">📱 Aplicações</button>
       <button class="tab-btn" data-tab="tab-analytics">📊 Análise de Dados (Zero-PII)</button>
       <button class="tab-btn" data-tab="tab-media">Mídias & Assets</button>
       <button class="tab-btn" data-tab="tab-relations">Relações</button>
@@ -159,42 +158,42 @@
       <button class="tab-btn" data-tab="tab-ipc">Control Plane & Socket</button>
     </div>
 
-    <!-- Tab 0: Content Packages / Bundles Management -->
+    <!-- Applications. Immutable bundles are generated internally when publishing. -->
     <section id="tab-bundles" class="tab-pane">
       <div class="pane-header-row">
         <div>
-          <h3 class="pane-title">Gestão Curatorial de Pacotes de Conteúdo (Content Bundles)</h3>
-          <p class="pane-subtitle">Selecione átomos reutilizáveis e publique uma composição versionada para uma aplicação do Totem</p>
+          <h3 class="pane-title">Aplicações Editoriais</h3>
+          <p class="pane-subtitle">Configure a experiência, selecione seus átomos e publique versões imutáveis no Totem</p>
         </div>
         <div class="package-header-actions">
-          <button id="btn-new-package" class="btn btn-secondary btn-sm-action">＋ Novo pacote</button>
+          <button id="btn-new-package" class="btn btn-secondary btn-sm-action">＋ Nova aplicação</button>
         </div>
       </div>
 
       <div id="package-workspace" class="package-workspace library-only">
         <aside class="package-library">
           <div class="package-library-header">
-            <div><h4>Pacotes salvos</h4><p>Selecione para editar ou ativar</p></div>
+            <div><h4>Aplicações</h4><p>Selecione para editar, publicar ou ativar</p></div>
             <span id="pkg-plans-count" class="badge-pill">0</span>
           </div>
-          <select id="pkg-plan-select" class="input-select package-mobile-select"><option value="">Selecione um pacote</option></select>
+          <select id="pkg-plan-select" class="input-select package-mobile-select"><option value="">Selecione uma aplicação</option></select>
           <div id="pkg-plans-list" class="package-plans-list"></div>
         </aside>
 
         <div id="package-editor-card" class="package-editor-card hidden">
           <div class="package-card-heading">
-            <div><span class="package-eyebrow">Editor de pacote</span><h4 id="pkg-editor-heading">Novo pacote</h4></div>
+            <div><span class="package-eyebrow">Editor de aplicação</span><h4 id="pkg-editor-heading">Nova aplicação</h4></div>
             <span id="package-badge-state" class="badge-pill">RASCUNHO</span>
           </div>
           <form id="form-package-meta">
             <div class="form-group" style="margin-bottom: 14px;">
-              <label for="pkg-title" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Título do Pacote de Conteúdo</label>
+              <label for="pkg-title" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Nome da aplicação</label>
               <input type="text" id="pkg-title" class="input-text" placeholder="Ex: Bioma Pampa — Campos Sulinos" required style="width: 100%;">
             </div>
             <div class="form-row-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px;">
               <div class="form-group">
-                <label for="pkg-id" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Identificador do Pacote (ID)</label>
-                <input type="text" id="pkg-id" class="input-text" placeholder="elo-content-pampa" required style="width: 100%;">
+                <label for="pkg-id" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Identificador da aplicação</label>
+                <input type="text" id="pkg-id" class="input-text" placeholder="app.elo.bioma-pampa" required style="width: 100%;">
               </div>
               <div class="form-group">
                 <label for="pkg-version" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Versão Semântica</label>
@@ -205,21 +204,24 @@
               <label for="pkg-theme" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Tema visual padrão</label>
               <input type="text" id="pkg-theme" class="input-text" placeholder="default" required style="width: 100%;">
             </div>
-            <div class="form-group" style="margin-bottom: 14px;"><label for="pkg-app-id">Aplicação de destino</label><input type="text" id="pkg-app-id" class="input-text" placeholder="ex: app.elo.museu"></div>
+            <div class="form-row-2" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+              <div class="form-group"><label for="pkg-domain">Domínio</label><input type="text" id="pkg-domain" class="input-text" placeholder="Ex: cultura, ciência, serviços"></div>
+              <div class="form-group"><label for="pkg-audience">Público principal</label><input type="text" id="pkg-audience" class="input-text" placeholder="Ex: público geral"></div>
+            </div>
             <div class="form-group" style="margin-bottom: 14px;">
-              <label for="pkg-desc" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Descrição Curatorial da Coleção</label>
-              <textarea id="pkg-desc" class="input-textarea" rows="3" placeholder="Objetivo curatorial do pacote e síntese da experiência..." style="width: 100%;"></textarea>
+              <label for="pkg-desc" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Descrição e propósito</label>
+              <textarea id="pkg-desc" class="input-textarea" rows="3" placeholder="Objetivo, contexto e síntese da experiência..." style="width: 100%;"></textarea>
             </div>
             <div class="package-editor-actions">
               <button type="button" id="btn-cancel-package" class="btn btn-secondary">Cancelar</button>
-              <button type="button" id="btn-save-package-meta" class="btn btn-primary">Salvar pacote</button>
+              <button type="button" id="btn-save-package-meta" class="btn btn-primary">Salvar aplicação</button>
             </div>
           </form>
         </div>
 
         <div id="package-atoms-card" class="package-atoms-card hidden">
           <div class="package-card-heading">
-            <div><span class="package-eyebrow">Composição</span><h4>Átomos do pacote</h4></div>
+            <div><span class="package-eyebrow">Conteúdo</span><h4>Átomos da aplicação</h4></div>
             <span id="pkg-atoms-count-badge" class="badge-pill" style="font-size: 11px;">0 Átomos</span>
           </div>
           <input id="pkg-atoms-search" class="input-text" type="search" placeholder="Buscar átomo por título, ID ou tipo…">
@@ -227,22 +229,6 @@
             <!-- Rendered by app.js -->
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- Tab: Applications & Domain Contexts -->
-    <section id="tab-apps" class="tab-pane">
-      <div class="pane-header-row">
-        <div>
-          <h3 class="pane-title">Registro Soberano de Aplicações e Contextos</h3>
-          <p class="pane-subtitle">Motor agnóstico a domínio: registre experiências (Biomas, Museus, Patrimônio Histórico, Artes, Ciência) e associe esquemas de metadados</p>
-        </div>
-        <button id="btn-new-app" class="btn btn-primary btn-sm-action">
-          + Nova Aplicação
-        </button>
-      </div>
-      <div id="apps-grid" class="atoms-grid" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); margin-top: 20px;">
-        <!-- Rendered by app.js -->
       </div>
     </section>
 

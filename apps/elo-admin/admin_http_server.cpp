@@ -1081,7 +1081,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         const QString id = sanitize_filename(QUrl::fromPercentEncoding(path.mid(14).toUtf8()));
         const auto active = publisher_.active_bundle();
         if (active && QString::fromStdString(active->bundle_id) == id) {
-            sendJsonResponse(socket, 409, "{\"error\":\"O pacote ativo não pode ser excluído. Ative outro pacote primeiro.\"}");
+            sendJsonResponse(socket, 409, "{\"error\":\"A aplicação ativa não pode ser excluída. Desative-a ou ative outra aplicação primeiro.\"}");
             return;
         }
         const bool removed = content_database_->delete_package(id);
@@ -1095,7 +1095,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         const QString id = sanitize_filename(QUrl::fromPercentEncoding(encodedId.toUtf8()));
         const auto plan = content_database_->package(id);
         if (plan.isEmpty()) {
-            sendJsonResponse(socket, 404, "{\"error\":\"Plano de pacote não encontrado\"}");
+            sendJsonResponse(socket, 404, "{\"error\":\"Aplicação não encontrada\"}");
             return;
         }
         content_database_->export_workspace(content_root_);
@@ -1103,7 +1103,7 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         if (!manifest.open(QIODevice::WriteOnly)
             || manifest.write(QJsonDocument(plan).toJson(QJsonDocument::Indented)) < 0
             || !manifest.commit()) {
-            sendJsonResponse(socket, 500, "{\"error\":\"Falha ao preparar manifesto do pacote\"}");
+            sendJsonResponse(socket, 500, "{\"error\":\"Falha ao preparar a versão publicável da aplicação\"}");
             return;
         }
         const auto result = publisher_.publish_and_activate(content_root_, "curator_local");
@@ -1123,13 +1123,34 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         return;
     }
 
+    if (method == QStringLiteral("POST") && path.startsWith(QStringLiteral("/api/packages/"))
+        && path.endsWith(QStringLiteral("/deactivate"))) {
+        const QString encodedId = path.mid(14, path.size() - 14 - 11);
+        const QString id = sanitize_filename(QUrl::fromPercentEncoding(encodedId.toUtf8()));
+        const auto active = publisher_.active_bundle();
+        if (!active || QString::fromStdString(active->bundle_id) != id) {
+            sendJsonResponse(socket, 409, "{\"error\":\"Esta aplicação não está ativa\"}");
+            return;
+        }
+        const auto result = publisher_.deactivate();
+        QJsonObject response{{QStringLiteral("success"), result.has_value()}};
+        if (result) {
+            system::ControlClient client;
+            response[QStringLiteral("kiosk_notified")] = client.notify_deactivated();
+        } else {
+            response[QStringLiteral("error")] = QString::fromStdString(result.error().to_string());
+        }
+        sendJsonResponse(socket, result ? 200 : 500, QJsonDocument(response).toJson(QJsonDocument::Compact));
+        return;
+    }
+
     if (method == QStringLiteral("GET") && path.startsWith(QStringLiteral("/api/packages/"))) {
         const QString id = sanitize_filename(QUrl::fromPercentEncoding(path.mid(14).toUtf8()));
         const auto value = content_database_->package(id);
         if (!value.isEmpty()) {
             sendJsonResponse(socket, 200, QJsonDocument(value).toJson(QJsonDocument::Compact));
         } else {
-            sendJsonResponse(socket, 404, "{\"error\":\"Plano de pacote não encontrado\"}");
+            sendJsonResponse(socket, 404, "{\"error\":\"Aplicação não encontrada\"}");
         }
         return;
     }

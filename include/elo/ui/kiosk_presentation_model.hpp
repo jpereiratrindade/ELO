@@ -99,6 +99,7 @@ public:
     Q_INVOKABLE void submitSurveyResponse(const QString& questionId, const QString& selectedOption, bool anonymous);
     Q_INVOKABLE void requestForgetMe();
     Q_INVOKABLE void finishSession();
+    Q_INVOKABLE void deactivateContent();
     Q_INVOKABLE void resetBehaviorTimer();
     Q_INVOKABLE void playSound(const QString& soundPath);
 

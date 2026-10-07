@@ -180,6 +180,7 @@ public:
 
     // Conclude and reset session
     void finish_session();
+    void deactivate_content() noexcept;
 
 private:
     identity::EloId elo_id_;
