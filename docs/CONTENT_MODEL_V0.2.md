@@ -69,16 +69,20 @@ O núcleo v0.2 é independente de domínio:
 
 ## Persistência e banco de dados
 
-Os JSONs permanecem como fonte canônica porque são portáveis, auditáveis, determinísticos para hash e adequados a bundles imutáveis. O SQLite continua reservado a estado operacional, eventos e análises locais.
+O SQLite em modo **WAL** é a fonte canônica do espaço editorial mutável. Átomos, relações, receitas, planos de pacote, associações e revisões são gravados transacionalmente em `editorial.sqlite3`.
 
-Se busca e filtragem crescerem, deve ser criado um **índice SQLite derivado e reconstruível**, nunca uma segunda fonte de verdade. Tabelas recomendadas para esse índice:
+JSON não é mais banco editorial. Ele é uma projeção gerada antes de validar/publicar, porque bundles selados precisam continuar portáteis, determinísticos e independentes do banco de autoria.
 
-- `content_atoms(content_id, type, subtype, title, language, lifecycle_status, modified_at)`;
-- `atom_terms(content_id, term, kind)`;
-- `package_atoms(bundle_id, version, content_id, position)`;
-- `content_search` como FTS5 para título, resumo e termos.
+Tabelas principais:
 
-O índice deve ser regenerado dos JSONs na inicialização ou após publicação. Isso evita divergência entre banco, arquivos e hash do pacote.
+- `content_atoms(content_id, document_json, updated_at)`;
+- `content_relations(relation_id, document_json, updated_at)`;
+- `content_recipes(recipe_id, document_json, updated_at)`;
+- `package_plans(bundle_id, document_json, updated_at)`;
+- `package_atoms(bundle_id, content_id, position)`;
+- `editorial_revisions(sequence, entity_kind, entity_id, operation, occurred_at)`.
+
+Na primeira execução, os JSONs legados são importados automaticamente se o banco estiver vazio. Depois disso, o fluxo é unidirecional: SQLite → snapshot JSON → validação → bundle imutável.
 
 ## Publicação e controle remoto
 

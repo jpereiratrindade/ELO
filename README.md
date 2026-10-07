@@ -82,7 +82,7 @@ sejam conectadas.
 - CMake 3.25+ e Ninja
 - Qt 6 (Core, Gui, Quick, Qml)
 - OpenCV 4.8+ (Core, ImgProc, ObjDetect, VideoIO, DNN)
-- SQLite 3
+- SQLite 3 em modo WAL (estado operacional e fonte editorial transacional)
 - `libcamera` e backend GStreamer correspondente para câmeras CSI no Raspberry Pi 5
 
 ### Build

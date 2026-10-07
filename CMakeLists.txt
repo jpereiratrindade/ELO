@@ -64,6 +64,7 @@ add_library(elo_core
     include/elo/ui/kiosk_presentation_model.hpp
     src/biometric/biometric_matcher.cpp
     src/content/content_bundle.cpp
+    src/content/content_database.cpp
     src/content/content_catalog.cpp
     src/content/content_validator.cpp
     src/content/content_selector.cpp

@@ -82,3 +82,7 @@ target_include_directories(test_content_publishing PRIVATE
 
 add_test(NAME ContentPublishing COMMAND test_content_publishing)
 
+add_executable(test_content_database test_content_database.cpp)
+target_link_libraries(test_content_database PRIVATE elo_core)
+target_include_directories(test_content_database PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
+add_test(NAME ContentDatabase COMMAND test_content_database)
