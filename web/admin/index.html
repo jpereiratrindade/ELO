@@ -166,29 +166,27 @@
           <h3 class="pane-title">Gestão Curatorial de Pacotes de Conteúdo (Content Bundles)</h3>
           <p class="pane-subtitle">Selecione átomos reutilizáveis e publique uma composição versionada para uma aplicação do Totem</p>
         </div>
-        <div style="display: flex; gap: 10px;">
-          <button id="btn-save-package-meta" class="btn btn-secondary btn-sm-action">
-            💾 Salvar Pacote
-          </button>
-          <button id="btn-publish-package-direct" class="btn btn-primary btn-sm-action">
-            🚀 Publicar Pacote no Totem
-          </button>
+        <div class="package-header-actions">
+          <button id="btn-new-package" class="btn btn-secondary btn-sm-action">＋ Novo pacote</button>
         </div>
       </div>
 
-      <div class="bundle-composer-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
-        <div class="card-composer" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
-          <h4 style="font-size: 1.1rem; color: var(--text-main); margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-            <span>📋 Metadados do Pacote</span>
-            <span id="package-badge-state" class="badge-pill badge-green" style="font-size: 11px;">ATIVO</span>
-          </h4>
+      <div id="package-workspace" class="package-workspace library-only">
+        <aside class="package-library">
+          <div class="package-library-header">
+            <div><h4>Pacotes salvos</h4><p>Selecione para editar ou ativar</p></div>
+            <span id="pkg-plans-count" class="badge-pill">0</span>
+          </div>
+          <select id="pkg-plan-select" class="input-select package-mobile-select"><option value="">Selecione um pacote</option></select>
+          <div id="pkg-plans-list" class="package-plans-list"></div>
+        </aside>
+
+        <div id="package-editor-card" class="package-editor-card hidden">
+          <div class="package-card-heading">
+            <div><span class="package-eyebrow">Editor de pacote</span><h4 id="pkg-editor-heading">Novo pacote</h4></div>
+            <span id="package-badge-state" class="badge-pill">RASCUNHO</span>
+          </div>
           <form id="form-package-meta">
-            <div class="form-group" style="margin-bottom: 14px;">
-              <label for="pkg-plan-select">Pacote planejado</label>
-              <select id="pkg-plan-select" class="input-select"><option value="">Novo pacote / manifesto atual</option></select>
-              <span class="form-hint">Troque de pacote sem duplicar os átomos do acervo.</span>
-            </div>
-            <div id="pkg-plans-list" style="display:flex; flex-wrap:wrap; gap:8px; margin: -4px 0 16px;"></div>
             <div class="form-group" style="margin-bottom: 14px;">
               <label for="pkg-title" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Título do Pacote de Conteúdo</label>
               <input type="text" id="pkg-title" class="input-text" placeholder="Ex: Bioma Pampa — Campos Sulinos" required style="width: 100%;">
@@ -212,16 +210,20 @@
               <label for="pkg-desc" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Descrição Curatorial da Coleção</label>
               <textarea id="pkg-desc" class="input-textarea" rows="3" placeholder="Objetivo curatorial do pacote e síntese da experiência..." style="width: 100%;"></textarea>
             </div>
+            <div class="package-editor-actions">
+              <button type="button" id="btn-cancel-package" class="btn btn-secondary">Cancelar</button>
+              <button type="button" id="btn-save-package-meta" class="btn btn-primary">Salvar pacote</button>
+            </div>
           </form>
         </div>
 
-        <div class="card-composer" style="background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 24px;">
-          <h4 style="font-size: 1.1rem; color: var(--text-main); margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
-            <span>🔬 Átomos Vinculados ao Pacote</span>
+        <div id="package-atoms-card" class="package-atoms-card hidden">
+          <div class="package-card-heading">
+            <div><span class="package-eyebrow">Composição</span><h4>Átomos do pacote</h4></div>
             <span id="pkg-atoms-count-badge" class="badge-pill" style="font-size: 11px;">0 Átomos</span>
-          </h4>
-          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 14px;">Todos os átomos ativos neste pacote de conteúdo alimentarão o modo contemplativo e interativo do Totem:</p>
-          <div id="pkg-atoms-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto; padding-right: 6px;">
+          </div>
+          <input id="pkg-atoms-search" class="input-text" type="search" placeholder="Buscar átomo por título, ID ou tipo…">
+          <div id="pkg-atoms-list" class="package-atoms-list">
             <!-- Rendered by app.js -->
           </div>
         </div>

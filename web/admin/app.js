@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let catalogData = { atoms: [], relations: [], recipes: [] };
   let currentStatus = null;
   let packageAtomIds = new Set();
+  let packagePlansData = [];
+  let selectedPackageId = '';
 
   // Tab switching
   const tabButtons = document.querySelectorAll('.tab-btn');
@@ -186,6 +188,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (document.getElementById('pkg-desc')) document.getElementById('pkg-desc').value = m.description || '';
       if (document.getElementById('pkg-app-id')) document.getElementById('pkg-app-id').value = m.application_id || '';
       packageAtomIds = new Set(Array.isArray(m.atom_ids) ? m.atom_ids : []);
+      selectedPackageId = m.bundle_id || '';
+      const heading = document.getElementById('pkg-editor-heading');
+      if (heading) heading.textContent = m.title || 'Novo pacote';
+      const state = document.getElementById('package-badge-state');
+      const isActive = currentStatus?.active_bundle?.bundle_id === selectedPackageId;
+      if (state) {
+        state.textContent = isActive ? 'ATIVO NO TOTEM' : 'RASCUNHO';
+        state.className = isActive ? 'badge-pill badge-green' : 'badge-pill';
+      }
       renderPackageAtoms(catalogData.atoms || []);
   }
 
@@ -209,6 +220,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       const currentId = preferredId || document.getElementById('pkg-id')?.value || '';
       const plans = data.packages || [];
+      packagePlansData = plans;
+      selectedPackageId = currentId;
       select.innerHTML = '<option value="">Novo pacote / manifesto atual</option>';
       plans.forEach(plan => {
         const option = document.createElement('option');
@@ -220,19 +233,54 @@ document.addEventListener('DOMContentLoaded', () => {
       select.value = plans.some(plan => plan.bundle_id === currentId) ? currentId : '';
 
       const list = document.getElementById('pkg-plans-list');
+      const count = document.getElementById('pkg-plans-count');
+      if (count) count.textContent = plans.length;
       if (list) {
-        list.innerHTML = plans.length ? '' : '<span class="form-hint">Nenhum pacote salvo ainda.</span>';
+        list.innerHTML = plans.length ? '' : '<div class="empty-state"><strong>Nenhum pacote salvo</strong><p>Crie o primeiro pacote para organizar uma publicação.</p></div>';
         plans.forEach(plan => {
-          const button = document.createElement('button');
-          button.type = 'button';
-          button.className = `btn btn-sm ${plan.bundle_id === currentId ? 'btn-primary' : 'btn-secondary'}`;
-          button.textContent = `📦 ${plan.title || plan.bundle_id} · v${plan.version || '0.1.0'}`;
-          button.addEventListener('click', () => loadPackagePlan(plan.bundle_id));
-          list.appendChild(button);
+          const isActive = currentStatus?.active_bundle?.bundle_id === plan.bundle_id;
+          const item = document.createElement('article');
+          item.className = `package-plan-item ${plan.bundle_id === currentId ? 'selected' : ''} ${isActive ? 'active' : ''}`;
+          item.innerHTML = `
+            <div class="package-plan-title-row">
+              <span class="package-plan-title">${plan.title || plan.bundle_id}</span>
+              ${isActive ? '<span class="badge-pill badge-green" style="font-size:9px;">ATIVO</span>' : ''}
+            </div>
+            <div class="package-plan-meta">v${plan.version || '0.1.0'} · ${(plan.atom_ids || []).length} átomos<br>${plan.bundle_id}</div>
+            <div class="package-plan-actions">
+              <button type="button" class="btn btn-secondary btn-edit-package">Editar</button>
+              <button type="button" class="btn ${isActive ? 'btn-secondary' : 'btn-primary'} btn-activate-package" ${isActive ? 'disabled' : ''}>${isActive ? 'Em execução' : 'Ativar'}</button>
+            </div>`;
+          item.addEventListener('click', (event) => {
+            if (!event.target.closest('button')) loadPackagePlan(plan.bundle_id);
+          });
+          item.querySelector('.btn-edit-package').addEventListener('click', () => loadPackagePlan(plan.bundle_id));
+          item.querySelector('.btn-activate-package').addEventListener('click', () => activatePackagePlan(plan));
+          list.appendChild(item);
         });
       }
     } catch (e) {
       console.warn('Erro ao listar planos de pacote:', e);
+    }
+  }
+
+  async function activatePackagePlan(plan) {
+    if (!plan || !plan.bundle_id) return;
+    if (!confirm(`Ativar o pacote "${plan.title || plan.bundle_id}" no Totem?`)) return;
+    try {
+      showNotice('Ativando pacote…', `Validando e publicando ${plan.title || plan.bundle_id}.`);
+      const saveResponse = await fetch('/api/manifest', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plan)
+      });
+      if (!saveResponse.ok) throw new Error((await saveResponse.json()).error || 'Falha ao selecionar pacote');
+      const publishResponse = await fetch('/api/publish', { method: 'POST' });
+      const result = await publishResponse.json();
+      if (!result.success) throw new Error(result.error || 'Falha ao publicar pacote');
+      showNotice('Pacote ativo', `${plan.title || plan.bundle_id} foi publicado e ativado no Totem.`);
+      await fetchStatus();
+      await fetchPackagePlans(plan.bundle_id);
+    } catch (error) {
+      showNotice('Falha ao ativar pacote', error.message, true);
     }
   }
 
@@ -242,10 +290,24 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch(`/api/packages/${encodeURIComponent(id)}`);
       if (!res.ok) throw new Error('Pacote não encontrado');
       applyPackageManifest(await res.json());
+      document.getElementById('pkg-id').disabled = true;
+      showPackageEditor();
       await fetchPackagePlans(id);
     } catch (e) {
       showNotice('Erro ao carregar pacote', e.message, true);
     }
+  }
+
+  function showPackageEditor() {
+    document.getElementById('package-workspace')?.classList.remove('library-only');
+    document.getElementById('package-editor-card')?.classList.remove('hidden');
+    document.getElementById('package-atoms-card')?.classList.remove('hidden');
+  }
+
+  function hidePackageEditor() {
+    document.getElementById('package-workspace')?.classList.add('library-only');
+    document.getElementById('package-editor-card')?.classList.add('hidden');
+    document.getElementById('package-atoms-card')?.classList.add('hidden');
   }
 
   document.getElementById('pkg-plan-select')?.addEventListener('change', (event) => loadPackagePlan(event.target.value));
@@ -263,9 +325,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    atoms.forEach(a => {
+    const query = (document.getElementById('pkg-atoms-search')?.value || '').trim().toLocaleLowerCase('pt-BR');
+    const visibleAtoms = query ? atoms.filter(a => `${a.title || ''} ${a.canonical_name || ''} ${a.content_id || ''} ${a.type || ''}`.toLocaleLowerCase('pt-BR').includes(query)) : atoms;
+    visibleAtoms.forEach(a => {
       const item = document.createElement('div');
-      item.style.cssText = 'background: var(--bg-surface); padding: 10px 14px; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-subtle);';
+      item.className = 'package-atom-item';
       item.innerHTML = `
         <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.size === 0 || packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} no pacote">
         <div>
@@ -284,6 +348,28 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   }
+
+  document.getElementById('pkg-atoms-search')?.addEventListener('input', () => renderPackageAtoms(catalogData.atoms || []));
+
+  document.getElementById('btn-new-package')?.addEventListener('click', () => {
+    document.getElementById('form-package-meta')?.reset();
+    document.getElementById('pkg-version').value = '0.1.0';
+    document.getElementById('pkg-theme').value = 'default';
+    packageAtomIds = new Set(catalogData.atoms.map(atom => atom.content_id));
+    selectedPackageId = '';
+    document.getElementById('pkg-id').disabled = false;
+    document.getElementById('pkg-editor-heading').textContent = 'Novo pacote';
+    document.getElementById('package-badge-state').textContent = 'NOVO';
+    renderPackageAtoms(catalogData.atoms || []);
+    fetchPackagePlans('');
+    showPackageEditor();
+    document.getElementById('pkg-title')?.focus();
+  });
+
+  document.getElementById('btn-cancel-package')?.addEventListener('click', () => {
+    hidePackageEditor();
+    fetchPackagePlans(selectedPackageId);
+  });
 
   let applicationsData = [];
 
@@ -1581,6 +1667,7 @@ document.addEventListener('DOMContentLoaded', () => {
           fetchStatus();
           fetchCatalog();
           await fetchPackagePlans(bundleId);
+          hidePackageEditor();
           return true;
         } else {
           showNotice('Erro ao Salvar', data.error || 'Falha', true);
@@ -1595,15 +1682,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnSavePkg.addEventListener('click', savePackagePlan);
   }
 
-  const btnPublishPkgDirect = document.getElementById('btn-publish-package-direct');
-  if (btnPublishPkgDirect) {
-    btnPublishPkgDirect.addEventListener('click', async () => {
-      if (!(await savePackagePlan())) return;
-      const btnPub = document.getElementById('btn-publish');
-      if (btnPub) btnPub.click();
-    });
-  }
-
   const btnRefreshAnalytics = document.getElementById('btn-refresh-analytics');
   if (btnRefreshAnalytics) {
     btnRefreshAnalytics.addEventListener('click', () => {
@@ -1613,10 +1691,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Initial load
-  fetchStatus();
+  fetchStatus().then(() => fetchManifest()).then(() => fetchPackagePlans());
   fetchCatalog();
   fetchMedia();
-  fetchManifest().then(() => fetchPackagePlans());
   fetchApplications();
   fetchAnalytics();
   setInterval(fetchStatus, 4000);
