@@ -11,6 +11,26 @@ Window {
     title: "ELO — Totem de Experiência Presencial"
     color: "#0f172a"
 
+    // Atalhos de teclado para saída e controle operacional
+    Shortcut {
+        sequence: "Escape"
+        onActivated: Qt.quit()
+    }
+    Shortcut {
+        sequence: "Ctrl+Q"
+        onActivated: Qt.quit()
+    }
+    Shortcut {
+        sequence: "F11"
+        onActivated: {
+            if (rootWindow.visibility === Window.FullScreen) {
+                rootWindow.visibility = Window.Windowed
+            } else {
+                rootWindow.visibility = Window.FullScreen
+            }
+        }
+    }
+
     Rectangle {
         id: headerBar
         anchors.top: parent.top
