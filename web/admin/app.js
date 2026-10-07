@@ -422,37 +422,56 @@ document.addEventListener('DOMContentLoaded', () => {
       let factsHtml = '';
       if (atom.canonical_facts && atom.canonical_facts.length > 0) {
         factsHtml = `<ul class="atom-facts">` +
-          atom.canonical_facts.map(f => `<li class="atom-fact-item">${f.statement}</li>`).join('') +
+          atom.canonical_facts.map(f => `<li class="atom-fact-item"><strong>•</strong> ${f.statement}</li>`).join('') +
           `</ul>`;
       }
 
-      let assetsHtml = '<div class="atom-assets-row">';
-      if (atom.images && atom.images.length > 0) {
-        assetsHtml += `<span class="asset-tag">🖼️ ${atom.images.length} imagem</span>`;
+      let metaChipsHtml = '';
+      if (atom.metadata && typeof atom.metadata === 'object') {
+        const metaEntries = Object.entries(atom.metadata).slice(0, 3);
+        if (metaEntries.length > 0) {
+          metaChipsHtml = '<div class="atom-meta-chips" style="display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0;">' +
+            metaEntries.map(([k, v]) => `<span class="tag-mono" style="font-size:0.75rem; background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:4px;"><strong style="color:var(--accent-cyan);">${k}:</strong> ${v}</span>`).join('') +
+            '</div>';
+        }
       }
-      if (atom.audios && atom.audios.length > 0) {
-        assetsHtml += `<span class="asset-tag">🎵 ${atom.audios.length} áudio</span>`;
+
+      let assetsHtml = '<div class="atom-assets-row">';
+      const imageCount = (atom.images ? atom.images.length : (atom.modalities?.image?.length || 0));
+      const audioCount = (atom.audios ? atom.audios.length : (atom.modalities?.audio?.length || 0));
+      if (imageCount > 0) {
+        assetsHtml += `<span class="asset-tag">🖼️ ${imageCount} imagem</span>`;
+      }
+      if (audioCount > 0) {
+        assetsHtml += `<span class="asset-tag">🎵 ${audioCount} áudio</span>`;
       }
       assetsHtml += '</div>';
 
       let audioButtonHtml = '';
-      if (atom.audios && atom.audios.length > 0) {
-        const audioSrc = atom.audios[0].startsWith('assets/') ? atom.audios[0] : 'assets/' + atom.audios[0];
+      const firstAudio = (atom.audios && atom.audios.length > 0) ? atom.audios[0] : (atom.modalities?.audio?.[0]);
+      if (firstAudio) {
+        const audioSrc = firstAudio.startsWith('assets/') ? firstAudio : 'assets/' + firstAudio;
         audioButtonHtml = `<button class="btn btn-outline btn-sm btn-play-audio" data-src="${audioSrc}">▶️ Ouvir</button>`;
       }
 
       const isLiveOnKiosk = currentStatus && currentStatus.kiosk_active_atom_id === atom.content_id;
       const liveBadgeHtml = isLiveOnKiosk ? '<span class="badge-pill badge-green" style="font-size: 10px; margin-left: 6px;">AO VIVO NO TOTEM</span>' : '';
 
+      const domainLabel = atom.domain || atom.category || '';
+      const domainBadge = domainLabel ? `<span class="badge-pill" style="font-size: 10px; background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); margin-left: 6px;">${domainLabel}</span>` : '';
+
+      const subtitle = atom.subtitle || atom.scientific_name || atom.type_label || '';
+
       card.innerHTML = `
         <div class="atom-header">
           <div>
-            <h4 class="atom-title">${atom.canonical_name || atom.title} ${liveBadgeHtml}</h4>
-            <div class="atom-scientific">${atom.scientific_name || atom.type_label || ''}</div>
+            <h4 class="atom-title">${atom.title || atom.canonical_name} ${liveBadgeHtml} ${domainBadge}</h4>
+            <div class="atom-scientific">${subtitle}</div>
           </div>
           <span class="atom-type-badge">${atom.type}</span>
         </div>
         ${factsHtml}
+        ${metaChipsHtml}
         ${assetsHtml}
         <div class="atom-actions-row">
           ${audioButtonHtml}
@@ -651,6 +670,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAtomCancel = document.getElementById('btn-atom-cancel');
   const factsContainer = document.getElementById('facts-container');
   const btnAddFact = document.getElementById('btn-add-fact');
+  const metaPairsContainer = document.getElementById('meta-pairs-container');
+  const btnAddMetaPair = document.getElementById('btn-add-meta-pair');
 
   function openAtomModalForCreate() {
     document.getElementById('modal-atom-title').textContent = 'Novo Átomo de Conteúdo';
@@ -660,7 +681,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('preview-image-box').classList.add('hidden');
     document.getElementById('preview-audio-box').classList.add('hidden');
     factsContainer.innerHTML = '';
-    addFactRow('', 'source_ufrgs_2023');
+    addFactRow('', 'source_curadoria_local');
+    if (metaPairsContainer) {
+      metaPairsContainer.innerHTML = '';
+      addMetaPairRow('Autor / Curador', '');
+      addMetaPairRow('Ano / Período', '');
+    }
     modalAtom.classList.remove('hidden');
   }
 
@@ -673,13 +699,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('atom-id').value = atom.content_id;
     document.getElementById('atom-id').disabled = true;
     document.getElementById('atom-type').value = atom.type || 'entity';
+    if (document.getElementById('atom-domain')) {
+      document.getElementById('atom-domain').value = atom.domain || atom.category || 'general';
+    }
     document.getElementById('atom-title').value = atom.title || '';
-    document.getElementById('atom-canonical').value = atom.canonical_name || '';
-    document.getElementById('atom-scientific').value = atom.scientific_name || '';
-    document.getElementById('atom-type-label').value = atom.type_label || '';
+    document.getElementById('atom-canonical').value = atom.canonical_name || atom.subject?.canonical_name || '';
+    document.getElementById('atom-scientific').value = atom.scientific_name || atom.subtitle || atom.subject?.scientific_name || '';
+    document.getElementById('atom-type-label').value = atom.type_label || atom.subject?.type_label || '';
     document.getElementById('atom-themes').value = (atom.themes || []).join(', ');
 
-    const imgPath = (atom.images && atom.images.length > 0) ? atom.images[0] : '';
+    const imgPath = (atom.images && atom.images.length > 0) ? atom.images[0] : (atom.modalities?.image?.[0] || '');
     document.getElementById('atom-image-path').value = imgPath;
     if (imgPath) {
       document.getElementById('preview-image').src = '/' + imgPath;
@@ -688,7 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('preview-image-box').classList.add('hidden');
     }
 
-    const audPath = (atom.audios && atom.audios.length > 0) ? atom.audios[0] : '';
+    const audPath = (atom.audios && atom.audios.length > 0) ? atom.audios[0] : (atom.modalities?.audio?.[0] || '');
     document.getElementById('atom-audio-path').value = audPath;
     if (audPath) {
       document.getElementById('preview-audio').src = '/' + audPath;
@@ -703,7 +732,19 @@ document.addEventListener('DOMContentLoaded', () => {
         addFactRow(f.statement, (f.source_ids || []).join(', '));
       });
     } else {
-      addFactRow('', 'source_ufrgs_2023');
+      addFactRow('', 'source_curadoria_local');
+    }
+
+    if (metaPairsContainer) {
+      metaPairsContainer.innerHTML = '';
+      if (atom.metadata && typeof atom.metadata === 'object' && Object.keys(atom.metadata).length > 0) {
+        for (const [k, v] of Object.entries(atom.metadata)) {
+          addMetaPairRow(k, v);
+        }
+      } else {
+        addMetaPairRow('Autor / Curador', '');
+        addMetaPairRow('Ano / Período', '');
+      }
     }
 
     modalAtom.classList.remove('hidden');
@@ -715,7 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
     row.innerHTML = `
       <div class="fact-inputs">
         <textarea class="input-textarea fact-statement" rows="2" placeholder="Declaração factual sobre o átomo...">${statement}</textarea>
-        <input type="text" class="input-text fact-sources" placeholder="Fontes (ex: source_icmbio_2018, source_ufrgs_2023)" value="${sources}">
+        <input type="text" class="input-text fact-sources" placeholder="Fontes de autoridade / Referências (ex: Museu, UFRGS 2024, IPHAN)" value="${sources}">
       </div>
       <button type="button" class="btn-del-fact" title="Remover fato">&times;</button>
     `;
@@ -723,7 +764,25 @@ document.addEventListener('DOMContentLoaded', () => {
     factsContainer.appendChild(row);
   }
 
+  function addMetaPairRow(key = '', value = '') {
+    if (!metaPairsContainer) return;
+    const row = document.createElement('div');
+    row.className = 'meta-pair-row';
+    row.innerHTML = `
+      <div class="meta-pair-inputs">
+        <input type="text" class="input-text meta-key" placeholder="Campo (ex: Autor, Época, Dimensões, Instituição)" value="${key}" style="flex: 1;">
+        <input type="text" class="input-text meta-val" placeholder="Valor correspondente" value="${value}" style="flex: 2;">
+      </div>
+      <button type="button" class="btn-del-meta" title="Remover campo">&times;</button>
+    `;
+    row.querySelector('.btn-del-meta').addEventListener('click', () => row.remove());
+    metaPairsContainer.appendChild(row);
+  }
+
   btnAddFact.addEventListener('click', () => addFactRow());
+  if (btnAddMetaPair) {
+    btnAddMetaPair.addEventListener('click', () => addMetaPairRow('', ''));
+  }
   btnNewAtom.addEventListener('click', openAtomModalForCreate);
   modalAtomClose.addEventListener('click', () => modalAtom.classList.add('hidden'));
   btnAtomCancel.addEventListener('click', () => modalAtom.classList.add('hidden'));
@@ -857,6 +916,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const themesStr = document.getElementById('atom-themes').value.trim();
     const themes = themesStr ? themesStr.split(',').map(s => s.trim()).filter(Boolean) : ['geral'];
 
+    const domain = document.getElementById('atom-domain') ? document.getElementById('atom-domain').value : 'general';
+    const subtitle = scientificName;
+
     // Collect facts
     const facts = [];
     document.querySelectorAll('.fact-row').forEach((row, idx) => {
@@ -872,6 +934,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // Collect custom structured metadata pairs
+    const customMetadata = {};
+    document.querySelectorAll('.meta-pair-row').forEach(row => {
+      const k = row.querySelector('.meta-key').value.trim();
+      const v = row.querySelector('.meta-val').value.trim();
+      if (k && v) {
+        customMetadata[k] = v;
+      }
+    });
+
     const imgPath = document.getElementById('atom-image-path').value.trim();
     const audPath = document.getElementById('atom-audio-path').value.trim();
 
@@ -879,13 +951,16 @@ document.addEventListener('DOMContentLoaded', () => {
       schema_version: '0.1',
       content_id: contentId,
       type: type,
+      domain: domain,
       subtype: 'custom',
       title: title,
+      subtitle: subtitle,
       subject: {
         canonical_name: canonicalName,
         scientific_name: scientificName,
         type_label: typeLabel
       },
+      metadata: customMetadata,
       themes: themes,
       canonical_facts: facts,
       modalities: {

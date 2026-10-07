@@ -440,150 +440,197 @@
     </section>
   </main>
 
-  <!-- Modal: Átomo CRUD -->
+  <!-- Modal: Átomo CRUD (Universal & Domain-Agnostic) -->
   <div id="modal-atom" class="modal-backdrop hidden">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width: 820px;">
       <div class="modal-header">
-        <h3 id="modal-atom-title" class="modal-title">Novo Átomo de Conteúdo</h3>
+        <div>
+          <h3 id="modal-atom-title" class="modal-title">Novo Átomo de Conteúdo</h3>
+          <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 2px;">Estruturação de dados canônicos, ontologia e proveniência para totens interativos</p>
+        </div>
         <button id="modal-atom-close" class="modal-close">&times;</button>
       </div>
       <form id="form-atom" class="modal-body">
         <input type="hidden" id="atom-edit-mode" value="create">
 
+        <!-- Seção 1: Identificação & Classificação -->
+        <div class="form-section-header">
+          <span class="form-section-num">01</span>
+          <span class="form-section-label">Identificação & Classificação Semântica</span>
+        </div>
+
         <div class="form-row-2">
           <div class="form-group">
-            <label for="atom-id">Identificador Único (Content ID)</label>
-            <input type="text" id="atom-id" class="input-text" placeholder="ex: species_graxaim_003">
-            <span class="form-hint">Gerado automaticamente se deixado vazio</span>
+            <label for="atom-id">Identificador Único Canônico (Content ID)</label>
+            <input type="text" id="atom-id" class="input-text" placeholder="ex: arte_monalisa_001, hist_farroupilha_001, item_001">
+            <span class="form-hint">Chave de referência imutável (gerada automaticamente se vazia)</span>
           </div>
           <div class="form-group">
-            <label for="atom-type">Tipo Semântico</label>
+            <label for="atom-type">Tipo Semântico / Ontologia</label>
             <select id="atom-type" class="input-select">
-              <option value="entity">Entity (Espécie / Indivíduo / Objeto)</option>
-              <option value="concept">Concept (Conceito Ecológico)</option>
-              <option value="place">Place (Lugar / Habitat / Bioma)</option>
-              <option value="phenomenon">Phenomenon (Fenômeno Natural)</option>
-              <option value="question">Question (Provocação / Pergunta)</option>
-              <option value="challenge">Challenge (Desafio Interativo)</option>
+              <option value="entity">Entity (Entidade / Obra / Artefato / Espécime / Objeto)</option>
+              <option value="phenomenon">Phenomenon (Fenômeno / Processo / Acontecimento Histórico)</option>
+              <option value="place">Place (Lugar / Sítio Histórico / Território / Paisagem)</option>
+              <option value="narrative">Narrative (Narrativa / Relato Oral / Biografia / Memória)</option>
+              <option value="collection">Collection (Coleção / Acervo / Painel Temático)</option>
+              <option value="concept">Concept (Conceito / Teoria / Saber Tradicional)</option>
+              <option value="question">Question (Provocação / Pergunta / Diálogo)</option>
+              <option value="challenge">Challenge (Desafio Interativo / Quiz Cognitivo)</option>
             </select>
           </div>
         </div>
 
         <div class="form-row-2">
           <div class="form-group">
-            <label for="atom-title">Título de Apresentação</label>
-            <input type="text" id="atom-title" class="input-text" required placeholder="ex: Graxaim-do-campo">
+            <label for="atom-title">Título Principal de Apresentação *</label>
+            <input type="text" id="atom-title" class="input-text" required placeholder="ex: Mona Lisa, Catedral de São Pedro, Cultivar BRS 539">
           </div>
           <div class="form-group">
-            <label for="atom-canonical">Nome Canônico</label>
-            <input type="text" id="atom-canonical" class="input-text" placeholder="ex: Graxaim-do-campo">
+            <label for="atom-canonical">Nome Canônico / Nomenclatura Formal</label>
+            <input type="text" id="atom-canonical" class="input-text" placeholder="ex: Retrato de Lisa Gherardini, Catedral Metropolitana">
           </div>
         </div>
 
-        <div class="form-row-2">
+        <div class="form-row-3">
           <div class="form-group">
-            <label for="atom-scientific">Nome Científico / Subtítulo</label>
-            <input type="text" id="atom-scientific" class="input-text" placeholder="ex: Lycalopex gymnocercus">
+            <label for="atom-scientific">Subtítulo / Denominação Complementar</label>
+            <input type="text" id="atom-scientific" class="input-text" placeholder="ex: Óleo sobre madeira (1503), Reserva hidrogeológica">
           </div>
           <div class="form-group">
-            <label for="atom-type-label">Rótulo Curatorial</label>
-            <input type="text" id="atom-type-label" class="input-text" placeholder="ex: Pintura a óleo, Fóssil paleolítico, Monumento histórico">
+            <label for="atom-domain">Domínio / Categoria</label>
+            <select id="atom-domain" class="input-select">
+              <option value="fine_arts">Artes Visuais & Estética</option>
+              <option value="cultural_heritage">Patrimônio Histórico & Memória</option>
+              <option value="environmental_sciences">Ciências Naturais & Biodiversidade</option>
+              <option value="agronomy_technology">Agronomia, Ciência & Tecnologia</option>
+              <option value="history_geography">História, Território & Geografia</option>
+              <option value="institutional_education">Educação & Acervos Institucionais</option>
+              <option value="general">Geral / Multidisciplinar</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="atom-type-label">Rótulo Curatorial / Tipologia</label>
+            <input type="text" id="atom-type-label" class="input-text" placeholder="ex: Pintura Renascentista, Monumento Nacional, Cultivar">
           </div>
         </div>
 
         <div class="form-group">
-          <label for="atom-themes">Temas / Categorias (separados por vírgula)</label>
-          <input type="text" id="atom-themes" class="input-text" placeholder="patrimonio, ciencia, historia, arte, natureza">
+          <label for="atom-themes">Tags & Indexadores Temáticos (separados por vírgula)</label>
+          <input type="text" id="atom-themes" class="input-text" placeholder="arte, renascimento, pintura, italia, patrimonio, memoria">
         </div>
 
-        <!-- Fatos Canônicos -->
-        <div class="form-section-title-row">
-          <h4 class="form-section-title">Fatos Canônicos & Fontes de Autoridade</h4>
-          <button type="button" id="btn-add-fact" class="btn btn-outline btn-sm">+ Adicionar Fato</button>
+        <!-- Seção 2: Narrativa & Fatos Canônicos -->
+        <div class="form-section-header" style="margin-top: 20px;">
+          <span class="form-section-num">02</span>
+          <span class="form-section-label">Corpus de Conhecimento & Fatos de Proveniência</span>
+          <button type="button" id="btn-add-fact" class="btn btn-outline btn-sm" style="margin-left: auto;">+ Adicionar Fato</button>
         </div>
+
         <div id="facts-container" class="facts-container">
-          <!-- Dynamically injected fact rows -->
+          <!-- Injetado dinamicamente -->
         </div>
 
-        <!-- Mídias e Assets -->
-        <h4 class="form-section-title" style="margin-top: 16px;">Mídias e Arquivos Físicos (Assets)</h4>
+        <!-- Seção 3: Metadados Estruturados Customizados -->
+        <div class="form-section-header" style="margin-top: 20px;">
+          <span class="form-section-num">03</span>
+          <span class="form-section-label">Metadados Estruturados Personalizados (Chave-Valor)</span>
+          <button type="button" id="btn-add-meta-pair" class="btn btn-outline btn-sm" style="margin-left: auto;">+ Adicionar Metadado</button>
+        </div>
+        <div id="meta-pairs-container" class="meta-pairs-container">
+          <!-- Injetado dinamicamente -->
+        </div>
+
+        <!-- Seção 4: Mídias & Ativos Multimodais -->
+        <div class="form-section-header" style="margin-top: 20px;">
+          <span class="form-section-num">04</span>
+          <span class="form-section-label">Ativos Multimodais (Imagens & Áudio)</span>
+        </div>
+
         <div class="form-row-2">
           <div class="form-group asset-upload-box">
-            <label>Imagem Científica / Ilustração</label>
+            <label>Mídia Visual Principal (Fotografia / Imagem / Ilustração)</label>
             <input type="file" id="upload-image-file" accept="image/*" class="input-file">
-            <input type="text" id="atom-image-path" class="input-text" placeholder="assets/images/exemplo.png">
+            <input type="text" id="atom-image-path" class="input-text" placeholder="assets/images/exemplo.jpg" style="margin-top: 6px;">
             <div id="preview-image-box" class="preview-box hidden">
               <img id="preview-image" src="" alt="Prévia">
               <div class="preview-action-bar">
-                <button type="button" id="btn-delete-atom-image" class="btn btn-danger-outline btn-xs">🗑️ Excluir Imagem</button>
+                <button type="button" id="btn-delete-atom-image" class="btn btn-danger-outline btn-xs">🗑️ Desvincular / Excluir</button>
               </div>
             </div>
           </div>
           <div class="form-group asset-upload-box">
-            <label>Canto / Paisagem Sonora (Áudio)</label>
+            <label>Mídia Sonora / Trilha / Narração (Áudio)</label>
             <input type="file" id="upload-audio-file" accept="audio/*" class="input-file">
-            <input type="text" id="atom-audio-path" class="input-text" placeholder="assets/audio/canto.wav">
+            <input type="text" id="atom-audio-path" class="input-text" placeholder="assets/audio/trilha.wav" style="margin-top: 6px;">
             <div id="preview-audio-box" class="preview-box hidden">
-              <audio id="preview-audio" controls></audio>
+              <audio id="preview-audio" controls style="width: 100%; margin-top: 8px;"></audio>
               <div class="preview-action-bar">
-                <button type="button" id="btn-delete-atom-audio" class="btn btn-danger-outline btn-xs">🗑️ Excluir Áudio</button>
+                <button type="button" id="btn-delete-atom-audio" class="btn btn-danger-outline btn-xs">🗑️ Desvincular / Excluir</button>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="modal-footer">
+        <div class="modal-footer" style="margin-top: 24px;">
           <button type="button" id="btn-atom-cancel" class="btn btn-secondary">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar Átomo (Rascunho)</button>
+          <button type="submit" class="btn btn-primary" style="padding: 10px 24px;">Salvar Átomo (Rascunho Editorial)</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Relação CRUD -->
+  <!-- Modal: Relação CRUD (Universal) -->
   <div id="modal-relation" class="modal-backdrop hidden">
-    <div class="modal-card">
+    <div class="modal-card" style="max-width: 680px;">
       <div class="modal-header">
-        <h3 class="modal-title">Nova Relação Ecológica</h3>
+        <div>
+          <h3 class="modal-title">Nova Relação Curatorial / Contextual</h3>
+          <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 2px;">Vínculo contextual ou estrutural entre entidades do catálogo</p>
+        </div>
         <button id="modal-relation-close" class="modal-close">&times;</button>
       </div>
       <form id="form-relation" class="modal-body">
         <div class="form-row-2">
           <div class="form-group">
-            <label for="rel-from">Átomo de Origem (From)</label>
+            <label for="rel-from">Átomo de Origem (From) *</label>
             <select id="rel-from" class="input-select" required></select>
           </div>
           <div class="form-group">
-            <label for="rel-to">Átomo de Destino (To)</label>
+            <label for="rel-to">Átomo de Destino (To) *</label>
             <select id="rel-to" class="input-select" required></select>
           </div>
         </div>
 
         <div class="form-row-2">
           <div class="form-group">
-            <label for="rel-type">Tipo de Vínculo</label>
+            <label for="rel-type">Tipo de Vínculo / Semântica</label>
             <select id="rel-type" class="input-select">
-              <option value="inhabits">Habita / Ocorre em (inhabits)</option>
-              <option value="depends_on">Depende de (depends_on)</option>
-              <option value="predates">Preda / Alimenta-se (predates)</option>
-              <option value="pollinates">Poliniza / Dispersa (pollinates)</option>
-              <option value="threatens">Ameaça / Degrada (threatens)</option>
+              <option value="related_to">Relacionado a / Contexto comum (related_to)</option>
+              <option value="part_of">Parte de / Componente de (part_of)</option>
+              <option value="influences">Influencia / Modifica / Interage com (influences)</option>
+              <option value="coexists_with">Coexiste com / Ocorre junto (coexists_with)</option>
+              <option value="located_in">Localizado em / Sítio geográfico (located_in)</option>
+              <option value="created_by">Criado por / Autoria / Origem (created_by)</option>
+              <option value="derives_from">Deriva de / Evolução histórica (derives_from)</option>
+              <option value="exemplifies">Exemplifica / Demonstra princípio (exemplifies)</option>
+              <option value="depends_on">Depende funcionalmente de (depends_on)</option>
+              <option value="inhabits">Habita / Ocorrência biológica (inhabits)</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="rel-confidence">Grau de Confiança (0.0 a 1.0)</label>
+            <label for="rel-confidence">Grau de Certeza Curatorial (0.1 a 1.0)</label>
             <input type="number" id="rel-confidence" class="input-text" min="0.1" max="1.0" step="0.05" value="1.0">
           </div>
         </div>
 
         <div class="form-group">
-          <label for="rel-desc">Descrição / Evidência Ecológica</label>
-          <textarea id="rel-desc" class="input-textarea" rows="3" placeholder="Explicação científica sobre o vínculo entre os dois átomos..."></textarea>
+          <label for="rel-desc">Descrição / Evidência Curatorial do Vínculo</label>
+          <textarea id="rel-desc" class="input-textarea" rows="3" placeholder="Explicação contextual ou documental sobre a relação entre os dois átomos..."></textarea>
         </div>
 
         <div class="modal-footer">
           <button type="button" id="btn-rel-cancel" class="btn btn-secondary">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar Relação (Rascunho)</button>
+          <button type="submit" class="btn btn-primary" style="padding: 10px 24px;">Salvar Relação (Rascunho)</button>
         </div>
       </form>
     </div>
