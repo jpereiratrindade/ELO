@@ -118,6 +118,10 @@
 
       <!-- Action Toolbar -->
       <div class="action-toolbar">
+        <button id="btn-publish" class="btn btn-primary" style="background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); font-weight: 600;">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+          Publicar no Totem
+        </button>
         <button id="btn-kiosk-start-main" class="btn btn-primary" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           Iniciar Totem (Kiosk)
@@ -214,7 +218,8 @@
             </div>
             <div class="package-editor-actions">
               <button type="button" id="btn-cancel-package" class="btn btn-secondary">Cancelar</button>
-              <button type="button" id="btn-save-package-meta" class="btn btn-primary">Salvar aplicação</button>
+              <button type="button" id="btn-save-package-meta" class="btn btn-secondary">Salvar Rascunho</button>
+              <button type="button" id="btn-publish-package" class="btn btn-primary" style="background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%); font-weight: 600;">🚀 Publicar & Ativar</button>
             </div>
           </form>
         </div>
@@ -659,84 +664,6 @@
         <div class="modal-footer">
           <button type="button" id="btn-rel-cancel" class="btn btn-secondary">Cancelar</button>
           <button type="submit" class="btn btn-primary" style="padding: 10px 24px;">Salvar Relação (Rascunho)</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal: Application / Project CRUD -->
-  <div id="modal-app" class="modal-backdrop hidden">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3 id="modal-app-title" class="modal-title">Novo Projeto / Aplicação</h3>
-        <button id="modal-app-close" class="modal-close">&times;</button>
-      </div>
-      <form id="form-app" class="modal-body">
-        <input type="hidden" id="app-edit-mode" value="create">
-
-        <div class="form-row-2">
-          <div class="form-group">
-            <label for="app-id">ID do Projeto (app_id)</label>
-            <input type="text" id="app-id" class="input-text" required placeholder="ex: app.elo.bioma-pampa">
-            <span class="form-hint">Identificador único do domínio/projeto</span>
-          </div>
-          <div class="form-group">
-            <label for="app-domain">Categoria de Domínio</label>
-            <select id="app-domain" class="input-select">
-              <option value="environmental_sciences">Ciências Ambientais & Ecologia</option>
-              <option value="cultural_heritage">Patrimônio Cultural & Memória</option>
-              <option value="fine_arts">Artes Visuais & Design</option>
-              <option value="civic_engagement">Engajamento Cívico & Educação</option>
-              <option value="science_technology">Ciência & Tecnologia</option>
-              <option value="custom">Domínio Personalizado</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row-2">
-          <div class="form-group">
-            <label for="app-name">Nome do Projeto / Experiência</label>
-            <input type="text" id="app-name" class="input-text" required placeholder="ex: Biodiversidade do Pampa Gaúcho">
-          </div>
-          <div class="form-group">
-            <label for="app-version">Versão</label>
-            <input type="text" id="app-version" class="input-text" value="1.0.0" placeholder="1.0.0">
-          </div>
-        </div>
-
-        <div class="form-row-2">
-          <div class="form-group">
-            <label for="app-bundle">Pacote de Conteúdo Vinculado</label>
-            <select id="app-bundle" class="input-select">
-              <!-- Rendered dynamically -->
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="app-theme">Tema Visual / Layout</label>
-            <input type="text" id="app-theme" class="input-text" placeholder="ex: pampa, dark, sepia, minimal">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label for="app-desc">Descrição e Propósito Curatorial</label>
-          <textarea id="app-desc" class="input-textarea" rows="3" placeholder="Objetivo, contexto da exposição ou experiência interativa..."></textarea>
-        </div>
-
-        <div class="form-group">
-          <label for="app-tags">Tags e Palavras-chave (separadas por vírgula)</label>
-          <input type="text" id="app-tags" class="input-text" placeholder="biodiversidade, pampa, conservacao, avifauna">
-        </div>
-
-        <div class="form-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px;">
-          <input type="checkbox" id="app-active" style="width: 18px; height: 18px; cursor: pointer;">
-          <label for="app-active" style="font-size: 0.9rem; color: var(--text-main); cursor: pointer;">
-            <strong>Definir como Projeto Ativo no Totem</strong> (substitui o projeto atual)
-          </label>
-        </div>
-
-        <div class="modal-footer">
-          <button type="button" id="btn-app-cancel" class="btn btn-secondary">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Salvar Projeto</button>
         </div>
       </form>
     </div>

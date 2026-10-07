@@ -1220,6 +1220,25 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
 
     // API: POST /api/publish
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/publish")) {
+        QString targetId;
+        if (!body.isEmpty()) {
+            auto doc = QJsonDocument::fromJson(body);
+            if (doc.isObject()) targetId = doc.object().value(QStringLiteral("bundle_id")).toString().trimmed();
+        }
+        if (targetId.isEmpty()) {
+            const auto active = publisher_.active_bundle();
+            if (active) targetId = QString::fromStdString(active->bundle_id);
+        }
+        if (!targetId.isEmpty()) {
+            const auto plan = content_database_->package(targetId);
+            if (!plan.isEmpty()) {
+                QSaveFile manifest(QString::fromStdString((content_root_ / "manifest.json").string()));
+                if (manifest.open(QIODevice::WriteOnly)) {
+                    manifest.write(QJsonDocument(plan).toJson(QJsonDocument::Indented));
+                    manifest.commit();
+                }
+            }
+        }
         content_database_->export_workspace(content_root_);
         auto pub_res = publisher_.publish_and_activate(content_root_, "curator_local");
 

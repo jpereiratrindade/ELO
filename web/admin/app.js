@@ -187,7 +187,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (document.getElementById('pkg-desc')) document.getElementById('pkg-desc').value = m.description || '';
       if (document.getElementById('pkg-domain')) document.getElementById('pkg-domain').value = m.domain_category || '';
       if (document.getElementById('pkg-audience')) document.getElementById('pkg-audience').value = m.target_audience || '';
-      packageAtomIds = new Set(Array.isArray(m.atom_ids) ? m.atom_ids : []);
+      const initialAtoms = Array.isArray(m.atom_ids) && m.atom_ids.length > 0 ? m.atom_ids : (catalogData.atoms || []).map(a => a.content_id);
+      packageAtomIds = new Set(initialAtoms);
       selectedPackageId = m.bundle_id || '';
       const heading = document.getElementById('pkg-editor-heading');
       if (heading) heading.textContent = m.title || 'Nova aplicação';
@@ -345,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const badge = document.getElementById('pkg-atoms-count-badge');
     if (!list) return;
     list.innerHTML = '';
-    const selectedCount = packageAtomIds.size || atoms.length;
+    const selectedCount = packageAtomIds.size;
     if (badge) badge.textContent = `${selectedCount} / ${atoms.length} Átomos`;
 
     if (atoms.length === 0) {
@@ -359,7 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const item = document.createElement('div');
       item.className = 'package-atom-item';
       item.innerHTML = `
-        <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.size === 0 || packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} na aplicação">
+        <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} na aplicação">
         <div>
           <strong style="color: var(--text-main); font-size: 0.9rem;">${a.canonical_name || a.title}</strong>
           <div style="color: var(--text-dim); font-size: 0.75rem;">${a.type_label || a.type} · <code>${a.content_id}</code></div>
@@ -370,7 +371,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     list.querySelectorAll('.pkg-atom-check').forEach(check => {
       check.addEventListener('change', () => {
-        if (packageAtomIds.size === 0) packageAtomIds = new Set(atoms.map(a => a.content_id));
         if (check.checked) packageAtomIds.add(check.dataset.id); else packageAtomIds.delete(check.dataset.id);
         if (badge) badge.textContent = `${packageAtomIds.size} / ${atoms.length} Átomos`;
       });
@@ -399,123 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchPackagePlans(selectedPackageId);
   });
 
-  let applicationsData = [];
 
-  async function fetchApplications() {
-    try {
-      const res = await fetch('/api/applications');
-      if (!res.ok) return;
-      const data = await res.json();
-      applicationsData = data.applications || [];
-      renderApplications(applicationsData);
-    } catch (e) {
-      console.warn('Erro ao carregar aplicações:', e);
-    }
-  }
-
-  function renderApplications(apps) {
-    const grid = document.getElementById('apps-grid');
-    if (!grid) return;
-    grid.innerHTML = '';
-
-    if (apps.length === 0) {
-      grid.innerHTML = '<p style="color:var(--text-dim); padding:20px;">Nenhuma aplicação ou projeto registrado ainda.</p>';
-      return;
-    }
-
-    apps.forEach(app => {
-      const card = document.createElement('div');
-      card.className = 'atom-card';
-      if (app.is_active) {
-        card.style.borderColor = 'var(--accent-emerald)';
-        card.style.boxShadow = '0 0 16px rgba(16, 185, 129, 0.2)';
-      } else {
-        card.style.borderColor = 'rgba(6, 182, 212, 0.3)';
-      }
-
-      const tagsHtml = (app.tags || []).map(t => `<span class="badge-pill" style="font-size:10px; margin-right:4px;">#${t}</span>`).join('');
-      const metaHtml = Object.entries(app.metadata_schema || {}).map(([k, v]) => `<div><strong>${k}:</strong> ${v}</div>`).join('');
-      const statusBadge = app.is_active
-        ? `<span class="badge-pill badge-green" style="font-weight: bold;">★ PROJETO ATIVO NO TOTEM</span>`
-        : `<span class="badge-pill" style="opacity: 0.7;">INATIVO</span>`;
-
-      card.innerHTML = `
-        <div class="atom-header" style="align-items: flex-start;">
-          <div>
-            <div style="margin-bottom: 6px;">${statusBadge}</div>
-            <h4 class="atom-title" style="font-size: 1.15rem; color: var(--text-main);">${app.name}</h4>
-            <div class="atom-scientific"><code>${app.app_id}</code> · v${app.version}</div>
-          </div>
-          <span class="atom-type-badge" style="background: rgba(6,182,212,0.15); color: var(--accent-cyan); border-color: rgba(6,182,212,0.4);">${app.domain_category}</span>
-        </div>
-        <p style="font-size: 0.88rem; color: var(--text-muted); margin: 12px 0; line-height: 1.5;">${app.description || 'Sem descrição curatorial.'}</p>
-        <div style="font-size: 0.82rem; color: var(--text-dim); background: var(--bg-surface); padding: 12px; border-radius: var(--radius-sm); margin-bottom: 14px; border: 1px solid var(--border-subtle);">
-          <div><strong>Pacote Vinculado:</strong> <code>${app.active_bundle_id || 'Nenhum'}</code></div>
-          <div><strong>Público-Alvo:</strong> ${app.target_audience || 'general'} | <strong>Tema:</strong> ${app.default_theme || 'default'}</div>
-          ${metaHtml}
-        </div>
-        <div style="margin-bottom: 14px;">${tagsHtml}</div>
-        <div class="atom-actions" style="display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid var(--border-subtle); padding-top: 12px;">
-          ${!app.is_active ? `<button class="btn btn-sm btn-primary btn-activate-app" data-id="${app.app_id}">⭐ Ativar no Totem</button>` : `<span class="badge-pill badge-green" style="font-size: 11px;">✓ Em Execução</span>`}
-          <button class="btn btn-sm btn-secondary btn-edit-app" data-id="${app.app_id}">✏️ Editar</button>
-          <button class="btn btn-sm btn-danger-outline btn-delete-app" data-id="${app.app_id}">🗑️ Excluir</button>
-        </div>
-      `;
-      grid.appendChild(card);
-    });
-
-    // Event listeners para os botões dos cards
-    grid.querySelectorAll('.btn-activate-app').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const appId = btn.getAttribute('data-id');
-        try {
-          showNotice('Ativando Projeto...', `Configurando projeto ${appId} como ativo no Totem...`);
-          const res = await fetch('/api/applications/activate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ app_id: appId })
-          });
-          const data = await res.json();
-          if (data.success) {
-            showNotice('Projeto Ativado!', data.message || `Projeto ${appId} ativado no Totem.`);
-            fetchApplications();
-            fetchStatus();
-          } else {
-            showNotice('Erro ao Ativar', data.error || 'Falha na ativação', true);
-          }
-        } catch (err) {
-          showNotice('Erro de Comunicação', err.message, true);
-        }
-      });
-    });
-
-    grid.querySelectorAll('.btn-edit-app').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const appId = btn.getAttribute('data-id');
-        openAppModalForEdit(appId);
-      });
-    });
-
-    grid.querySelectorAll('.btn-delete-app').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const appId = btn.getAttribute('data-id');
-        if (!confirm(`Deseja realmente EXCLUIR o projeto "${appId}"?`)) return;
-
-        try {
-          const res = await fetch(`/api/applications?id=${encodeURIComponent(appId)}`, { method: 'DELETE' });
-          const data = await res.json();
-          if (data.success) {
-            showNotice('Projeto Excluído', `Projeto ${appId} removido com sucesso.`);
-            fetchApplications();
-          } else {
-            showNotice('Erro ao Excluir', data.error || 'Falha', true);
-          }
-        } catch (err) {
-          showNotice('Erro de Comunicação', err.message, true);
-        }
-      });
-    });
-  }
 
   async function fetchAnalytics() {
     try {
@@ -1289,113 +1173,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Application / Project Modal & Form Handling
-  const modalApp = document.getElementById('modal-app');
-  const formApp = document.getElementById('form-app');
-  const btnNewApp = document.getElementById('btn-new-app');
-  const modalAppClose = document.getElementById('modal-app-close');
-  const btnAppCancel = document.getElementById('btn-app-cancel');
-
-  function populateAppBundleOptions(selectedBundleId) {
-    const sel = document.getElementById('app-bundle');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">(Nenhum pacote vinculado)</option>';
-    if (currentStatus && currentStatus.bundles) {
-      currentStatus.bundles.forEach(b => {
-        const opt = document.createElement('option');
-        opt.value = b.bundle_id;
-        opt.textContent = `${b.title || b.bundle_id} (v${b.version})`;
-        if (b.bundle_id === selectedBundleId) opt.selected = true;
-        sel.appendChild(opt);
-      });
-    }
-  }
-
-  function openAppModalForCreate() {
-    if (!modalApp) return;
-    document.getElementById('modal-app-title').textContent = 'Novo Projeto / Aplicação';
-    document.getElementById('app-edit-mode').value = 'create';
-    formApp.reset();
-    document.getElementById('app-id').disabled = false;
-    document.getElementById('app-version').value = '1.0.0';
-    populateAppBundleOptions(currentStatus && currentStatus.active_bundle ? currentStatus.active_bundle.bundle_id : '');
-    modalApp.classList.remove('hidden');
-  }
-
-  function openAppModalForEdit(appId) {
-    const app = applicationsData.find(a => a.app_id === appId);
-    if (!app || !modalApp) return;
-
-    document.getElementById('modal-app-title').textContent = `Editar Projeto: ${app.name}`;
-    document.getElementById('app-edit-mode').value = 'edit';
-    document.getElementById('app-id').value = app.app_id;
-    document.getElementById('app-id').disabled = true;
-    document.getElementById('app-name').value = app.name || '';
-    document.getElementById('app-domain').value = app.domain_category || 'environmental_sciences';
-    document.getElementById('app-version').value = app.version || '1.0.0';
-    document.getElementById('app-theme').value = app.default_theme || '';
-    document.getElementById('app-desc').value = app.description || '';
-    document.getElementById('app-tags').value = (app.tags || []).join(', ');
-    document.getElementById('app-active').checked = !!app.is_active;
-
-    populateAppBundleOptions(app.active_bundle_id);
-    modalApp.classList.remove('hidden');
-  }
-
-  if (btnNewApp) btnNewApp.addEventListener('click', openAppModalForCreate);
-  if (modalAppClose) modalAppClose.addEventListener('click', () => modalApp.classList.add('hidden'));
-  if (btnAppCancel) btnAppCancel.addEventListener('click', () => modalApp.classList.add('hidden'));
-
-  if (formApp) {
-    formApp.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const appId = document.getElementById('app-id').value.trim();
-      const name = document.getElementById('app-name').value.trim();
-      const domain = document.getElementById('app-domain').value;
-      const version = document.getElementById('app-version').value.trim() || '1.0.0';
-      const bundleId = document.getElementById('app-bundle').value;
-      const theme = document.getElementById('app-theme').value.trim();
-      const desc = document.getElementById('app-desc').value.trim();
-      const tagsStr = document.getElementById('app-tags').value.trim();
-      const isActive = document.getElementById('app-active').checked;
-
-      const tags = tagsStr ? tagsStr.split(',').map(t => t.trim()).filter(Boolean) : [];
-
-      const payload = {
-        app_id: appId,
-        name: name,
-        domain_category: domain,
-        version: version,
-        active_bundle_id: bundleId,
-        default_theme: theme,
-        description: desc,
-        tags: tags,
-        is_active: isActive,
-        telemetry_enabled: true
-      };
-
+  // Action Buttons: Validate, Publish, Package Management, Reload
+  const btnPublish = document.getElementById('btn-publish');
+  if (btnPublish) {
+    btnPublish.addEventListener('click', async () => {
+      if (!confirm('Deseja empacotar, validar e publicar a versão ativa/rascunho no Totem?')) return;
       try {
-        const res = await fetch('/api/applications', {
+        showNotice('Publicando no Totem…', 'Calculando hash determinístico e sincronizando Totem via IPC...');
+        const res = await fetch('/api/publish', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ bundle_id: selectedPackageId || '' })
         });
         const data = await res.json();
         if (data.success) {
-          modalApp.classList.add('hidden');
-          showNotice('Projeto Salvo!', `Projeto "${name}" (${appId}) salvo com sucesso.`);
-          fetchApplications();
-          if (isActive) fetchStatus();
+          showNotice('Publicação Concluída com Sucesso! 🚀', `Aplicação "${data.bundle_id}" (v${data.version}) publicada e ativada no Totem.`);
+          await fetchStatus();
+          await fetchCatalog();
+          await fetchPackagePlans(data.bundle_id);
         } else {
-          showNotice('Erro ao Salvar Projeto', data.error || 'Erro', true);
+          showNotice('Falha na Publicação', data.error || 'Erro desconhecido', true);
         }
       } catch (err) {
-        showNotice('Falha de Rede', err.message, true);
+        showNotice('Erro de Comunicação', err.message, true);
       }
     });
   }
 
-  // Action Buttons: Validate, Package Management, Reload
   document.getElementById('btn-validate').addEventListener('click', async () => {
     try {
       showNotice('Validando Catálogo...', 'Executando ContentValidator nativo em C++26...');
@@ -1661,8 +1465,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Package Meta & Publish Actions
+  const formPkgMeta = document.getElementById('form-package-meta');
   const btnSavePkg = document.getElementById('btn-save-package-meta');
-  async function savePackagePlan() {
+  const btnPublishPkg = document.getElementById('btn-publish-package');
+
+  async function savePackagePlan(andActivate = false) {
       const title = document.getElementById('pkg-title').value.trim();
       const bundleId = document.getElementById('pkg-id').value.trim();
       const version = document.getElementById('pkg-version').value.trim();
@@ -1677,6 +1484,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       try {
+        showNotice('Salvando Aplicação…', `Registrando "${title}" (${bundleId})...`);
         const res = await fetch('/api/packages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1689,17 +1497,27 @@ document.addEventListener('DOMContentLoaded', () => {
             description: desc,
             domain_category: domainCategory,
             target_audience: targetAudience,
-            atom_ids: packageAtomIds.size ? Array.from(packageAtomIds) : catalogData.atoms.map(a => a.content_id)
+            atom_ids: Array.from(packageAtomIds)
           })
         });
         const data = await res.json();
         if (data.success) {
-          showNotice('Aplicação salva!', `A aplicação "${title}" (${version}) foi salva com sucesso.`);
-          updateLifecycleUI(true);
-          fetchStatus();
-          fetchCatalog();
+          if (andActivate) {
+            showNotice('Publicando no Totem…', `Publicando e ativando "${title}"...`);
+            const actRes = await fetch(`/api/packages/${encodeURIComponent(bundleId)}/activate`, { method: 'POST' });
+            const actData = await actRes.json();
+            if (actData.success) {
+              showNotice('Aplicação Publicada e Ativa! 🚀', `Aplicação "${title}" (v${actData.version || version}) está ativa no Totem.`);
+            } else {
+              showNotice('Salvo, mas falha ao ativar', actData.error || 'Erro na ativação', true);
+            }
+          } else {
+            showNotice('Aplicação Salva!', `A aplicação "${title}" (${version}) foi salva no banco editorial.`);
+          }
+          await fetchStatus();
+          await fetchCatalog();
           await fetchPackagePlans(bundleId);
-          hidePackageEditor();
+          await loadPackagePlan(bundleId);
           return true;
         } else {
           showNotice('Erro ao Salvar', data.error || 'Falha', true);
@@ -1710,8 +1528,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return false;
       }
   }
+
+  if (formPkgMeta) {
+    formPkgMeta.addEventListener('submit', (e) => {
+      e.preventDefault();
+      savePackagePlan(false);
+    });
+  }
+
   if (btnSavePkg) {
-    btnSavePkg.addEventListener('click', savePackagePlan);
+    btnSavePkg.addEventListener('click', () => savePackagePlan(false));
+  }
+
+  if (btnPublishPkg) {
+    btnPublishPkg.addEventListener('click', () => savePackagePlan(true));
   }
 
   const btnRefreshAnalytics = document.getElementById('btn-refresh-analytics');
