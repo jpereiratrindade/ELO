@@ -1,11 +1,15 @@
 #include "admin_http_server.hpp"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QProcess>
+#include <QProcessEnvironment>
+#include <QThread>
 #include <QUrl>
 #include <iostream>
 
@@ -1152,6 +1156,71 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         QJsonObject resp;
         resp[QStringLiteral("success")] = ok;
         sendJsonResponse(socket, ok ? 200 : 503, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // Helper to resolve kiosk binary
+    auto resolve_kiosk_bin = []() -> QString {
+        auto env = QProcessEnvironment::systemEnvironment();
+        QString custom = env.value(QStringLiteral("ELO_KIOSK_BIN"));
+        if (!custom.isEmpty() && QFile::exists(custom)) return custom;
+
+        QString appDir = QCoreApplication::applicationDirPath();
+        for (const auto& cand : {
+            appDir + QStringLiteral("/elo-kiosk"),
+            appDir + QStringLiteral("/../elo-kiosk/elo-kiosk"),
+            QStringLiteral("./build/apps/elo-kiosk/elo-kiosk"),
+            QStringLiteral("/usr/bin/elo-kiosk"),
+            QStringLiteral("/usr/local/bin/elo-kiosk")
+        }) {
+            if (QFile::exists(cand)) {
+                return QFileInfo(cand).canonicalFilePath();
+            }
+        }
+        return QStringLiteral("./build/apps/elo-kiosk/elo-kiosk");
+    };
+
+    // API: POST /api/kiosk/stop (Shutdown Kiosk Process)
+    if (method == QStringLiteral("POST") && (path == QStringLiteral("/api/kiosk/stop") || path == QStringLiteral("/api/kiosk/shutdown"))) {
+        system::ControlClient client;
+        bool ok = client.shutdown_kiosk();
+        if (!ok) {
+            QProcess::execute(QStringLiteral("pkill"), {QStringLiteral("-f"), QStringLiteral("elo-kiosk")});
+            ok = true;
+        }
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = ok;
+        resp[QStringLiteral("message")] = QStringLiteral("Comando de encerramento enviado ao totem.");
+        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: POST /api/kiosk/start (Launch Kiosk Process)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/start")) {
+        QString bin = resolve_kiosk_bin();
+        bool launched = QProcess::startDetached(bin, {});
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = launched;
+        resp[QStringLiteral("message")] = launched ? QStringLiteral("Totem iniciado com sucesso.") : QStringLiteral("Falha ao iniciar processo do Totem.");
+        resp[QStringLiteral("binary")] = bin;
+        sendJsonResponse(socket, launched ? 200 : 500, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        return;
+    }
+
+    // API: POST /api/kiosk/restart (Restart Kiosk Process)
+    if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/restart")) {
+        system::ControlClient client;
+        (void)client.shutdown_kiosk();
+        QProcess::execute(QStringLiteral("pkill"), {QStringLiteral("-f"), QStringLiteral("elo-kiosk")});
+        QThread::msleep(500);
+
+        QString bin = resolve_kiosk_bin();
+        bool launched = QProcess::startDetached(bin, {});
+        QJsonObject resp;
+        resp[QStringLiteral("success")] = launched;
+        resp[QStringLiteral("message")] = launched ? QStringLiteral("Totem reiniciado com sucesso.") : QStringLiteral("Falha ao reiniciar Totem.");
+        resp[QStringLiteral("binary")] = bin;
+        sendJsonResponse(socket, launched ? 200 : 500, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }
 

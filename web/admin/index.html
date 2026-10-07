@@ -27,6 +27,11 @@
         <span class="status-dot"></span>
         <span id="kiosk-status-text">Kiosk: Verificando...</span>
       </div>
+      <div id="kiosk-power-controls" style="display: flex; gap: 6px; align-items: center;">
+        <button id="btn-kiosk-start" class="btn btn-sm btn-primary" style="display:none; padding: 4px 10px; font-size: 11px;" title="Iniciar processo do Totem">▶️ Iniciar Totem</button>
+        <button id="btn-kiosk-restart" class="btn btn-sm btn-secondary" style="display:none; padding: 4px 10px; font-size: 11px;" title="Reiniciar processo do Totem">🔄 Reiniciar</button>
+        <button id="btn-kiosk-stop" class="btn btn-sm btn-danger-outline" style="display:none; padding: 4px 10px; font-size: 11px;" title="Encerrar processo do Totem">⏹️ Encerrar</button>
+      </div>
       <div id="kiosk-live-pill" class="status-pill status-live-content" style="display:none;">
         <span class="status-icon">📺</span>
         <span id="kiosk-live-text">Totem: —</span>
@@ -410,11 +415,22 @@
             <code>CONTENT_RELOAD</code>
             <code>CONTENT_PUBLISHED</code>
             <code>STATUS_REQUEST</code>
+            <code>SHOW_ATOM</code>
+            <code>ADVANCE_CONTENT</code>
+            <code>SHUTDOWN</code>
           </span>
         </div>
         <div class="ipc-detail-row">
+          <span class="ipc-key">Controle de Ciclo de Vida:</span>
+          <div style="display: flex; gap: 8px;">
+            <button id="btn-ipc-start" class="btn btn-sm btn-primary">▶️ Iniciar Kiosk</button>
+            <button id="btn-ipc-restart" class="btn btn-sm btn-secondary">🔄 Reiniciar Kiosk</button>
+            <button id="btn-ipc-stop" class="btn btn-sm btn-danger-outline">⏹️ Encerrar Kiosk</button>
+          </div>
+        </div>
+        <div class="ipc-detail-row">
           <span class="ipc-key">Invariante A5:</span>
-          <span class="ipc-text">Kiosk Sovereignty — Se o admin cair, o kiosk continua funcionando sem interrupção.</span>
+          <span class="ipc-text">Kiosk Sovereignty — Se o admin cair, o kiosk continua funcionando sem interrupção. O runtime do totem pode ser iniciado, encerrado ou recarregado soberanamente.</span>
         </div>
       </div>
     </section>

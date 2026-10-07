@@ -106,6 +106,10 @@ void ControlServer::onReadyRead() {
         } else if (line == QStringLiteral("ADVANCE_CONTENT")) {
             emit advanceRequested();
             socket->write("OK ADVANCE_ACK\n");
+        } else if (line == QStringLiteral("SHUTDOWN") || line == QStringLiteral("QUIT") || line == QStringLiteral("STOP")) {
+            socket->write("OK SHUTDOWN_ACK\n");
+            socket->flush();
+            emit shutdownRequested();
         } else if (line.startsWith(QStringLiteral("CONTENT_PUBLISHED"))) {
             auto parts = line.split(' ');
             QString bundleId = parts.size() > 1 ? parts[1] : QString();
@@ -155,6 +159,11 @@ bool ControlClient::show_atom(const QString& atom_id, int timeout_ms) {
 
 bool ControlClient::advance_content(int timeout_ms) {
     auto reply = send_command(QStringLiteral("ADVANCE_CONTENT"), timeout_ms);
+    return reply.contains(QStringLiteral("OK"));
+}
+
+bool ControlClient::shutdown_kiosk(int timeout_ms) {
+    auto reply = send_command(QStringLiteral("SHUTDOWN"), timeout_ms);
     return reply.contains(QStringLiteral("OK"));
 }
 

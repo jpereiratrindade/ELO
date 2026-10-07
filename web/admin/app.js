@@ -85,7 +85,23 @@ document.addEventListener('DOMContentLoaded', () => {
         kioskText.textContent = 'Kiosk: ONLINE (IPC OK)';
       } else {
         kioskPill.classList.add('status-offline');
-        kioskText.textContent = 'Kiosk: AGUARDANDO IPC';
+        kioskText.textContent = 'Kiosk: OFFLINE / PARADO';
+      }
+
+      // Kiosk Power Control Buttons Visibility
+      const btnStart = document.getElementById('btn-kiosk-start');
+      const btnRestart = document.getElementById('btn-kiosk-restart');
+      const btnStop = document.getElementById('btn-kiosk-stop');
+      if (btnStart && btnRestart && btnStop) {
+        if (data.kiosk_online) {
+          btnStart.style.display = 'none';
+          btnRestart.style.display = 'inline-flex';
+          btnStop.style.display = 'inline-flex';
+        } else {
+          btnStart.style.display = 'inline-flex';
+          btnRestart.style.display = 'none';
+          btnStop.style.display = 'none';
+        }
       }
 
       // Live totem active atom indicator
@@ -104,8 +120,17 @@ document.addEventListener('DOMContentLoaded', () => {
       // Socket path in IPC tab
       document.getElementById('ipc-socket-path').textContent = data.control_socket || '/run/elo/control.sock';
       const connState = document.getElementById('ipc-conn-state');
-      connState.textContent = data.kiosk_online ? 'Conectado ao elo-kiosk' : 'Kiosk offline ou dormindo';
+      connState.textContent = data.kiosk_online ? 'Conectado ao elo-kiosk (Online)' : 'Kiosk desligado ou offline';
       connState.className = data.kiosk_online ? 'badge-pill badge-green' : 'badge-pill';
+
+      const btnIpcStart = document.getElementById('btn-ipc-start');
+      const btnIpcRestart = document.getElementById('btn-ipc-restart');
+      const btnIpcStop = document.getElementById('btn-ipc-stop');
+      if (btnIpcStart && btnIpcRestart && btnIpcStop) {
+        btnIpcStart.disabled = data.kiosk_online;
+        btnIpcRestart.disabled = !data.kiosk_online;
+        btnIpcStop.disabled = !data.kiosk_online;
+      }
 
       // Active Bundle Card
       if (data.active_bundle) {
@@ -1129,6 +1154,43 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Kiosk Start / Stop / Restart Controls
+  async function performKioskAction(action, label) {
+    try {
+      showNotice('Controle do Kiosk', `Executando: ${label}...`);
+      const res = await fetch(`/api/kiosk/${action}`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        showNotice('Sucesso', data.message || `Ação "${label}" executada.`);
+      } else {
+        showNotice('Atenção / Erro', data.error || data.message || 'Falha ao executar ação no Kiosk', true);
+      }
+      setTimeout(fetchStatus, 800);
+      setTimeout(fetchStatus, 2000);
+    } catch (err) {
+      showNotice('Erro de Comunicação', err.message, true);
+    }
+  }
+
+  ['btn-kiosk-start', 'btn-ipc-start'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => performKioskAction('start', 'Iniciar Totem'));
+  });
+
+  ['btn-kiosk-restart', 'btn-ipc-restart'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => performKioskAction('restart', 'Reiniciar Totem'));
+  });
+
+  ['btn-kiosk-stop', 'btn-ipc-stop'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('click', () => {
+      if (confirm('Deseja realmente encerrar a execução do totem (kiosk)?')) {
+        performKioskAction('stop', 'Encerrar Totem');
+      }
+    });
+  });
 
   // Package Meta & Publish Actions
   const btnSavePkg = document.getElementById('btn-save-package-meta');

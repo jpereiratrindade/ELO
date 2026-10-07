@@ -33,6 +33,7 @@ signals:
     void commandReceived(const QString& command);
     void showAtomRequested(const QString& atomId);
     void advanceRequested();
+    void shutdownRequested();
 
 private slots:
     void onNewConnection();
@@ -44,7 +45,7 @@ private:
     std::function<QString()> status_provider_{};
 };
 
-/// @brief Control Plane IPC Client (used by elo-admin to trigger kiosk reloads)
+/// @brief Control Plane IPC Client (used by elo-admin to trigger kiosk reloads and lifecycle actions)
 class ControlClient {
 public:
     explicit ControlClient(const QString& socket_path = QString());
@@ -54,6 +55,7 @@ public:
     [[nodiscard]] bool notify_published(const QString& bundle_id, const QString& hash, int timeout_ms = 1000);
     [[nodiscard]] bool show_atom(const QString& atom_id, int timeout_ms = 1000);
     [[nodiscard]] bool advance_content(int timeout_ms = 1000);
+    [[nodiscard]] bool shutdown_kiosk(int timeout_ms = 1000);
     [[nodiscard]] QString send_command(const QString& command, int timeout_ms = 1000);
 
 private:

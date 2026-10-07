@@ -169,6 +169,12 @@ int main(int argc, char* argv[]) {
                     std::cerr << "[ELO][kiosk] Hot reload failed: " << reload_res.error().to_string() << '\n';
                 }
             });
+
+        QObject::connect(control_server.get(), &elo::system::ControlServer::shutdownRequested,
+            []() {
+                std::cout << "[ELO][kiosk] Remote shutdown signal received. Terminating kiosk...\n";
+                QCoreApplication::quit();
+            });
     }
 
     QQmlApplicationEngine qml_engine;
