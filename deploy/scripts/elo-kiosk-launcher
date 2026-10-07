@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# ELO Kiosk Launcher — Hardware Backend Resolver for Raspberry Pi 5
+# ==============================================================================
+set -e
+
+USER_UID=$(id -u)
+if [ -d "/run/user/${USER_UID}" ]; then
+    export XDG_RUNTIME_DIR="/run/user/${USER_UID}"
+else
+    export XDG_RUNTIME_DIR="/tmp/elo-runtime-${USER_UID}"
+    mkdir -p "${XDG_RUNTIME_DIR}"
+    chmod 0700 "${XDG_RUNTIME_DIR}"
+fi
+
+# Auto-detect display session
+if [ -n "$WAYLAND_DISPLAY" ]; then
+    export QT_QPA_PLATFORM="wayland"
+elif [ -n "$DISPLAY" ]; then
+    export QT_QPA_PLATFORM="xcb"
+else
+    # Embedded Direct KMS/DRM mode on Raspberry Pi 5
+    export QT_QPA_PLATFORM="eglfs"
+    export QT_QPA_EGLFS_ALWAYS_SET_MODE=1
+    export QT_QPA_EGLFS_KMS_ATOMIC=1
+    export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+fi
+
+exec /usr/local/bin/elo-kiosk "$@"
