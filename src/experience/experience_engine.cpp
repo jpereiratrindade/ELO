@@ -294,7 +294,9 @@ core::Result<void> ExperienceEngine::select_contextual_content(
         }
         record_jev_event("content.selected", active_atom_->content_id);
     }
-    transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
+    if (state_ != SessionState::IDLE || (role != content::ContentRole::Attract && role != content::ContentRole::Ambient)) {
+        transition_to(SessionState::CONTENT_ACTIVE, EventType::CONTENT_SELECTED);
+    }
     return {};
 }
 
@@ -512,11 +514,15 @@ void ExperienceEngine::finish_session() {
     record_jev_event("session.end");
     active_person_ = std::nullopt;
     biometric_continuity_active_ = false;
-    active_atom_ = nullptr;
-    active_variant_ = nullptr;
     recipe_active_ = false;
     session_seen_content_.clear();
     transition_to(SessionState::IDLE, EventType::SESSION_FINISHED);
+    if (content_catalog_ && content_catalog_->atom_count() > 0) {
+        (void)select_contextual_content(content::ContentRole::Attract);
+    } else {
+        active_atom_ = nullptr;
+        active_variant_ = nullptr;
+    }
 }
 
 } // namespace elo::experience

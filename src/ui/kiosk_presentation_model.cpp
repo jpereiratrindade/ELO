@@ -66,13 +66,16 @@ QString KioskPresentationModel::bundleTitle() const {
 QString KioskPresentationModel::contentTitle() const {
     if (!engine_) return QString();
     auto actions = engine_->active_presentation_actions();
-    if (!actions.empty()) {
+    if (!actions.empty() && !actions.front().title.empty()) {
         return QString::fromStdString(actions.front().title);
     }
     if (engine_->active_content_atom()) {
-        return QString::fromStdString(engine_->active_content_atom()->title);
+        if (!engine_->active_content_atom()->title.empty()) {
+            return QString::fromStdString(engine_->active_content_atom()->title);
+        }
+        return QString::fromStdString(engine_->active_content_atom()->subject.canonical_name);
     }
-    return bundleTitle();
+    return QString();
 }
 
 QString KioskPresentationModel::contentText() const {
@@ -300,6 +303,9 @@ void KioskPresentationModel::selectContextualContent(const QString& roleStr) {
             advanceContent();
             return;
         }
+        if (engine_->active_content_atom()) {
+            current_content_ = engine_->active_content_atom()->content_id;
+        }
         resetBehaviorTimer();
         emit contentChanged();
         emit stateChanged();
@@ -444,6 +450,9 @@ void KioskPresentationModel::finishSession() {
         emit recognitionVisualStateChanged(false);
         engine_->finish_session();
         current_content_.clear();
+        if (engine_->active_content_atom()) {
+            current_content_ = engine_->active_content_atom()->content_id;
+        }
         recognition_resolved_ = false;
         pending_embeddings_.clear();
         pending_quality_sum_ = 0.0;
@@ -524,13 +533,19 @@ void KioskPresentationModel::tick(double delta_seconds) {
 
     switch (state) {
         case experience::SessionState::IDLE: {
-            constexpr double kAmbientRotationDuration = 10.0;
+            constexpr double kAmbientRotationDuration = 8.0;
             behavior_progress_ = std::clamp(state_duration_ / kAmbientRotationDuration, 0.0, 1.0);
             emit behaviorProgressChanged();
             if (state_duration_ >= kAmbientRotationDuration) {
                 state_duration_ = 0.0;
                 behavior_progress_ = 0.0;
-                selectContextualContent(QStringLiteral("attract"));
+                if (engine_ && engine_->content_catalog() && engine_->content_catalog()->atom_count() > 0) {
+                    (void)engine_->select_contextual_content(content::ContentRole::Attract);
+                    if (engine_->active_content_atom()) {
+                        current_content_ = engine_->active_content_atom()->content_id;
+                    }
+                    emit contentChanged();
+                }
             }
             break;
         }

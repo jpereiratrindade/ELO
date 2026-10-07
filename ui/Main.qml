@@ -32,7 +32,7 @@ Window {
             }
 
             Text {
-                text: "•  Sempre pronto. Sempre incompleto."
+                text: "•  " + (kioskModel.bundleTitle.length > 0 ? kioskModel.bundleTitle : "Sempre pronto. Sempre incompleto.")
                 font.pixelSize: 14
                 color: "#94a3b8"
             }
@@ -206,7 +206,7 @@ Window {
                 spacing: 4
 
                 Text {
-                    text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : kioskModel.bundleTitle
+                    text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Exploração do Acervo"
                     font.pixelSize: Math.max(28, Math.min(contentArea.width * 0.026, 44))
                     font.bold: true
                     color: "#f8fafc"
@@ -314,7 +314,7 @@ Window {
                     }
 
                     Text {
-                        text: kioskModel.contentTitle
+                        text: kioskModel.contentTitle.length > 0 ? kioskModel.contentTitle : "Átomo de Conteúdo"
                         font.pixelSize: 24
                         font.bold: true
                         color: "#e2e8f0"
@@ -322,11 +322,11 @@ Window {
                     }
 
                     Text {
-                        text: kioskModel.bundleTitle
+                        text: kioskModel.contentTypeLabel.length > 0 ? kioskModel.contentTypeLabel : (kioskModel.contentScientificName.length > 0 ? kioskModel.contentScientificName : "")
                         font.pixelSize: 15
                         color: "#64748b"
                         Layout.alignment: Qt.AlignHCenter
-                        visible: kioskModel.bundleTitle.length > 0
+                        visible: text.length > 0
                     }
                 }
 
