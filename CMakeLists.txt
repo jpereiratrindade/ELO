@@ -98,6 +98,10 @@ endif()
 add_subdirectory(apps/elo-kiosk)
 add_subdirectory(apps/elo-admin)
 
+# Installation of Web Admin Studio & Documentation
+install(DIRECTORY web/admin DESTINATION share/elo)
+install(DIRECTORY docs DESTINATION share/doc/elo)
+
 # Constitutional Tests and Experiments
 enable_testing()
 add_subdirectory(tests)

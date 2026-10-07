@@ -21,3 +21,5 @@ target_link_libraries(elo-kiosk PRIVATE
 target_include_directories(elo-kiosk PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../include
 )
+
+install(TARGETS elo-kiosk RUNTIME DESTINATION bin)

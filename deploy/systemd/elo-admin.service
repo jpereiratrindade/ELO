@@ -1,0 +1,17 @@
+[Unit]
+Description=ELO Sovereign Content Studio Admin Daemon
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=%I
+Environment=ELO_ADMIN_PORT=8080
+Environment=QT_QPA_PLATFORM=minimal
+WorkingDirectory=/home/%I
+ExecStart=/usr/local/bin/elo-admin
+Restart=always
+RestartSec=3s
+
+[Install]
+WantedBy=multi-user.target

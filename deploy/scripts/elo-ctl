@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# ELO Control CLI (elo-ctl) — Raspberry Pi 5 & Appliance Management Utility
+# ==============================================================================
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+TARGET_USER="${SUDO_USER:-$USER}"
+
+usage() {
+    echo -e "${BLUE}======================================================${NC}"
+    echo -e "${GREEN}  ELO Sovereign Totem Control Tool (elo-ctl)${NC}"
+    echo -e "${BLUE}======================================================${NC}"
+    echo "Uso: elo-ctl [comando]"
+    echo ""
+    echo "Comandos disponíveis:"
+    echo "  status            Exibe status dos serviços, socket IPC e câmeras"
+    echo "  start             Inicia o Admin Studio e o Totem Kiosk"
+    echo "  stop              Interrompe os serviços do Totem e Admin"
+    echo "  restart           Reinicia o Totem e o Admin Studio"
+    echo "  start-kiosk       Inicia apenas o processo do Totem Kiosk"
+    echo "  stop-kiosk        Interrompe apenas o Totem Kiosk"
+    echo "  reload-content    Envia sinal de hot-reload de catálogo ao Totem"
+    echo "  logs-kiosk        Exibe logs em tempo real do Totem Kiosk"
+    echo "  logs-admin        Exibe logs em tempo real do Admin Studio"
+    echo "  camera-check      Lista e testa câmeras V4L2/libcamera disponíveis"
+    echo "  admin-url         Mostra o IP e URL para acesso ao Studio Web"
+    echo "  help              Exibe esta mensagem de ajuda"
+    echo ""
+}
+
+get_local_ip() {
+    hostname -I | awk '{print $1}'
+}
+
+cmd_status() {
+    echo -e "${BLUE}>>> Status dos Serviços ELO:${NC}"
+    if systemctl is-active --quiet "elo-admin@${TARGET_USER}" 2>/dev/null; then
+        echo -e "  Admin Studio: [${GREEN}ATIVO${NC}] (http://$(get_local_ip):8080)"
+    elif pgrep -f "elo-admin" >/dev/null; then
+        echo -e "  Admin Studio: [${GREEN}RODANDO (manual)${NC}] (http://$(get_local_ip):8080)"
+    else
+        echo -e "  Admin Studio: [${RED}INATIVO${NC}]"
+    fi
+
+    if systemctl is-active --quiet "elo-kiosk@${TARGET_USER}" 2>/dev/null; then
+        echo -e "  Totem Kiosk:  [${GREEN}ATIVO (systemd)${NC}]"
+    elif pgrep -f "elo-kiosk" >/dev/null; then
+        echo -e "  Totem Kiosk:  [${GREEN}RODANDO (manual)${NC}]"
+    else
+        echo -e "  Totem Kiosk:  [${YELLOW}PARADO${NC}]"
+    fi
+
+    echo ""
+    echo -e "${BLUE}>>> Socket IPC de Controle:${NC}"
+    SOCKET_PATH="/run/user/$(id -u ${TARGET_USER})/elo-control.sock"
+    if [ -S "$SOCKET_PATH" ]; then
+        echo -e "  Socket: ${GREEN}${SOCKET_PATH}${NC} (Conectado)"
+    else
+        echo -e "  Socket: ${YELLOW}Não ativo no momento${NC}"
+    fi
+
+    echo ""
+    echo -e "${BLUE}>>> Câmeras detectadas:${NC}"
+    if command -v v4l2-ctl >/dev/null 2>&1; then
+        v4l2-ctl --list-devices 2>/dev/null || echo "Nenhum dispositivo V4L2 encontrado."
+    elif [ -d "/dev" ]; then
+        ls -l /dev/video* 2>/dev/null || echo "Nenhum /dev/video* encontrado."
+    fi
+}
+
+cmd_start() {
+    echo -e "${GREEN}Iniciando serviços ELO...${NC}"
+    if systemctl list-unit-files | grep -q "elo-admin"; then
+        sudo systemctl start "elo-admin@${TARGET_USER}"
+        sudo systemctl start "elo-kiosk@${TARGET_USER}"
+    else
+        echo "Executando em modo binário direto..."
+        /usr/local/bin/elo-admin &
+        sleep 1
+        /usr/local/bin/elo-kiosk &
+    fi
+    echo -e "${GREEN}Serviços iniciados com sucesso!${NC}"
+    echo "Acesse o painel em: http://$(get_local_ip):8080"
+}
+
+cmd_stop() {
+    echo -e "${YELLOW}Interrompendo serviços ELO...${NC}"
+    if systemctl list-unit-files | grep -q "elo-admin"; then
+        sudo systemctl stop "elo-kiosk@${TARGET_USER}" || true
+        sudo systemctl stop "elo-admin@${TARGET_USER}" || true
+    fi
+    pkill -f "elo-kiosk" || true
+    pkill -f "elo-admin" || true
+    echo -e "${GREEN}Serviços interrompidos.${NC}"
+}
+
+cmd_restart() {
+    cmd_stop
+    sleep 1
+    cmd_start
+}
+
+cmd_reload_content() {
+    echo -e "${BLUE}Enviando sinal de hot-reload via IPC...${NC}"
+    if curl -s -X POST http://localhost:8080/api/kiosk/reload >/dev/null 2>&1; then
+        echo -e "${GREEN}Catálogo recarregado com sucesso no Totem!${NC}"
+    else
+        echo -e "${YELLOW}Aviso: Não foi possível contatar a API local (o admin está rodando?).${NC}"
+    fi
+}
+
+case "$1" in
+    status)
+        cmd_status
+        ;;
+    start)
+        cmd_start
+        ;;
+    stop)
+        cmd_stop
+        ;;
+    restart)
+        cmd_restart
+        ;;
+    start-kiosk)
+        if systemctl list-unit-files | grep -q "elo-kiosk"; then
+            sudo systemctl start "elo-kiosk@${TARGET_USER}"
+        else
+            /usr/local/bin/elo-kiosk &
+        fi
+        ;;
+    stop-kiosk)
+        if systemctl list-unit-files | grep -q "elo-kiosk"; then
+            sudo systemctl stop "elo-kiosk@${TARGET_USER}" || true
+        fi
+        pkill -f "elo-kiosk" || true
+        ;;
+    reload-content)
+        cmd_reload_content
+        ;;
+    logs-kiosk)
+        journalctl -u "elo-kiosk@${TARGET_USER}" -f -n 50
+        ;;
+    logs-admin)
+        journalctl -u "elo-admin@${TARGET_USER}" -f -n 50
+        ;;
+    camera-check)
+        echo -e "${BLUE}>>> Verificando dispositivos de vídeo e permissões:${NC}"
+        ls -la /dev/video* 2>/dev/null || echo "Nenhum /dev/video* encontrado."
+        echo ""
+        id -Gn "${TARGET_USER}" | grep -q "video" && echo -e "Grupo 'video': [${GREEN}OK${NC}]" || echo -e "Grupo 'video': [${RED}FALTANDO - adicione com sudo usermod -aG video ${TARGET_USER}${NC}]"
+        ;;
+    admin-url)
+        echo -e "${GREEN}Studio Web URL:${NC} http://$(get_local_ip):8080"
+        ;;
+    help|--help|-h|"")
+        usage
+        ;;
+    *)
+        echo -e "${RED}Comando desconhecido: $1${NC}"
+        usage
+        exit 1
+        ;;
+esac
