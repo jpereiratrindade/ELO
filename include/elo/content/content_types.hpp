@@ -279,11 +279,14 @@ struct ModalityAssets {
 
 /// @brief ELO-CONTENT-001 Section 40: ContentAtom
 struct ContentAtom {
-    std::string schema_version{"0.1"};
+    std::string schema_version{"0.2"};
     std::string content_id;
     ContentType type{ContentType::Unknown};
     std::string subtype{};
     std::string title;
+    std::string summary{};
+    std::string language{"pt-BR"};
+    std::string lifecycle_status{"draft"};
     ContentSubject subject;
     std::vector<std::string> themes{};
     std::vector<CanonicalFact> canonical_facts{};
@@ -292,6 +295,16 @@ struct ContentAtom {
     std::vector<std::string> audiences{"general"};
     std::vector<std::string> relation_ids{};
     std::unordered_map<std::string, std::string> custom_attributes{};
+    std::string creator{};
+    std::string publisher{};
+    std::string source_reference{};
+    std::string license{};
+    std::string rights_holder{};
+    std::string attribution{};
+    std::string created_at{};
+    std::string modified_at{};
+    std::string alt_text{};
+    std::string transcript{};
     bool reviewed{true};
 };
 
@@ -409,6 +422,8 @@ struct BundleManifest {
     std::string content_hash{};
     std::string parent_bundle{};
     std::string created_at{};
+    std::string application_id{};
+    std::vector<std::string> atom_ids{};
 };
 
 } // namespace elo::content

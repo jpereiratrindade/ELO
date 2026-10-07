@@ -9,6 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcessEnvironment>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QString>
 
@@ -16,6 +17,7 @@
 #include <chrono>
 #include <fstream>
 #include <iostream>
+#include <unordered_set>
 #include <unistd.h>
 
 namespace elo::content {
@@ -44,6 +46,10 @@ BundleManifest read_manifest(const std::filesystem::path& path) {
     manifest.content_hash = obj.value(QStringLiteral("content_hash")).toString().toStdString();
     manifest.parent_bundle = obj.value(QStringLiteral("parent_bundle")).toString().toStdString();
     manifest.created_at = obj.value(QStringLiteral("created_at")).toString().toStdString();
+    manifest.application_id = obj.value(QStringLiteral("application_id")).toString().toStdString();
+    for (const auto& value : obj.value(QStringLiteral("atom_ids")).toArray()) {
+        manifest.atom_ids.push_back(value.toString().toStdString());
+    }
     return manifest;
 }
 
@@ -60,12 +66,80 @@ bool write_manifest(const std::filesystem::path& path, const BundleManifest& man
     obj[QStringLiteral("content_hash")] = QString::fromStdString(manifest.content_hash);
     obj[QStringLiteral("parent_bundle")] = QString::fromStdString(manifest.parent_bundle);
     obj[QStringLiteral("created_at")] = QString::fromStdString(manifest.created_at);
+    obj[QStringLiteral("application_id")] = QString::fromStdString(manifest.application_id);
+    QJsonArray atomIds;
+    for (const auto& id : manifest.atom_ids) atomIds.append(QString::fromStdString(id));
+    obj[QStringLiteral("atom_ids")] = atomIds;
 
     QFile file(QString::fromStdString(path.string()));
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
         return false;
     }
     file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    return true;
+}
+
+bool prune_catalog_to_package(const std::filesystem::path& bundle_root,
+                              const std::vector<std::string>& atom_ids,
+                              std::string& error) {
+    if (atom_ids.empty()) return true; // Backward compatible: empty means all atoms.
+    const std::unordered_set<std::string> selected(atom_ids.begin(), atom_ids.end());
+    const auto catalog = bundle_root / "catalog";
+    std::unordered_set<std::string> found;
+
+    for (const auto& folder : {"atoms", "objects"}) {
+        const auto dir = catalog / folder;
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec)) continue;
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec) || entry.path().extension() != ".json") continue;
+            QFile file(QString::fromStdString(entry.path().string()));
+            if (!file.open(QIODevice::ReadOnly)) continue;
+            const auto doc = QJsonDocument::fromJson(file.readAll());
+            const auto id = doc.object().value(QStringLiteral("content_id")).toString().toStdString();
+            if (!selected.contains(id)) std::filesystem::remove(entry.path(), ec);
+            else found.insert(id);
+        }
+    }
+    for (const auto& id : selected) {
+        if (!found.contains(id)) {
+            error = "Package references missing atom: " + id;
+            return false;
+        }
+    }
+
+    const auto filter_directory = [&](const std::filesystem::path& dir, bool relation) {
+        std::error_code ec;
+        if (!std::filesystem::exists(dir, ec)) return true;
+        for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec) || entry.path().extension() != ".json") continue;
+            QFile file(QString::fromStdString(entry.path().string()));
+            if (!file.open(QIODevice::ReadOnly)) continue;
+            auto doc = QJsonDocument::fromJson(file.readAll());
+            auto keep = [&](const QJsonObject& obj) {
+                if (relation) {
+                    return selected.contains(obj.value(QStringLiteral("from")).toString().toStdString())
+                        && selected.contains(obj.value(QStringLiteral("to")).toString().toStdString());
+                }
+                return selected.contains(obj.value(QStringLiteral("content_id")).toString().toStdString());
+            };
+            if (doc.isArray()) {
+                QJsonArray filtered;
+                for (const auto& value : doc.array()) if (value.isObject() && keep(value.toObject())) filtered.append(value);
+                file.close();
+                QSaveFile output(QString::fromStdString(entry.path().string()));
+                if (!output.open(QIODevice::WriteOnly) || output.write(QJsonDocument(filtered).toJson(QJsonDocument::Indented)) < 0 || !output.commit()) return false;
+            } else if (doc.isObject() && !keep(doc.object())) {
+                file.close();
+                std::filesystem::remove(entry.path(), ec);
+            }
+        }
+        return true;
+    };
+    if (!filter_directory(catalog / "relations", true) || !filter_directory(catalog / "variants", false)) {
+        error = "Failed to filter package relations or variants";
+        return false;
+    }
     return true;
 }
 
@@ -249,20 +323,8 @@ BundlePublishResult BundlePublisher::publish_and_activate(
     BundlePublishResult res;
     ContentBundle candidate(candidate_dir);
 
-    // 1. Validate candidate bundle
-    auto report = candidate.validate();
-    if (!report.valid) {
-        res.success = false;
-        std::string errs;
-        for (const auto& e : report.errors) {
-            if (!errs.empty()) errs += "; ";
-            errs += e.item_id + ": " + e.message;
-        }
-        res.error_message = "Validation failed: " + errs;
-        return res;
-    }
-
-    // 2. Load manifest and calculate hash
+    // 1. Load package plan. Validation happens after atom selection is applied,
+    // so unrelated draft atoms cannot block publication of this package.
     auto m_res = candidate.load_manifest();
     if (!m_res) {
         res.success = false;
@@ -270,13 +332,6 @@ BundlePublishResult BundlePublisher::publish_and_activate(
         return res;
     }
     auto manifest = *m_res;
-
-    auto hash_res = candidate.compute_content_hash();
-    if (!hash_res) {
-        res.success = false;
-        res.error_message = hash_res.error().to_string();
-        return res;
-    }
 
     auto active = active_bundle();
     if (active) {
@@ -286,7 +341,6 @@ BundlePublishResult BundlePublisher::publish_and_activate(
         manifest.curation_revision = 1;
     }
 
-    manifest.content_hash = *hash_res;
     manifest.created_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate).toStdString();
 
     // 3. Prepare target folder in bundles/
@@ -312,6 +366,39 @@ BundlePublishResult BundlePublisher::publish_and_activate(
             }
         }
     }
+
+    std::string package_error;
+    if (!prune_catalog_to_package(target_dir, manifest.atom_ids, package_error)) {
+        std::filesystem::remove_all(target_dir, ec);
+        res.success = false;
+        res.error_message = package_error;
+        return res;
+    }
+
+    // Validate the actual selected package, not only the full authoring catalog.
+    if (!write_manifest(target_dir / "manifest.json", manifest)) {
+        res.success = false;
+        res.error_message = "Failed to write package manifest";
+        return res;
+    }
+    ContentBundle sealedCandidate(target_dir);
+    auto sealedReport = sealedCandidate.validate();
+    if (!sealedReport.valid) {
+        std::filesystem::remove_all(target_dir, ec);
+        res.success = false;
+        res.error_message = "Selected package failed validation";
+        for (const auto& issue : sealedReport.errors) {
+            res.error_message += "; " + issue.item_id + ": " + issue.message;
+        }
+        return res;
+    }
+    auto hash_res = sealedCandidate.compute_content_hash();
+    if (!hash_res) {
+        res.success = false;
+        res.error_message = hash_res.error().to_string();
+        return res;
+    }
+    manifest.content_hash = *hash_res;
 
     // Update sealed manifest with new hash and timestamps
     if (!write_manifest(target_dir / "manifest.json", manifest)) {

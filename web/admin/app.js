@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
   let catalogData = { atoms: [], relations: [], recipes: [] };
   let currentStatus = null;
+  let packageAtomIds = new Set();
 
   // Tab switching
   const tabButtons = document.querySelectorAll('.tab-btn');
@@ -16,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (target) {
         target.classList.add('active');
         if (target.id === 'tab-media') fetchMedia();
-        if (target.id === 'tab-bundles') fetchManifest();
+        if (target.id === 'tab-bundles') { fetchManifest(); fetchPackagePlans(); }
         if (target.id === 'tab-apps') fetchApplications();
         if (target.id === 'tab-analytics') fetchAnalytics();
       }
@@ -177,27 +178,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  async function fetchManifest() {
-    try {
-      const res = await fetch('/api/manifest');
-      if (!res.ok) return;
-      const m = await res.json();
+  function applyPackageManifest(m) {
       if (document.getElementById('pkg-title')) document.getElementById('pkg-title').value = m.title || '';
       if (document.getElementById('pkg-id')) document.getElementById('pkg-id').value = m.bundle_id || '';
       if (document.getElementById('pkg-version')) document.getElementById('pkg-version').value = m.version || '';
       if (document.getElementById('pkg-theme')) document.getElementById('pkg-theme').value = m.default_theme || '';
       if (document.getElementById('pkg-desc')) document.getElementById('pkg-desc').value = m.description || '';
+      if (document.getElementById('pkg-app-id')) document.getElementById('pkg-app-id').value = m.application_id || '';
+      packageAtomIds = new Set(Array.isArray(m.atom_ids) ? m.atom_ids : []);
+      renderPackageAtoms(catalogData.atoms || []);
+  }
+
+  async function fetchManifest() {
+    try {
+      const res = await fetch('/api/manifest');
+      if (!res.ok) return;
+      const m = await res.json();
+      applyPackageManifest(m);
     } catch (e) {
       console.warn('Erro ao carregar manifesto:', e);
     }
   }
+
+  async function fetchPackagePlans() {
+    const select = document.getElementById('pkg-plan-select');
+    if (!select) return;
+    try {
+      const res = await fetch('/api/packages');
+      if (!res.ok) return;
+      const data = await res.json();
+      const currentId = document.getElementById('pkg-id')?.value || '';
+      select.innerHTML = '<option value="">Novo pacote / manifesto atual</option>';
+      (data.packages || []).forEach(plan => {
+        const option = document.createElement('option');
+        option.value = plan.bundle_id;
+        option.textContent = `${plan.title || plan.bundle_id} (v${plan.version || '0.1.0'})`;
+        option.selected = plan.bundle_id === currentId;
+        select.appendChild(option);
+      });
+    } catch (e) {
+      console.warn('Erro ao listar planos de pacote:', e);
+    }
+  }
+
+  document.getElementById('pkg-plan-select')?.addEventListener('change', async (event) => {
+    const id = event.target.value;
+    if (!id) return;
+    try {
+      const res = await fetch(`/api/packages/${encodeURIComponent(id)}`);
+      if (!res.ok) throw new Error('Pacote não encontrado');
+      applyPackageManifest(await res.json());
+    } catch (e) {
+      showNotice('Erro ao carregar pacote', e.message, true);
+    }
+  });
 
   function renderPackageAtoms(atoms) {
     const list = document.getElementById('pkg-atoms-list');
     const badge = document.getElementById('pkg-atoms-count-badge');
     if (!list) return;
     list.innerHTML = '';
-    if (badge) badge.textContent = `${atoms.length} Átomos`;
+    const selectedCount = packageAtomIds.size || atoms.length;
+    if (badge) badge.textContent = `${selectedCount} / ${atoms.length} Átomos`;
 
     if (atoms.length === 0) {
       list.innerHTML = '<p style="color:var(--text-dim); padding:10px;">Nenhum átomo cadastrado neste pacote ainda.</p>';
@@ -208,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const item = document.createElement('div');
       item.style.cssText = 'background: var(--bg-surface); padding: 10px 14px; border-radius: var(--radius-md); display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border-subtle);';
       item.innerHTML = `
+        <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.size === 0 || packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} no pacote">
         <div>
           <strong style="color: var(--text-main); font-size: 0.9rem;">${a.canonical_name || a.title}</strong>
           <div style="color: var(--text-dim); font-size: 0.75rem;">${a.type_label || a.type} · <code>${a.content_id}</code></div>
@@ -215,6 +258,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="badge-pill" style="font-size: 10px;">${a.type}</span>
       `;
       list.appendChild(item);
+    });
+    list.querySelectorAll('.pkg-atom-check').forEach(check => {
+      check.addEventListener('change', () => {
+        if (packageAtomIds.size === 0) packageAtomIds = new Set(atoms.map(a => a.content_id));
+        if (check.checked) packageAtomIds.add(check.dataset.id); else packageAtomIds.delete(check.dataset.id);
+        if (badge) badge.textContent = `${packageAtomIds.size} / ${atoms.length} Átomos`;
+      });
     });
   }
 
@@ -684,8 +734,7 @@ document.addEventListener('DOMContentLoaded', () => {
     addFactRow('', 'source_curadoria_local');
     if (metaPairsContainer) {
       metaPairsContainer.innerHTML = '';
-      addMetaPairRow('Autor / Curador', '');
-      addMetaPairRow('Ano / Período', '');
+      addMetaPairRow('', '');
     }
     modalAtom.classList.remove('hidden');
   }
@@ -699,14 +748,23 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('atom-id').value = atom.content_id;
     document.getElementById('atom-id').disabled = true;
     document.getElementById('atom-type').value = atom.type || 'entity';
-    if (document.getElementById('atom-domain')) {
-      document.getElementById('atom-domain').value = atom.domain || atom.category || 'general';
-    }
+    document.getElementById('atom-subtype').value = atom.subtype || '';
+    document.getElementById('atom-language').value = atom.language || 'pt-BR';
+    document.getElementById('atom-summary').value = atom.summary || '';
+    document.getElementById('atom-status').value = atom.lifecycle_status || 'draft';
     document.getElementById('atom-title').value = atom.title || '';
     document.getElementById('atom-canonical').value = atom.canonical_name || atom.subject?.canonical_name || '';
     document.getElementById('atom-scientific').value = atom.scientific_name || atom.subtitle || atom.subject?.scientific_name || '';
     document.getElementById('atom-type-label').value = atom.type_label || atom.subject?.type_label || '';
     document.getElementById('atom-themes').value = (atom.themes || []).join(', ');
+    document.getElementById('atom-creator').value = atom.provenance?.creator || '';
+    document.getElementById('atom-publisher').value = atom.provenance?.publisher || '';
+    document.getElementById('atom-source').value = atom.provenance?.source_reference || '';
+    document.getElementById('atom-license').value = atom.rights?.license || '';
+    document.getElementById('atom-rights-holder').value = atom.rights?.rights_holder || '';
+    document.getElementById('atom-attribution').value = atom.rights?.attribution || '';
+    document.getElementById('atom-alt-text').value = atom.accessibility?.alt_text || '';
+    document.getElementById('atom-transcript').value = atom.accessibility?.transcript || '';
 
     const imgPath = (atom.images && atom.images.length > 0) ? atom.images[0] : (atom.modalities?.image?.[0] || '');
     document.getElementById('atom-image-path').value = imgPath;
@@ -742,8 +800,7 @@ document.addEventListener('DOMContentLoaded', () => {
           addMetaPairRow(k, v);
         }
       } else {
-        addMetaPairRow('Autor / Curador', '');
-        addMetaPairRow('Ano / Período', '');
+        addMetaPairRow('', '');
       }
     }
 
@@ -909,6 +966,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const mode = document.getElementById('atom-edit-mode').value;
     const contentId = document.getElementById('atom-id').value.trim();
     const type = document.getElementById('atom-type').value;
+    const subtype = document.getElementById('atom-subtype').value.trim();
     const title = document.getElementById('atom-title').value.trim();
     const canonicalName = document.getElementById('atom-canonical').value.trim() || title;
     const scientificName = document.getElementById('atom-scientific').value.trim();
@@ -916,7 +974,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const themesStr = document.getElementById('atom-themes').value.trim();
     const themes = themesStr ? themesStr.split(',').map(s => s.trim()).filter(Boolean) : ['geral'];
 
-    const domain = document.getElementById('atom-domain') ? document.getElementById('atom-domain').value : 'general';
+    const language = document.getElementById('atom-language').value.trim() || 'pt-BR';
+    const summary = document.getElementById('atom-summary').value.trim();
+    const lifecycleStatus = document.getElementById('atom-status').value;
     const subtitle = scientificName;
 
     // Collect facts
@@ -948,12 +1008,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const audPath = document.getElementById('atom-audio-path').value.trim();
 
     const payload = {
-      schema_version: '0.1',
+      schema_version: '0.2',
       content_id: contentId,
       type: type,
-      domain: domain,
-      subtype: 'custom',
+      subtype: subtype,
       title: title,
+      summary: summary,
+      language: language,
+      lifecycle_status: lifecycleStatus,
       subtitle: subtitle,
       subject: {
         canonical_name: canonicalName,
@@ -968,7 +1030,23 @@ document.addEventListener('DOMContentLoaded', () => {
         audio: audPath ? [audPath] : []
       },
       supported_roles: ['ambient', 'attract', 'engage', 'deepen'],
-      provenance: { reviewed: true }
+      provenance: {
+        creator: document.getElementById('atom-creator').value.trim(),
+        publisher: document.getElementById('atom-publisher').value.trim(),
+        source_reference: document.getElementById('atom-source').value.trim(),
+        reviewed: lifecycleStatus === 'approved',
+        created_at: mode === 'edit' ? ((catalogData.atoms || []).find(a => a.content_id === contentId)?.provenance?.created_at || new Date().toISOString()) : new Date().toISOString(),
+        modified_at: new Date().toISOString()
+      },
+      rights: {
+        license: document.getElementById('atom-license').value.trim(),
+        rights_holder: document.getElementById('atom-rights-holder').value.trim(),
+        attribution: document.getElementById('atom-attribution').value.trim()
+      },
+      accessibility: {
+        alt_text: document.getElementById('atom-alt-text').value.trim(),
+        transcript: document.getElementById('atom-transcript').value.trim()
+      }
     };
 
     try {
@@ -1451,17 +1529,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Package Meta & Publish Actions
   const btnSavePkg = document.getElementById('btn-save-package-meta');
-  if (btnSavePkg) {
-    btnSavePkg.addEventListener('click', async () => {
+  async function savePackagePlan() {
       const title = document.getElementById('pkg-title').value.trim();
       const bundleId = document.getElementById('pkg-id').value.trim();
       const version = document.getElementById('pkg-version').value.trim();
       const theme = document.getElementById('pkg-theme').value.trim();
       const desc = document.getElementById('pkg-desc').value.trim();
+      const applicationId = document.getElementById('pkg-app-id').value.trim();
 
       if (!title || !bundleId || !version) {
         showNotice('Campos Obrigatórios', 'Preencha Título, ID e Versão do Pacote.', true);
-        return;
+        return false;
       }
 
       try {
@@ -1469,12 +1547,14 @@ document.addEventListener('DOMContentLoaded', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            schema_version: '0.1',
+            schema_version: '0.2',
             bundle_id: bundleId,
             version: version,
             title: title,
             default_theme: theme,
-            description: desc
+            description: desc,
+            application_id: applicationId,
+            atom_ids: packageAtomIds.size ? Array.from(packageAtomIds) : catalogData.atoms.map(a => a.content_id)
           })
         });
         const data = await res.json();
@@ -1483,18 +1563,25 @@ document.addEventListener('DOMContentLoaded', () => {
           updateLifecycleUI(true);
           fetchStatus();
           fetchCatalog();
+          fetchPackagePlans();
+          return true;
         } else {
           showNotice('Erro ao Salvar', data.error || 'Falha', true);
+          return false;
         }
       } catch (err) {
         showNotice('Falha de Rede', err.message, true);
+        return false;
       }
-    });
+  }
+  if (btnSavePkg) {
+    btnSavePkg.addEventListener('click', savePackagePlan);
   }
 
   const btnPublishPkgDirect = document.getElementById('btn-publish-package-direct');
   if (btnPublishPkgDirect) {
-    btnPublishPkgDirect.addEventListener('click', () => {
+    btnPublishPkgDirect.addEventListener('click', async () => {
+      if (!(await savePackagePlan())) return;
       const btnPub = document.getElementById('btn-publish');
       if (btnPub) btnPub.click();
     });
@@ -1513,6 +1600,7 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchCatalog();
   fetchMedia();
   fetchManifest();
+  fetchPackagePlans();
   fetchApplications();
   fetchAnalytics();
   setInterval(fetchStatus, 4000);

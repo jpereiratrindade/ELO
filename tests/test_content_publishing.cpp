@@ -4,6 +4,10 @@
 #include "test_content_fixtures.hpp"
 
 #include <QCoreApplication>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <cassert>
 #include <chrono>
 #include <filesystem>
@@ -93,6 +97,45 @@ void test_bundle_publisher_and_atomic_swap() {
     std::filesystem::remove_all(temp_root, ec);
 }
 
+void test_package_atom_selection() {
+    std::cout << "[TEST] Package publishes only explicitly selected atoms...\n";
+    const auto source = resolve_content_dir();
+    const auto temp = std::filesystem::temp_directory_path() /
+        ("elo_package_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    const auto candidate = temp / "candidate";
+    const auto repository = temp / "repository";
+    std::filesystem::create_directories(candidate);
+    std::filesystem::copy(source, candidate,
+        std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing);
+
+    QFile manifest(QString::fromStdString((candidate / "manifest.json").string()));
+    TEST_ASSERT(manifest.open(QIODevice::ReadOnly), "Candidate manifest opens");
+    auto document = QJsonDocument::fromJson(manifest.readAll());
+    manifest.close();
+    auto object = document.object();
+    object[QStringLiteral("application_id")] = QStringLiteral("app.elo.test");
+    object[QStringLiteral("atom_ids")] = QJsonArray{QStringLiteral("species_cardeal_001")};
+    TEST_ASSERT(manifest.open(QIODevice::WriteOnly | QIODevice::Truncate), "Candidate manifest is writable");
+    manifest.write(QJsonDocument(object).toJson(QJsonDocument::Indented));
+    manifest.close();
+
+    elo::content::BundlePublisher publisher(repository);
+    const auto result = publisher.publish_and_activate(candidate, "test");
+    TEST_ASSERT(result.success, "Selected package publishes successfully");
+    elo::content::ContentBundle sealed(result.bundle_path);
+    const auto catalog = sealed.load_catalog();
+    TEST_ASSERT(catalog.has_value(), "Selected package catalog loads");
+    TEST_ASSERT(catalog->all_atoms().size() == 1, "Sealed package contains exactly one selected atom");
+    TEST_ASSERT(catalog->find_atom("species_cardeal_001") != nullptr, "Selected atom is present");
+    const auto sealedManifest = sealed.load_manifest();
+    TEST_ASSERT(sealedManifest.has_value() && sealedManifest->application_id == "app.elo.test",
+                "Application binding is preserved");
+    TEST_ASSERT(sealedManifest->atom_ids.size() == 1, "Atom membership is preserved in manifest");
+
+    std::error_code ec;
+    std::filesystem::remove_all(temp, ec);
+}
+
 void test_control_plane_ipc(int argc, char* argv[]) {
     std::cout << "[TEST] Control plane Unix domain socket IPC...\n";
     QCoreApplication app(argc, argv);
@@ -133,6 +176,7 @@ void test_control_plane_ipc(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     test_content_bundle_and_hash();
     test_bundle_publisher_and_atomic_swap();
+    test_package_atom_selection();
     test_control_plane_ipc(argc, argv);
     std::cout << "\nAll Content Publishing & Control Plane tests PASSED successfully!\n";
     return 0;

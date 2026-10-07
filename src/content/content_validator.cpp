@@ -17,6 +17,25 @@ ValidationReport ContentValidator::validate(const ContentCatalog& catalog) {
             report.valid = false;
         }
 
+        if (atom->title.empty()) {
+            report.errors.push_back({atom->content_id, "ContentAtom has empty title", true});
+            report.valid = false;
+        }
+        if (atom->language.empty()) {
+            report.warnings.push_back("ContentAtom " + atom->content_id + " has no language metadata");
+        }
+        if (atom->lifecycle_status != "draft" && atom->lifecycle_status != "in_review"
+            && atom->lifecycle_status != "approved" && atom->lifecycle_status != "archived") {
+            report.errors.push_back({atom->content_id, "ContentAtom has invalid lifecycle_status", true});
+            report.valid = false;
+        }
+        if (!atom->assets.images.empty() && atom->alt_text.empty()) {
+            report.warnings.push_back("ContentAtom " + atom->content_id + " has images but no accessibility alt_text");
+        }
+        if (atom->license.empty()) {
+            report.warnings.push_back("ContentAtom " + atom->content_id + " has no rights license");
+        }
+
         if (atom->supported_roles.empty()) {
             report.warnings.push_back("ContentAtom " + atom->content_id + " has no supported roles declared");
         }

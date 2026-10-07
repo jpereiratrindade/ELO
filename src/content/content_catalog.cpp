@@ -21,6 +21,9 @@ ContentAtom parse_atom_json(const QJsonObject& obj) {
     atom.type = parse_content_type(obj.value(QStringLiteral("type")).toString().toStdString());
     atom.subtype = obj.value(QStringLiteral("subtype")).toString().toStdString();
     atom.title = obj.value(QStringLiteral("title")).toString().toStdString();
+    atom.summary = obj.value(QStringLiteral("summary")).toString(obj.value(QStringLiteral("description")).toString()).toStdString();
+    atom.language = obj.value(QStringLiteral("language")).toString(QStringLiteral("pt-BR")).toStdString();
+    atom.lifecycle_status = obj.value(QStringLiteral("lifecycle_status")).toString(QStringLiteral("draft")).toStdString();
 
     const auto subj_obj = obj.value(QStringLiteral("subject")).toObject();
     atom.subject.canonical_name = subj_obj.value(QStringLiteral("canonical_name")).toString().toStdString();
@@ -77,6 +80,25 @@ ContentAtom parse_atom_json(const QJsonObject& obj) {
 
     const auto prov_obj = obj.value(QStringLiteral("provenance")).toObject();
     atom.reviewed = prov_obj.value(QStringLiteral("reviewed")).toBool(true);
+    atom.creator = prov_obj.value(QStringLiteral("creator")).toString().toStdString();
+    atom.publisher = prov_obj.value(QStringLiteral("publisher")).toString().toStdString();
+    atom.source_reference = prov_obj.value(QStringLiteral("source_reference")).toString().toStdString();
+    atom.created_at = prov_obj.value(QStringLiteral("created_at")).toString().toStdString();
+    atom.modified_at = prov_obj.value(QStringLiteral("modified_at")).toString().toStdString();
+
+    const auto rights_obj = obj.value(QStringLiteral("rights")).toObject();
+    atom.license = rights_obj.value(QStringLiteral("license")).toString().toStdString();
+    atom.rights_holder = rights_obj.value(QStringLiteral("rights_holder")).toString().toStdString();
+    atom.attribution = rights_obj.value(QStringLiteral("attribution")).toString().toStdString();
+
+    const auto accessibility_obj = obj.value(QStringLiteral("accessibility")).toObject();
+    atom.alt_text = accessibility_obj.value(QStringLiteral("alt_text")).toString().toStdString();
+    atom.transcript = accessibility_obj.value(QStringLiteral("transcript")).toString().toStdString();
+
+    const auto metadata_obj = obj.value(QStringLiteral("metadata")).toObject();
+    for (auto it = metadata_obj.begin(); it != metadata_obj.end(); ++it) {
+        atom.custom_attributes[it.key().toStdString()] = it.value().toVariant().toString().toStdString();
+    }
 
     return atom;
 }
@@ -160,6 +182,10 @@ BundleManifest parse_manifest_json(const QJsonObject& obj) {
     manifest.content_hash = obj.value(QStringLiteral("content_hash")).toString().toStdString();
     manifest.parent_bundle = obj.value(QStringLiteral("parent_bundle")).toString().toStdString();
     manifest.created_at = obj.value(QStringLiteral("created_at")).toString().toStdString();
+    manifest.application_id = obj.value(QStringLiteral("application_id")).toString().toStdString();
+    for (const auto& value : obj.value(QStringLiteral("atom_ids")).toArray()) {
+        manifest.atom_ids.push_back(value.toString().toStdString());
+    }
     return manifest;
 }
 

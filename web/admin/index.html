@@ -164,7 +164,7 @@
       <div class="pane-header-row">
         <div>
           <h3 class="pane-title">Gestão Curatorial de Pacotes de Conteúdo (Content Bundles)</h3>
-          <p class="pane-subtitle">Estruture, versiona e publique pacotes temáticos soberanos (ex: Bioma Pampa, Mata Atlântica) diretamente no Totem</p>
+          <p class="pane-subtitle">Selecione átomos reutilizáveis e publique uma composição versionada para uma aplicação do Totem</p>
         </div>
         <div style="display: flex; gap: 10px;">
           <button id="btn-save-package-meta" class="btn btn-secondary btn-sm-action">
@@ -184,6 +184,11 @@
           </h4>
           <form id="form-package-meta">
             <div class="form-group" style="margin-bottom: 14px;">
+              <label for="pkg-plan-select">Pacote planejado</label>
+              <select id="pkg-plan-select" class="input-select"><option value="">Novo pacote / manifesto atual</option></select>
+              <span class="form-hint">Troque de pacote sem duplicar os átomos do acervo.</span>
+            </div>
+            <div class="form-group" style="margin-bottom: 14px;">
               <label for="pkg-title" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Título do Pacote de Conteúdo</label>
               <input type="text" id="pkg-title" class="input-text" placeholder="Ex: Bioma Pampa — Campos Sulinos" required style="width: 100%;">
             </div>
@@ -198,9 +203,10 @@
               </div>
             </div>
             <div class="form-group" style="margin-bottom: 14px;">
-              <label for="pkg-theme" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Tema / Bioma Principal</label>
-              <input type="text" id="pkg-theme" class="input-text" placeholder="pampa" required style="width: 100%;">
+              <label for="pkg-theme" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Tema visual padrão</label>
+              <input type="text" id="pkg-theme" class="input-text" placeholder="default" required style="width: 100%;">
             </div>
+            <div class="form-group" style="margin-bottom: 14px;"><label for="pkg-app-id">Aplicação de destino</label><input type="text" id="pkg-app-id" class="input-text" placeholder="ex: app.elo.museu"></div>
             <div class="form-group" style="margin-bottom: 14px;">
               <label for="pkg-desc" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 6px;">Descrição Curatorial da Coleção</label>
               <textarea id="pkg-desc" class="input-textarea" rows="3" placeholder="Objetivo curatorial do pacote e síntese da experiência..." style="width: 100%;"></textarea>
@@ -304,8 +310,8 @@
     <section id="tab-atoms" class="tab-pane active">
       <div class="pane-header-row">
         <div>
-          <h3 class="pane-title">Entidades e Átomos Canônicos</h3>
-          <p class="pane-subtitle">Unidades atômicas de conhecimento com proveniência e fatos canônicos verificados</p>
+          <h3 class="pane-title">Átomos de Conteúdo</h3>
+          <p class="pane-subtitle">Registros reutilizáveis e independentes de domínio, com proveniência, direitos e acessibilidade</p>
         </div>
         <button id="btn-new-atom" class="btn btn-primary btn-sm-action">
           + Novo Átomo de Conteúdo
@@ -456,7 +462,7 @@
         <!-- Seção 1: Identificação & Classificação -->
         <div class="form-section-header">
           <span class="form-section-num">01</span>
-          <span class="form-section-label">Identificação & Classificação Semântica</span>
+          <span class="form-section-label">Identificação e Descoberta</span>
         </div>
 
         <div class="form-row-2">
@@ -466,16 +472,21 @@
             <span class="form-hint">Chave de referência imutável (gerada automaticamente se vazia)</span>
           </div>
           <div class="form-group">
-            <label for="atom-type">Tipo Semântico / Ontologia</label>
+            <label for="atom-type">Natureza do Conteúdo</label>
             <select id="atom-type" class="input-select">
-              <option value="entity">Entity (Entidade / Obra / Artefato / Espécime / Objeto)</option>
-              <option value="phenomenon">Phenomenon (Fenômeno / Processo / Acontecimento Histórico)</option>
-              <option value="place">Place (Lugar / Sítio Histórico / Território / Paisagem)</option>
-              <option value="narrative">Narrative (Narrativa / Relato Oral / Biografia / Memória)</option>
-              <option value="collection">Collection (Coleção / Acervo / Painel Temático)</option>
-              <option value="concept">Concept (Conceito / Teoria / Saber Tradicional)</option>
-              <option value="question">Question (Provocação / Pergunta / Diálogo)</option>
-              <option value="challenge">Challenge (Desafio Interativo / Quiz Cognitivo)</option>
+              <option value="entity">Entidade ou objeto identificável</option>
+              <option value="concept">Conceito ou tema</option>
+              <option value="fact">Informação factual</option>
+              <option value="event">Evento</option>
+              <option value="place">Local</option>
+              <option value="phenomenon">Processo ou fenômeno</option>
+              <option value="micro_story">Narrativa breve</option>
+              <option value="question">Pergunta</option>
+              <option value="challenge">Atividade ou desafio</option>
+              <option value="comparison">Comparação</option>
+              <option value="sequence">Sequência</option>
+              <option value="indicator">Indicador ou dado</option>
+              <option value="ambient_scene">Cena ambiente</option>
             </select>
           </div>
         </div>
@@ -486,31 +497,39 @@
             <input type="text" id="atom-title" class="input-text" required placeholder="ex: Mona Lisa, Catedral de São Pedro, Cultivar BRS 539">
           </div>
           <div class="form-group">
-            <label for="atom-canonical">Nome Canônico / Nomenclatura Formal</label>
-            <input type="text" id="atom-canonical" class="input-text" placeholder="ex: Retrato de Lisa Gherardini, Catedral Metropolitana">
+            <label for="atom-canonical">Nome preferencial / Designação formal</label>
+            <input type="text" id="atom-canonical" class="input-text" placeholder="Nome pelo qual o conteúdo deve ser identificado">
           </div>
         </div>
 
         <div class="form-row-3">
           <div class="form-group">
-            <label for="atom-scientific">Subtítulo / Denominação Complementar</label>
-            <input type="text" id="atom-scientific" class="input-text" placeholder="ex: Óleo sobre madeira (1503), Reserva hidrogeológica">
+            <label for="atom-scientific">Subtítulo / Nome alternativo</label>
+            <input type="text" id="atom-scientific" class="input-text" placeholder="Designação complementar, opcional">
           </div>
           <div class="form-group">
-            <label for="atom-domain">Domínio / Categoria</label>
-            <select id="atom-domain" class="input-select">
-              <option value="fine_arts">Artes Visuais & Estética</option>
-              <option value="cultural_heritage">Patrimônio Histórico & Memória</option>
-              <option value="environmental_sciences">Ciências Naturais & Biodiversidade</option>
-              <option value="agronomy_technology">Agronomia, Ciência & Tecnologia</option>
-              <option value="history_geography">História, Território & Geografia</option>
-              <option value="institutional_education">Educação & Acervos Institucionais</option>
-              <option value="general">Geral / Multidisciplinar</option>
-            </select>
+            <label for="atom-subtype">Subtipo livre</label>
+            <input type="text" id="atom-subtype" class="input-text" placeholder="ex: documento, produto, biografia, tutorial">
           </div>
           <div class="form-group">
-            <label for="atom-type-label">Rótulo Curatorial / Tipologia</label>
-            <input type="text" id="atom-type-label" class="input-text" placeholder="ex: Pintura Renascentista, Monumento Nacional, Cultivar">
+            <label for="atom-language">Idioma principal (BCP 47)</label>
+            <input type="text" id="atom-language" class="input-text" value="pt-BR" placeholder="pt-BR">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="atom-summary">Resumo editorial</label>
+          <textarea id="atom-summary" class="input-textarea" rows="3" placeholder="Síntese autocontida e neutra do conteúdo"></textarea>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="atom-status">Estado editorial</label>
+            <select id="atom-status" class="input-select"><option value="draft">Rascunho</option><option value="in_review">Em revisão</option><option value="approved">Aprovado</option><option value="archived">Arquivado</option></select>
+          </div>
+          <div class="form-group">
+            <label for="atom-type-label">Rótulo de exibição</label>
+            <input type="text" id="atom-type-label" class="input-text" placeholder="Rótulo curto apresentado ao público">
           </div>
         </div>
 
@@ -522,7 +541,7 @@
         <!-- Seção 2: Narrativa & Fatos Canônicos -->
         <div class="form-section-header" style="margin-top: 20px;">
           <span class="form-section-num">02</span>
-          <span class="form-section-label">Corpus de Conhecimento & Fatos de Proveniência</span>
+          <span class="form-section-label">Afirmações verificáveis e fontes</span>
           <button type="button" id="btn-add-fact" class="btn btn-outline btn-sm" style="margin-left: auto;">+ Adicionar Fato</button>
         </div>
 
@@ -540,9 +559,25 @@
           <!-- Injetado dinamicamente -->
         </div>
 
-        <!-- Seção 4: Mídias & Ativos Multimodais -->
+        <div class="form-section-header" style="margin-top: 20px;"><span class="form-section-num">04</span><span class="form-section-label">Responsabilidade, Proveniência e Direitos</span></div>
+        <div class="form-row-3">
+          <div class="form-group"><label for="atom-creator">Autor / Criador</label><input id="atom-creator" class="input-text"></div>
+          <div class="form-group"><label for="atom-publisher">Organização responsável</label><input id="atom-publisher" class="input-text"></div>
+          <div class="form-group"><label for="atom-source">Referência da fonte</label><input id="atom-source" class="input-text" placeholder="URI, acervo ou citação"></div>
+        </div>
+        <div class="form-row-3">
+          <div class="form-group"><label for="atom-license">Licença</label><input id="atom-license" class="input-text" placeholder="ex: CC BY 4.0"></div>
+          <div class="form-group"><label for="atom-rights-holder">Titular dos direitos</label><input id="atom-rights-holder" class="input-text"></div>
+          <div class="form-group"><label for="atom-attribution">Crédito obrigatório</label><input id="atom-attribution" class="input-text"></div>
+        </div>
+
+        <div class="form-section-header" style="margin-top: 20px;"><span class="form-section-num">05</span><span class="form-section-label">Acessibilidade</span></div>
+        <div class="form-group"><label for="atom-alt-text">Descrição textual das imagens</label><textarea id="atom-alt-text" class="input-textarea" rows="2"></textarea></div>
+        <div class="form-group"><label for="atom-transcript">Transcrição de áudio ou vídeo</label><textarea id="atom-transcript" class="input-textarea" rows="3"></textarea></div>
+
+        <!-- Seção 6: Mídias & Ativos Multimodais -->
         <div class="form-section-header" style="margin-top: 20px;">
-          <span class="form-section-num">04</span>
+          <span class="form-section-num">06</span>
           <span class="form-section-label">Ativos Multimodais (Imagens & Áudio)</span>
         </div>
 
