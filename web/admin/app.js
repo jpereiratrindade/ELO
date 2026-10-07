@@ -139,6 +139,12 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('active-bundle-hash').textContent = data.active_bundle.content_hash || 'Sem hash';
         document.getElementById('stat-version').textContent = 'v' + data.active_bundle.version;
         document.getElementById('stat-revision').textContent = '#' + data.active_bundle.curation_revision;
+      } else {
+        document.getElementById('active-bundle-title').textContent = 'Biodiversidade do Bioma Pampa & Campos Sulinos';
+        document.getElementById('active-bundle-desc').textContent = 'Catálogo soberano local em modo Rascunho Editorial. Clique em "Publicar no Totem" para ativar a primeira versão.';
+        document.getElementById('active-bundle-hash').textContent = 'Pronto para publicação determinística';
+        document.getElementById('stat-version').textContent = 'v1.0.0';
+        document.getElementById('stat-revision').textContent = '#1 (Draft)';
       }
 
       // Editorial State
