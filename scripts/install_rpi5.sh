@@ -130,6 +130,12 @@ chown -R "${CURRENT_USER}:${CURRENT_USER}" "${USER_HOME}/.local/share/elo" || tr
 
 # 7. Configuração dos Serviços Systemd
 echo -e "${BLUE}>>> [6/6] Instalando e habilitando serviços no Systemd...${NC}"
+$SUDO_CMD install -d -m 0750 /etc/elo
+if ! $SUDO_CMD test -s /etc/elo/admin.env; then
+    ADMIN_TOKEN=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+    printf 'ELO_ADMIN_TOKEN=%s\n' "$ADMIN_TOKEN" | $SUDO_CMD tee /etc/elo/admin.env >/dev/null
+    $SUDO_CMD chmod 0600 /etc/elo/admin.env
+fi
 $SUDO_CMD cp deploy/systemd/elo-admin.service /etc/systemd/system/elo-admin@.service
 $SUDO_CMD cp deploy/systemd/elo-kiosk.service /etc/systemd/system/elo-kiosk@.service
 $SUDO_CMD systemctl daemon-reload

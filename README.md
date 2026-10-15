@@ -21,11 +21,11 @@ ELO ≠ QT
 - **Invariante E1 (SYSTEM_AUTONOMY)**: O ELO tem identidade, propósito, ciclo de vida e regras próprias.
 - **Invariante E2 (ENTE_INDEPENDENCE)**: Consome `ente-kernel` (`ente::kernel`) estritamente por seu contrato constitutivo. Eventos e transições de sessão pertencem ao ELO e não alteram a geração do kernel; `transform()` fica reservado a mudanças constitutivas identificadas da própria realização.
 - **Invariantes E3 & E4 (JEV_INDEPENDENCE & JUDGMENT_IS_NOT_ACTION)**: Consome JEV para julgamentos probabilísticos tipados (`Score`, `Choice`, `Noul`). JEV julga, mas quem toma decisão operacional e age é o ELO.
-- **Invariantes E5 & E6 (OFFLINE_PRIMARY_OPERATION & LOCAL_GUI_AVAILABILITY)**: estabelecem como requisito que `NETWORK = OFF` seja o estado padrão e que boot, interface, biometria, experiência, sorteios, questionários e persistência funcionem localmente.
+- **Invariantes E5 & E6 (OFFLINE_PRIMARY_OPERATION & LOCAL_GUI_AVAILABILITY)**: estabelecem como requisito que `NETWORK = OFF` seja o estado padrão e que boot, interface, experiência anônima, sorteios, questionários e persistência funcionem localmente.
 - **Invariante E7 (PRESENTATION_DOMAIN_SEPARATION)**: QML restringe-se à apresentação através de `KioskPresentationModel`. Lógica de domínio, biometria e SQLite nunca entram no QML.
-- **Invariantes E8, E9 & E10 (PERSON_AUTONOMY, VISIBLE_LOCAL_ENROLLMENT & RAW_IMAGE_EPHEMERALITY)**: reconhecimento local automático e visível, possibilidade imediata de esquecimento e imagens destruídas após extração do embedding, sem retenção de fotos brutas.
+- **Invariantes E8, E9 & E10 (PERSON_AUTONOMY, VISIBLE_LOCAL_ENROLLMENT & RAW_IMAGE_EPHEMERALITY)**: no G0, presença inicia somente sessão anônima. Continuidade biométrica experimental está desabilitada no fluxo principal e não há matrícula automática.
 - **Invariante E12 & E13 (BIOMETRIC_IS_EVIDENCE & UNKNOWN_IS_VALID)**: Correspondência facial é evidência probabilística. Estados: `UNKNOWN`, `CANDIDATE`, `SUPPORTED`, `UNCERTAIN`.
-- **Invariante E14 (LOCAL_FORGETTING)**: Direito local ao esquecimento instantâneo (`FORGET(Pxx)`) sem necessidade de conexão externa.
+- **Invariante E14 (LOCAL_FORGETTING)**: A operação local remove vínculos conhecidos e propaga falhas. Não garante apagamento físico instantâneo de WAL, backups ou cópias.
 - **Invariante E15 (IDENTITY_SPACE_SEPARATION)**: Separação forte de tipos:
   `EloId` (`elo://...`) $\neq$ `KernelId` $\neq$ `DeviceId` (`device://...`) $\neq$ `PersonLocalId` (`person-local://...`).
 - **Invariante E17 (RANDOMIZATION_INDEPENDENCE)**: Sorteios locais são estatisticamente independentes da aparência ou qualidade facial.
@@ -108,21 +108,16 @@ ctest --test-dir build --output-on-failure
 Não há escolha interativa de câmera nem botão de aproximação. O dispositivo físico do
 totem é descoberto no boot, a captura inicia imediatamente e o detector permanece pronto
 para observar presença. Quando um único rosto é sustentado por frames consecutivos, a
-interface inicia automaticamente o reconhecimento local.
+interface inicia uma sessão anônima. Presença não autoriza reconhecimento ou matrícula.
 
 ```bash
 ./build/apps/elo-kiosk/elo-kiosk
 ```
 
-O ELO compara o embedding com os templates locais. Se não houver correspondência
-compatível, cria automaticamente `person-local://Pxx` e apresenta “Bem-vindo ao ELO”.
-Se houver correspondência, apresenta “Que bom ver você novamente” e retoma a
-continuidade. Frames brutos não são gravados: somente o vetor facial derivado, o
-histórico e os vínculos estritamente necessários são persistidos no SQLite local.
-Cada decisão combina três embeddings transitórios consecutivos. Em um retorno
-reconhecido, o vetor agregado atual refina o único template do mesmo `PersonLocalId`,
-tornando a representação local mais robusta a variações futuras sem acumular templates
-nem armazenar fotografias.
+O detector pode informar presença, mas o fluxo produtivo não solicita embeddings,
+compara templates nem cria `PersonLocalId`. Dados biométricos existentes não são
+apagados automaticamente. Código experimental de continuidade permanece isolado para
+tratamento posterior e não representa garantia criptográfica ou de irreversibilidade.
 
 Configurações de implantação, não opções apresentadas à pessoa:
 
@@ -140,19 +135,13 @@ configuração do CMake com versões e hashes fixados. Em uma imagem de produç�
 use `ELO_FACE_DETECTOR_MODEL` e `ELO_FACE_RECOGNIZER_MODEL` para apontar aos artefatos
 pré-instalados e configure `ELO_DOWNLOAD_VISION_MODELS=OFF`.
 
-### Teste da interface e da continuidade
+### Teste da interface anônima
 
 1. Inicie `./build/apps/elo-kiosk/elo-kiosk` com uma câmera conectada.
-2. Confirme que o vídeo aparece sem clicar em qualquer botão e aproxime um único rosto.
-3. Confirme que a prévia discreta no canto superior direito muda de “reconhecendo” para
-   “identidade reconhecida”, sem solicitar confirmação.
-4. Na primeira ocorrência, confirme a mensagem **Bem-vindo ao ELO** e a criação de um
-   `person-local://Pxx`; nenhuma fotografia deve ser criada no diretório de dados.
-5. Encerre e abra o aplicativo novamente usando o mesmo `ELO_DATA_DIR`. O mesmo rosto
-   deve receber **Que bom ver você novamente**, recuperar o identificador e avançar
-   para o próximo conteúdo.
-6. Acione **Direito ao Esquecimento**, reinicie e confirme que a identidade anterior
-   não é recuperada.
+2. Aproxime-se e confirme estado `PRESENCE_DETECTED` e mensagem de sessão anônima.
+3. Confirme que conteúdo inicia sem identidade pessoal.
+4. Verifique que nenhuma linha nova aparece em `biometric_templates`.
+5. Desconecte câmera e confirme que experiência ativa continua operando.
 
 Para um ensaio descartável, aponte `ELO_DATA_DIR` para um diretório temporário dedicado.
 Se mais de uma pessoa estiver no enquadramento, o sistema deve pedir que apenas uma

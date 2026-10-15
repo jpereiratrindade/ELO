@@ -29,7 +29,9 @@ enum class BiometricModelArchitecture : std::uint8_t {
 }
 
 /// @brief Sovereign Biometric Key specification (Constitutional Invariants E12, E13 & E26).
-/// Ensures non-reversible, salt-isolated, vector-quantized probabilistic biometric keys.
+/// Experimental compatibility type. Not cryptographically reviewed and not used
+/// by the G0 production flow. Its output must not be represented as SHA-256,
+/// irreversible, or hardware-isolated.
 /// No raw images or reversible embeddings are ever exposed across external interfaces.
 struct BiometricKey final {
     std::string key_urn;                  // e.g. "elo://bio/v1/a7f3c9e..."
@@ -38,10 +40,9 @@ struct BiometricKey final {
     std::uint32_t vector_dimension{512};  // 512-D or 256-D normalized space
     double quality_score{0.0};            // Quality assurance threshold [0.0, 1.0]
     std::uint64_t generation_epoch{0};    // Timestamp of enrollment
-    std::string key_fingerprint;          // Deterministic SHA-256 digest of normalized weights
+    std::string key_fingerprint;          // Legacy deterministic label; not SHA-256
 
-    /// @brief Derive a sovereign deterministic BiometricKey from a normalized embedding and kernel seed.
-    /// Uses kernel seed as a cryptographic salt so biometric identifiers cannot be correlated across different kiosks.
+    /// @brief Legacy deterministic mixer retained only for compatibility tests.
     [[nodiscard]] static BiometricKey derive(
         std::span<const float> embedding,
         identity::PersonLocalId pseudonym,

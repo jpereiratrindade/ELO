@@ -9,3 +9,5 @@ build-*/
 content/bundles/
 content/staging/
 content/current
+__pycache__/
+*.pyc

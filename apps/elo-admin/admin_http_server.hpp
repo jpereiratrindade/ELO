@@ -5,9 +5,9 @@
 #include "elo/system/control_socket.hpp"
 #include "elo/application/application_registry.hpp"
 #include "elo/analytics/analytics_engine.hpp"
-#include "elo/biometric/biometric_key.hpp"
 
 #include <QByteArray>
+#include <QHostAddress>
 #include <QObject>
 #include <QString>
 #include <QTcpServer>
@@ -24,6 +24,7 @@ public:
     explicit AdminHttpServer(
         std::filesystem::path content_root,
         std::filesystem::path web_root,
+        QByteArray admin_token,
         quint16 port = 8080,
         QObject* parent = nullptr);
     ~AdminHttpServer() override;
@@ -31,6 +32,7 @@ public:
     [[nodiscard]] bool start();
     void stop();
     [[nodiscard]] quint16 port() const noexcept { return port_; }
+    [[nodiscard]] QHostAddress listenAddress() const { return tcp_server_->serverAddress(); }
 
 private slots:
     void onNewConnection();
@@ -40,6 +42,7 @@ private:
     void handleHttpRequest(QTcpSocket* socket, const QByteArray& requestData);
     void sendResponse(QTcpSocket* socket, int statusCode, const QString& contentType, const QByteArray& body);
     void sendJsonResponse(QTcpSocket* socket, int statusCode, const QByteArray& jsonBytes);
+    [[nodiscard]] bool isAuthorized(const QByteArray& requestData) const;
 
     // CRUD Handlers
     void handleAtomsRoute(QTcpSocket* socket, const QString& method, const QString& path, const QByteArray& body);
@@ -50,6 +53,7 @@ private:
 
     std::filesystem::path content_root_;
     std::filesystem::path web_root_;
+    QByteArray admin_token_;
     quint16 port_{8080};
     std::unique_ptr<QTcpServer> tcp_server_;
     content::BundlePublisher publisher_;

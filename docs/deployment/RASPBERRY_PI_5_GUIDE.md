@@ -56,14 +56,26 @@ Após a instalação, o utilitário `elo-ctl` estará disponível globalmente no
 
 ---
 
-## 4. Acessando o Sovereign Content Studio via Rede Local
+## 4. Acessando o Content Studio local protegido
 
-Com o serviço ativo, acesse o painel administrativo de qualquer computador, tablet ou celular conectado na mesma rede:
+O servidor escuta somente em loopback. No próprio Raspberry Pi:
 
 ```text
-http://<IP_DO_RASPBERRY_PI>:8080
+http://127.0.0.1:8080
 ```
-*(Exemplo: `http://10.163.4.146:8080`)*
+
+O instalador cria token aleatório em `/etc/elo/admin.env`. Consulte-o localmente com
+privilégios administrativos e informe-o ao Studio quando solicitado. Não registre token
+em Git, logs ou capturas de tela.
+
+Para administração a partir de outra máquina, use túnel SSH autenticado:
+
+```bash
+ssh -L 8080:127.0.0.1:8080 usuario@raspberry-pi
+```
+
+Depois abra `http://127.0.0.1:8080` na máquina cliente. Exposição LAN direta permanece
+desabilitada até existir mecanismo remoto especificamente projetado e validado.
 
 No Studio Web você pode:
 * Criar e editar Átomos de Conteúdo e variantes multimodais (Texto, Imagens, Áudios).
