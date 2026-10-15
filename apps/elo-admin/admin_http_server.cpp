@@ -191,15 +191,20 @@ void AdminHttpServer::onClientReadyRead() {
     auto& buf = client_buffers_[socket];
     buf.append(socket->readAll());
 
-    if (buf.size() > kMaxHeaderBytes && buf.indexOf("\r\n\r\n") == -1) {
+    int headerEnd = buf.indexOf("\r\n\r\n");
+    if (headerEnd == -1) {
+        if (buf.size() > kMaxHeaderBytes) {
+            sendJsonResponse(socket, 413, "{\"error\":\"Cabeçalhos excedem o limite\"}");
+            client_buffers_.erase(socket);
+            return;
+        }
+        return; // Wait for full HTTP headers
+    }
+
+    if (headerEnd > kMaxHeaderBytes) {
         sendJsonResponse(socket, 413, "{\"error\":\"Cabeçalhos excedem o limite\"}");
         client_buffers_.erase(socket);
         return;
-    }
-
-    int headerEnd = buf.indexOf("\r\n\r\n");
-    if (headerEnd == -1) {
-        return; // Wait for full HTTP headers
     }
 
     qsizetype contentLength = 0;
@@ -207,13 +212,19 @@ void AdminHttpServer::onClientReadyRead() {
     QByteArray lowerHeader = headerBytes.toLower();
     int clIdx = lowerHeader.indexOf("content-length:");
     if (clIdx != -1) {
+        int secondClIdx = lowerHeader.indexOf("content-length:", clIdx + 15);
+        if (secondClIdx != -1) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Content-Length duplicado\"}");
+            client_buffers_.erase(socket);
+            return;
+        }
         int clEnd = headerBytes.indexOf("\r\n", clIdx);
         if (clEnd == -1) clEnd = headerBytes.size();
         QByteArray clVal = headerBytes.mid(clIdx + 15, clEnd - (clIdx + 15)).trimmed();
         bool validLength = false;
         contentLength = clVal.toLongLong(&validLength);
         if (!validLength || contentLength < 0 || contentLength > kMaxBodyBytes) {
-            sendJsonResponse(socket, contentLength > kMaxBodyBytes ? 413 : 400,
+            sendJsonResponse(socket, (validLength && contentLength > kMaxBodyBytes) ? 413 : 400,
                              "{\"error\":\"Content-Length inválido ou excessivo\"}");
             client_buffers_.erase(socket);
             return;
@@ -221,6 +232,12 @@ void AdminHttpServer::onClientReadyRead() {
     }
 
     const qsizetype totalExpected = headerEnd + 4 + contentLength;
+    if (totalExpected > kMaxHeaderBytes + 4 + kMaxBodyBytes) {
+        sendJsonResponse(socket, 413, "{\"error\":\"Payload excede o limite máximo permitido\"}");
+        client_buffers_.erase(socket);
+        return;
+    }
+
     if (buf.size() < totalExpected) {
         return; // Wait for the remaining body chunks
     }
@@ -251,6 +268,8 @@ void AdminHttpServer::sendResponse(QTcpSocket* socket, int statusCode, const QSt
     }
     response.append("Cache-Control: no-store\r\n");
     response.append("X-Content-Type-Options: nosniff\r\n");
+    response.append("X-Frame-Options: DENY\r\n");
+    response.append("Content-Security-Policy: default-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; script-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none';\r\n");
     response.append("Connection: close\r\n\r\n");
     response.append(body);
 

@@ -7,12 +7,32 @@ document.addEventListener('DOMContentLoaded', () => {
       if (token) sessionStorage.setItem('eloAdminToken', token);
     }
     const headers = new Headers(init.headers || {});
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    // Only send the admin token to same-origin /api/* endpoints
+    let requestUrl = null;
+    try {
+      requestUrl = typeof input === 'string' ? new URL(input, window.location.href) : new URL(input.url, window.location.href);
+    } catch (_) {
+      // Fallback
+    }
+    const isSameOriginApi = requestUrl && (requestUrl.origin === window.location.origin) && requestUrl.pathname.startsWith('/api/');
+    if (isSameOriginApi && token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
     return nativeFetch(input, { ...init, headers }).then(response => {
-      if (response.status === 401) sessionStorage.removeItem('eloAdminToken');
+      if (response.status === 401 && isSameOriginApi) sessionStorage.removeItem('eloAdminToken');
       return response;
     });
   };
+
+  function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
 
   let catalogData = { atoms: [], relations: [], recipes: [] };
   let currentStatus = null;
@@ -257,17 +277,38 @@ document.addEventListener('DOMContentLoaded', () => {
           const isActive = !!plan.is_active;
           const item = document.createElement('article');
           item.className = `package-plan-item ${plan.bundle_id === currentId ? 'selected' : ''} ${isActive ? 'active' : ''}`;
-          item.innerHTML = `
-            <div class="package-plan-title-row">
-              <span class="package-plan-title">${plan.title || plan.bundle_id}</span>
-              ${isActive ? '<span class="badge-pill badge-green" style="font-size:9px;">ATIVO</span>' : ''}
-            </div>
-            <div class="package-plan-meta">v${plan.version || '0.1.0'} · ${(plan.atom_ids || []).length} átomos · ${plan.is_published ? 'publicado' : 'não publicado'}<br>${plan.bundle_id}</div>
-            <div class="package-plan-actions">
-              <button type="button" class="btn btn-secondary btn-edit-package">Editar</button>
-              <button type="button" class="btn ${isActive ? 'btn-danger-outline' : 'btn-primary'} btn-activate-package">${isActive ? 'Desativar' : 'Ativar'}</button>
-              <button type="button" class="btn btn-danger-outline btn-delete-package" ${isActive ? 'disabled' : ''} title="Excluir plano">×</button>
-            </div>`;
+
+          const titleRow = document.createElement('div');
+          titleRow.className = 'package-plan-title-row';
+          const titleSpan = document.createElement('span');
+          titleSpan.className = 'package-plan-title';
+          titleSpan.textContent = plan.title || plan.bundle_id;
+          titleRow.appendChild(titleSpan);
+          if (isActive) {
+            const activeBadge = document.createElement('span');
+            activeBadge.className = 'badge-pill badge-green';
+            activeBadge.style.fontSize = '9px';
+            activeBadge.textContent = 'ATIVO';
+            titleRow.appendChild(activeBadge);
+          }
+          item.appendChild(titleRow);
+
+          const metaDiv = document.createElement('div');
+          metaDiv.className = 'package-plan-meta';
+          metaDiv.textContent = `v${plan.version || '0.1.0'} · ${(plan.atom_ids || []).length} átomos · ${plan.is_published ? 'publicado' : 'não publicado'}`;
+          metaDiv.appendChild(document.createElement('br'));
+          metaDiv.appendChild(document.createTextNode(plan.bundle_id));
+          item.appendChild(metaDiv);
+
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'package-plan-actions';
+          actionsDiv.innerHTML = `
+            <button type="button" class="btn btn-secondary btn-edit-package">Editar</button>
+            <button type="button" class="btn ${isActive ? 'btn-danger-outline' : 'btn-primary'} btn-activate-package">${isActive ? 'Desativar' : 'Ativar'}</button>
+            <button type="button" class="btn btn-danger-outline btn-delete-package" ${isActive ? 'disabled' : ''} title="Excluir plano">×</button>
+          `;
+          item.appendChild(actionsDiv);
+
           item.addEventListener('click', (event) => {
             if (!event.target.closest('button')) loadPackagePlan(plan.bundle_id);
           });
@@ -374,14 +415,37 @@ document.addEventListener('DOMContentLoaded', () => {
     visibleAtoms.forEach(a => {
       const item = document.createElement('div');
       item.className = 'package-atom-item';
-      item.innerHTML = `
-        <input type="checkbox" class="pkg-atom-check" data-id="${a.content_id}" ${packageAtomIds.has(a.content_id) ? 'checked' : ''} aria-label="Incluir ${a.title || a.content_id} na aplicação">
-        <div>
-          <strong style="color: var(--text-main); font-size: 0.9rem;">${a.canonical_name || a.title}</strong>
-          <div style="color: var(--text-dim); font-size: 0.75rem;">${a.type_label || a.type} · <code>${a.content_id}</code></div>
-        </div>
-        <span class="badge-pill" style="font-size: 10px;">${a.type}</span>
-      `;
+
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'pkg-atom-check';
+      check.dataset.id = a.content_id;
+      check.checked = packageAtomIds.has(a.content_id);
+      check.setAttribute('aria-label', `Incluir ${a.title || a.content_id} na aplicação`);
+
+      const textWrap = document.createElement('div');
+      const titleStrong = document.createElement('strong');
+      titleStrong.style.cssText = 'color: var(--text-main); font-size: 0.9rem;';
+      titleStrong.textContent = a.canonical_name || a.title;
+
+      const subInfo = document.createElement('div');
+      subInfo.style.cssText = 'color: var(--text-dim); font-size: 0.75rem;';
+      subInfo.textContent = `${a.type_label || a.type} · `;
+      const codeElem = document.createElement('code');
+      codeElem.textContent = a.content_id;
+      subInfo.appendChild(codeElem);
+
+      textWrap.appendChild(titleStrong);
+      textWrap.appendChild(subInfo);
+
+      const typeBadge = document.createElement('span');
+      typeBadge.className = 'badge-pill';
+      typeBadge.style.fontSize = '10px';
+      typeBadge.textContent = a.type;
+
+      item.appendChild(check);
+      item.appendChild(textWrap);
+      item.appendChild(typeBadge);
       list.appendChild(item);
     });
     list.querySelectorAll('.pkg-atom-check').forEach(check => {
@@ -456,13 +520,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const count = (data.atom_view_counts || {})[atom] || 1;
             const item = document.createElement('div');
             item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); padding:10px 14px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);';
-            item.innerHTML = `
-              <div>
-                <strong style="color:var(--text-main); font-size:0.9rem;">${atom}</strong>
-                <div style="color:var(--text-dim); font-size:0.75rem;">${count} visualizações agregadas</div>
-              </div>
-              <span class="badge-pill badge-green">${avg.toFixed(1)}s de contemplação média</span>
-            `;
+            const leftCol = document.createElement('div');
+            const atomStrong = document.createElement('strong');
+            atomStrong.style.cssText = 'color:var(--text-main); font-size:0.9rem;';
+            atomStrong.textContent = atom;
+            const countDiv = document.createElement('div');
+            countDiv.style.cssText = 'color:var(--text-dim); font-size:0.75rem;';
+            countDiv.textContent = `${count} visualizações agregadas`;
+            leftCol.appendChild(atomStrong);
+            leftCol.appendChild(countDiv);
+
+            const badgeSpan = document.createElement('span');
+            badgeSpan.className = 'badge-pill badge-green';
+            badgeSpan.textContent = `${avg.toFixed(1)}s de contemplação média`;
+
+            item.appendChild(leftCol);
+            item.appendChild(badgeSpan);
             dwellList.appendChild(item);
           });
         }
@@ -486,14 +559,28 @@ document.addEventListener('DOMContentLoaded', () => {
           flows.forEach(f => {
             const item = document.createElement('div');
             item.style.cssText = 'display:flex; justify-content:space-between; align-items:center; background:var(--bg-surface); padding:10px 14px; border-radius:var(--radius-md); border:1px solid var(--border-subtle);';
-            item.innerHTML = `
-              <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem;">
-                <code style="color:var(--text-main);">${f.src}</code>
-                <span style="color:var(--accent-cyan);">➔</span>
-                <code style="color:var(--text-main);">${f.tgt}</code>
-              </div>
-              <span class="badge-pill" style="font-size:10px;">${f.count} transições</span>
-            `;
+            const flowWrap = document.createElement('div');
+            flowWrap.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:0.85rem;';
+            const srcCode = document.createElement('code');
+            srcCode.style.color = 'var(--text-main)';
+            srcCode.textContent = f.src;
+            const arrowSpan = document.createElement('span');
+            arrowSpan.style.color = 'var(--accent-cyan)';
+            arrowSpan.textContent = '➔';
+            const tgtCode = document.createElement('code');
+            tgtCode.style.color = 'var(--text-main)';
+            tgtCode.textContent = f.tgt;
+            flowWrap.appendChild(srcCode);
+            flowWrap.appendChild(arrowSpan);
+            flowWrap.appendChild(tgtCode);
+
+            const countBadge = document.createElement('span');
+            countBadge.className = 'badge-pill';
+            countBadge.style.fontSize = '10px';
+            countBadge.textContent = `${f.count} transições`;
+
+            item.appendChild(flowWrap);
+            item.appendChild(countBadge);
             flowList.appendChild(item);
           });
         }
@@ -516,67 +603,142 @@ document.addEventListener('DOMContentLoaded', () => {
       const card = document.createElement('div');
       card.className = 'atom-card';
 
-      let factsHtml = '';
-      if (atom.canonical_facts && atom.canonical_facts.length > 0) {
-        factsHtml = `<ul class="atom-facts">` +
-          atom.canonical_facts.map(f => `<li class="atom-fact-item"><strong>•</strong> ${f.statement}</li>`).join('') +
-          `</ul>`;
+      // Header
+      const headerDiv = document.createElement('div');
+      headerDiv.className = 'atom-header';
+
+      const titleGroup = document.createElement('div');
+      const titleH4 = document.createElement('h4');
+      titleH4.className = 'atom-title';
+      titleH4.textContent = atom.title || atom.canonical_name || '';
+
+      const isLiveOnKiosk = currentStatus && currentStatus.kiosk_active_atom_id === atom.content_id;
+      if (isLiveOnKiosk) {
+        const liveBadge = document.createElement('span');
+        liveBadge.className = 'badge-pill badge-green';
+        liveBadge.style.cssText = 'font-size: 10px; margin-left: 6px;';
+        liveBadge.textContent = 'AO VIVO NO TOTEM';
+        titleH4.appendChild(liveBadge);
       }
 
-      let metaChipsHtml = '';
+      const domainLabel = atom.domain || atom.category || '';
+      if (domainLabel) {
+        const domainBadge = document.createElement('span');
+        domainBadge.className = 'badge-pill';
+        domainBadge.style.cssText = 'font-size: 10px; background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); margin-left: 6px;';
+        domainBadge.textContent = domainLabel;
+        titleH4.appendChild(domainBadge);
+      }
+      titleGroup.appendChild(titleH4);
+
+      const subtitle = atom.subtitle || atom.scientific_name || atom.type_label || '';
+      if (subtitle) {
+        const subDiv = document.createElement('div');
+        subDiv.className = 'atom-scientific';
+        subDiv.textContent = subtitle;
+        titleGroup.appendChild(subDiv);
+      }
+
+      const typeBadge = document.createElement('span');
+      typeBadge.className = 'atom-type-badge';
+      typeBadge.textContent = atom.type || 'entity';
+
+      headerDiv.appendChild(titleGroup);
+      headerDiv.appendChild(typeBadge);
+      card.appendChild(headerDiv);
+
+      // Facts
+      if (atom.canonical_facts && atom.canonical_facts.length > 0) {
+        const factsUl = document.createElement('ul');
+        factsUl.className = 'atom-facts';
+        atom.canonical_facts.forEach(f => {
+          const li = document.createElement('li');
+          li.className = 'atom-fact-item';
+          const bullet = document.createElement('strong');
+          bullet.textContent = '• ';
+          li.appendChild(bullet);
+          li.appendChild(document.createTextNode(f.statement || ''));
+          factsUl.appendChild(li);
+        });
+        card.appendChild(factsUl);
+      }
+
+      // Metadata Chips
       if (atom.metadata && typeof atom.metadata === 'object') {
         const metaEntries = Object.entries(atom.metadata).slice(0, 3);
         if (metaEntries.length > 0) {
-          metaChipsHtml = '<div class="atom-meta-chips" style="display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0;">' +
-            metaEntries.map(([k, v]) => `<span class="tag-mono" style="font-size:0.75rem; background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:4px;"><strong style="color:var(--accent-cyan);">${k}:</strong> ${v}</span>`).join('') +
-            '</div>';
+          const metaContainer = document.createElement('div');
+          metaContainer.className = 'atom-meta-chips';
+          metaContainer.style.cssText = 'display:flex; flex-wrap:wrap; gap:6px; margin: 8px 0;';
+          metaEntries.forEach(([k, v]) => {
+            const chip = document.createElement('span');
+            chip.className = 'tag-mono';
+            chip.style.cssText = 'font-size:0.75rem; background:rgba(255,255,255,0.06); padding:2px 8px; border-radius:4px;';
+            const kStrong = document.createElement('strong');
+            kStrong.style.color = 'var(--accent-cyan)';
+            kStrong.textContent = `${k}: `;
+            chip.appendChild(kStrong);
+            chip.appendChild(document.createTextNode(String(v)));
+            metaContainer.appendChild(chip);
+          });
+          card.appendChild(metaContainer);
         }
       }
 
-      let assetsHtml = '<div class="atom-assets-row">';
+      // Assets row
+      const assetsRow = document.createElement('div');
+      assetsRow.className = 'atom-assets-row';
       const imageCount = (atom.images ? atom.images.length : (atom.modalities?.image?.length || 0));
       const audioCount = (atom.audios ? atom.audios.length : (atom.modalities?.audio?.length || 0));
       if (imageCount > 0) {
-        assetsHtml += `<span class="asset-tag">🖼️ ${imageCount} imagem</span>`;
+        const imgTag = document.createElement('span');
+        imgTag.className = 'asset-tag';
+        imgTag.textContent = `🖼️ ${imageCount} imagem`;
+        assetsRow.appendChild(imgTag);
       }
       if (audioCount > 0) {
-        assetsHtml += `<span class="asset-tag">🎵 ${audioCount} áudio</span>`;
+        const audTag = document.createElement('span');
+        audTag.className = 'asset-tag';
+        audTag.textContent = `🎵 ${audioCount} áudio`;
+        assetsRow.appendChild(audTag);
       }
-      assetsHtml += '</div>';
+      card.appendChild(assetsRow);
 
-      let audioButtonHtml = '';
+      // Actions row
+      const actionsRow = document.createElement('div');
+      actionsRow.className = 'atom-actions-row';
+
       const firstAudio = (atom.audios && atom.audios.length > 0) ? atom.audios[0] : (atom.modalities?.audio?.[0]);
       if (firstAudio) {
         const audioSrc = firstAudio.startsWith('assets/') ? firstAudio : 'assets/' + firstAudio;
-        audioButtonHtml = `<button class="btn btn-outline btn-sm btn-play-audio" data-src="${audioSrc}">▶️ Ouvir</button>`;
+        const playBtn = document.createElement('button');
+        playBtn.className = 'btn btn-outline btn-sm btn-play-audio';
+        playBtn.dataset.src = audioSrc;
+        playBtn.textContent = '▶️ Ouvir';
+        actionsRow.appendChild(playBtn);
       }
 
-      const isLiveOnKiosk = currentStatus && currentStatus.kiosk_active_atom_id === atom.content_id;
-      const liveBadgeHtml = isLiveOnKiosk ? '<span class="badge-pill badge-green" style="font-size: 10px; margin-left: 6px;">AO VIVO NO TOTEM</span>' : '';
+      const totemBtn = document.createElement('button');
+      totemBtn.className = 'btn btn-outline btn-sm btn-kiosk-show';
+      totemBtn.dataset.id = atom.content_id;
+      totemBtn.title = 'Exibir imediatamente no totem';
+      totemBtn.textContent = '📺 Totem';
+      actionsRow.appendChild(totemBtn);
 
-      const domainLabel = atom.domain || atom.category || '';
-      const domainBadge = domainLabel ? `<span class="badge-pill" style="font-size: 10px; background: rgba(56, 189, 248, 0.15); color: var(--accent-cyan); margin-left: 6px;">${domainLabel}</span>` : '';
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn btn-secondary btn-sm btn-edit-atom';
+      editBtn.dataset.id = atom.content_id;
+      editBtn.textContent = '✏️ Editar';
+      actionsRow.appendChild(editBtn);
 
-      const subtitle = atom.subtitle || atom.scientific_name || atom.type_label || '';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-danger-outline btn-sm btn-del-atom';
+      delBtn.dataset.id = atom.content_id;
+      delBtn.dataset.title = atom.canonical_name || atom.title || '';
+      delBtn.textContent = '🗑️';
+      actionsRow.appendChild(delBtn);
 
-      card.innerHTML = `
-        <div class="atom-header">
-          <div>
-            <h4 class="atom-title">${atom.title || atom.canonical_name} ${liveBadgeHtml} ${domainBadge}</h4>
-            <div class="atom-scientific">${subtitle}</div>
-          </div>
-          <span class="atom-type-badge">${atom.type}</span>
-        </div>
-        ${factsHtml}
-        ${metaChipsHtml}
-        ${assetsHtml}
-        <div class="atom-actions-row">
-          ${audioButtonHtml}
-          <button class="btn btn-outline btn-sm btn-kiosk-show" data-id="${atom.content_id}" title="Exibir imediatamente no totem">📺 Totem</button>
-          <button class="btn btn-secondary btn-sm btn-edit-atom" data-id="${atom.content_id}">✏️ Editar</button>
-          <button class="btn btn-danger-outline btn-sm btn-del-atom" data-id="${atom.content_id}" data-title="${atom.canonical_name || atom.title}">🗑️</button>
-        </div>
-      `;
+      card.appendChild(actionsRow);
       container.appendChild(card);
     });
 
@@ -655,18 +817,39 @@ document.addEventListener('DOMContentLoaded', () => {
     relations.forEach(rel => {
       const card = document.createElement('div');
       card.className = 'relation-card';
-      card.innerHTML = `
-        <div class="rel-header">
-          <span class="rel-badge">${rel.type || 'vínculo'}</span>
-          <button class="btn btn-danger-outline btn-sm btn-del-relation" data-id="${rel.relation_id}">🗑️</button>
-        </div>
-        <div class="rel-nodes">
-          <span>${rel.from}</span>
-          <span class="rel-arrow">➔</span>
-          <span>${rel.to}</span>
-        </div>
-        <p class="rel-desc">${rel.description || 'Vínculo ecossistêmico verificado.'}</p>
-      `;
+
+      const header = document.createElement('div');
+      header.className = 'rel-header';
+      const badge = document.createElement('span');
+      badge.className = 'rel-badge';
+      badge.textContent = rel.type || 'vínculo';
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-danger-outline btn-sm btn-del-relation';
+      delBtn.dataset.id = rel.relation_id;
+      delBtn.textContent = '🗑️';
+      header.appendChild(badge);
+      header.appendChild(delBtn);
+
+      const nodes = document.createElement('div');
+      nodes.className = 'rel-nodes';
+      const fromSpan = document.createElement('span');
+      fromSpan.textContent = rel.from;
+      const arrowSpan = document.createElement('span');
+      arrowSpan.className = 'rel-arrow';
+      arrowSpan.textContent = '➔';
+      const toSpan = document.createElement('span');
+      toSpan.textContent = rel.to;
+      nodes.appendChild(fromSpan);
+      nodes.appendChild(arrowSpan);
+      nodes.appendChild(toSpan);
+
+      const desc = document.createElement('p');
+      desc.className = 'rel-desc';
+      desc.textContent = rel.description || 'Vínculo ecossistêmico verificado.';
+
+      card.appendChild(header);
+      card.appendChild(nodes);
+      card.appendChild(desc);
       container.appendChild(card);
     });
 
@@ -696,11 +879,19 @@ document.addEventListener('DOMContentLoaded', () => {
     recipes.forEach(rec => {
       const card = document.createElement('div');
       card.className = 'recipe-card';
-      card.innerHTML = `
-        <h4 class="recipe-title">${rec.name || rec.recipe_id}</h4>
-        <p class="recipe-desc">${rec.description || 'Receita contextual de engajamento do visitante.'}</p>
-        <div class="recipe-steps-count">Passos coreografados: ${rec.step_count || 1}</div>
-      `;
+      const title = document.createElement('h4');
+      title.className = 'recipe-title';
+      title.textContent = rec.name || rec.recipe_id;
+      const desc = document.createElement('p');
+      desc.className = 'recipe-desc';
+      desc.textContent = rec.description || 'Receita contextual de engajamento do visitante.';
+      const steps = document.createElement('div');
+      steps.className = 'recipe-steps-count';
+      steps.textContent = `Passos coreografados: ${rec.step_count || 1}`;
+
+      card.appendChild(title);
+      card.appendChild(desc);
+      card.appendChild(steps);
       container.appendChild(card);
     });
   }
@@ -720,16 +911,53 @@ document.addEventListener('DOMContentLoaded', () => {
       const hashShort = b.content_hash ? b.content_hash.substring(0, 18) + '...' : '—';
       const dateStr = b.created_at ? new Date(b.created_at).toLocaleString('pt-BR') : '—';
 
-      tr.innerHTML = `
-        <td><strong>v${b.version}</strong> ${isCurrent ? '<span class="badge-pill badge-green" style="margin-left:6px;">ATIVO</span>' : ''}</td>
-        <td>#${b.curation_revision}</td>
-        <td>${b.title || b.bundle_id}</td>
-        <td><code class="hash-code">${hashShort}</code></td>
-        <td>${dateStr}</td>
-        <td>
-          ${!isCurrent ? `<button class="btn btn-secondary btn-sm btn-rollback" data-target="${b.bundle_id}-${b.version}">Ativar / Rollback</button>` : '<span style="color:var(--text-dim); font-size:0.8rem;">Em Execução</span>'}
-        </td>
-      `;
+      const tdVer = document.createElement('td');
+      const verStrong = document.createElement('strong');
+      verStrong.textContent = `v${b.version}`;
+      tdVer.appendChild(verStrong);
+      if (isCurrent) {
+        const curBadge = document.createElement('span');
+        curBadge.className = 'badge-pill badge-green';
+        curBadge.style.marginLeft = '6px';
+        curBadge.textContent = 'ATIVO';
+        tdVer.appendChild(curBadge);
+      }
+
+      const tdRev = document.createElement('td');
+      tdRev.textContent = `#${b.curation_revision}`;
+
+      const tdTitle = document.createElement('td');
+      tdTitle.textContent = b.title || b.bundle_id;
+
+      const tdHash = document.createElement('td');
+      const codeHash = document.createElement('code');
+      codeHash.className = 'hash-code';
+      codeHash.textContent = hashShort;
+      tdHash.appendChild(codeHash);
+
+      const tdDate = document.createElement('td');
+      tdDate.textContent = dateStr;
+
+      const tdAction = document.createElement('td');
+      if (!isCurrent) {
+        const rbBtn = document.createElement('button');
+        rbBtn.className = 'btn btn-secondary btn-sm btn-rollback';
+        rbBtn.dataset.target = `${b.bundle_id}-${b.version}`;
+        rbBtn.textContent = 'Ativar / Rollback';
+        tdAction.appendChild(rbBtn);
+      } else {
+        const curSpan = document.createElement('span');
+        curSpan.style.cssText = 'color:var(--text-dim); font-size:0.8rem;';
+        curSpan.textContent = 'Em Execução';
+        tdAction.appendChild(curSpan);
+      }
+
+      tr.appendChild(tdVer);
+      tr.appendChild(tdRev);
+      tr.appendChild(tdTitle);
+      tr.appendChild(tdHash);
+      tr.appendChild(tdDate);
+      tr.appendChild(tdAction);
       tbody.appendChild(tr);
     });
 
@@ -857,14 +1085,34 @@ document.addEventListener('DOMContentLoaded', () => {
   function addFactRow(statement = '', sources = '') {
     const row = document.createElement('div');
     row.className = 'fact-row';
-    row.innerHTML = `
-      <div class="fact-inputs">
-        <textarea class="input-textarea fact-statement" rows="2" placeholder="Declaração factual sobre o átomo...">${statement}</textarea>
-        <input type="text" class="input-text fact-sources" placeholder="Fontes de autoridade / Referências (ex: Museu, UFRGS 2024, IPHAN)" value="${sources}">
-      </div>
-      <button type="button" class="btn-del-fact" title="Remover fato">&times;</button>
-    `;
-    row.querySelector('.btn-del-fact').addEventListener('click', () => row.remove());
+
+    const inputsDiv = document.createElement('div');
+    inputsDiv.className = 'fact-inputs';
+
+    const ta = document.createElement('textarea');
+    ta.className = 'input-textarea fact-statement';
+    ta.rows = 2;
+    ta.placeholder = 'Declaração factual sobre o átomo...';
+    ta.value = statement;
+
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.className = 'input-text fact-sources';
+    inp.placeholder = 'Fontes de autoridade / Referências (ex: Museu, UFRGS 2024, IPHAN)';
+    inp.value = sources;
+
+    inputsDiv.appendChild(ta);
+    inputsDiv.appendChild(inp);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-del-fact';
+    btn.title = 'Remover fato';
+    btn.textContent = '×';
+    btn.addEventListener('click', () => row.remove());
+
+    row.appendChild(inputsDiv);
+    row.appendChild(btn);
     factsContainer.appendChild(row);
   }
 
@@ -872,14 +1120,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!metaPairsContainer) return;
     const row = document.createElement('div');
     row.className = 'meta-pair-row';
-    row.innerHTML = `
-      <div class="meta-pair-inputs">
-        <input type="text" class="input-text meta-key" placeholder="Campo (ex: Autor, Época, Dimensões, Instituição)" value="${key}" style="flex: 1;">
-        <input type="text" class="input-text meta-val" placeholder="Valor correspondente" value="${value}" style="flex: 2;">
-      </div>
-      <button type="button" class="btn-del-meta" title="Remover campo">&times;</button>
-    `;
-    row.querySelector('.btn-del-meta').addEventListener('click', () => row.remove());
+
+    const inputsDiv = document.createElement('div');
+    inputsDiv.className = 'meta-pair-inputs';
+
+    const keyInp = document.createElement('input');
+    keyInp.type = 'text';
+    keyInp.className = 'input-text meta-key';
+    keyInp.placeholder = 'Campo (ex: Autor, Época, Dimensões, Instituição)';
+    keyInp.value = key;
+    keyInp.style.flex = '1';
+
+    const valInp = document.createElement('input');
+    valInp.type = 'text';
+    valInp.className = 'input-text meta-val';
+    valInp.placeholder = 'Valor correspondente';
+    valInp.value = value;
+    valInp.style.flex = '2';
+
+    inputsDiv.appendChild(keyInp);
+    inputsDiv.appendChild(valInp);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-del-meta';
+    btn.title = 'Remover campo';
+    btn.textContent = '×';
+    btn.addEventListener('click', () => row.remove());
+
+    row.appendChild(inputsDiv);
+    row.appendChild(btn);
     metaPairsContainer.appendChild(row);
   }
 
@@ -1294,45 +1564,87 @@ document.addEventListener('DOMContentLoaded', () => {
       const card = document.createElement('div');
       card.className = 'media-card';
 
-      let mediaPreviewHtml = '';
+      const thumbContainer = document.createElement('div');
+      thumbContainer.className = 'media-thumb-container';
       if (item.type === 'image') {
-        mediaPreviewHtml = `
-          <div class="media-thumb-container">
-            <img class="media-thumb" src="/${item.path}" alt="${item.filename}" loading="lazy">
-          </div>
-        `;
+        const img = document.createElement('img');
+        img.className = 'media-thumb';
+        img.src = '/' + encodeURI(item.path);
+        img.alt = item.filename;
+        img.loading = 'lazy';
+        thumbContainer.appendChild(img);
       } else {
-        mediaPreviewHtml = `
-          <div class="media-thumb-container">
-            <div class="media-audio-box">
-              <span style="font-size: 2.2rem;">🎵</span>
-              <audio controls src="/${item.path}" style="width: 100%; max-height: 40px;"></audio>
-            </div>
-          </div>
-        `;
+        const audioBox = document.createElement('div');
+        audioBox.className = 'media-audio-box';
+        const iconSpan = document.createElement('span');
+        iconSpan.style.fontSize = '2.2rem';
+        iconSpan.textContent = '🎵';
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = '/' + encodeURI(item.path);
+        audio.style.cssText = 'width: 100%; max-height: 40px;';
+        audioBox.appendChild(iconSpan);
+        audioBox.appendChild(audio);
+        thumbContainer.appendChild(audioBox);
       }
+      card.appendChild(thumbContainer);
+
+      const bodyDiv = document.createElement('div');
+      bodyDiv.className = 'media-body';
+
+      const h4Name = document.createElement('h4');
+      h4Name.className = 'media-name';
+      h4Name.title = item.filename;
+      h4Name.textContent = item.filename;
+      bodyDiv.appendChild(h4Name);
+
+      const pathSpan = document.createElement('span');
+      pathSpan.className = 'media-path-text';
+      pathSpan.textContent = item.path;
+      bodyDiv.appendChild(pathSpan);
+
+      const metaRow = document.createElement('div');
+      metaRow.className = 'media-meta-row';
+      const sizeSpan = document.createElement('span');
+      sizeSpan.textContent = formatBytes(item.size_bytes);
+      const typeSpan = document.createElement('span');
+      typeSpan.textContent = item.type === 'image' ? '🖼️ Imagem' : '🎵 Áudio';
+      metaRow.appendChild(sizeSpan);
+      metaRow.appendChild(typeSpan);
+      bodyDiv.appendChild(metaRow);
 
       const isUsed = item.used_by && item.used_by.length > 0;
-      const usageBadge = isUsed
-        ? `<span class="media-badge media-badge-used" title="${item.used_by.join(', ')}">✓ Vinculado: ${item.used_by.slice(0, 2).join(', ')}${item.used_by.length > 2 ? ' +' + (item.used_by.length - 2) : ''}</span>`
-        : `<span class="media-badge media-badge-orphan">⚪ Mídia não vinculada</span>`;
+      const usageBadge = document.createElement('span');
+      if (isUsed) {
+        usageBadge.className = 'media-badge media-badge-used';
+        usageBadge.title = item.used_by.join(', ');
+        const usedPrefix = item.used_by.slice(0, 2).join(', ');
+        const extra = item.used_by.length > 2 ? ` +${item.used_by.length - 2}` : '';
+        usageBadge.textContent = `✓ Vinculado: ${usedPrefix}${extra}`;
+      } else {
+        usageBadge.className = 'media-badge media-badge-orphan';
+        usageBadge.textContent = '⚪ Mídia não vinculada';
+      }
+      bodyDiv.appendChild(usageBadge);
 
-      card.innerHTML = `
-        ${mediaPreviewHtml}
-        <div class="media-body">
-          <h4 class="media-name" title="${item.filename}">${item.filename}</h4>
-          <span class="media-path-text">${item.path}</span>
-          <div class="media-meta-row">
-            <span>${formatBytes(item.size_bytes)}</span>
-            <span>${item.type === 'image' ? '🖼️ Imagem' : '🎵 Áudio'}</span>
-          </div>
-          ${usageBadge}
-          <div class="media-actions">
-            <button class="btn btn-outline btn-xs btn-copy-path" data-path="${item.path}">📋 Copiar</button>
-            <button class="btn btn-danger-outline btn-xs btn-delete-media" data-path="${item.path}" data-name="${item.filename}">🗑️ Excluir</button>
-          </div>
-        </div>
-      `;
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'media-actions';
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'btn btn-outline btn-xs btn-copy-path';
+      copyBtn.dataset.path = item.path;
+      copyBtn.textContent = '📋 Copiar';
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'btn btn-danger-outline btn-xs btn-delete-media';
+      delBtn.dataset.path = item.path;
+      delBtn.dataset.name = item.filename;
+      delBtn.textContent = '🗑️ Excluir';
+
+      actionsDiv.appendChild(copyBtn);
+      actionsDiv.appendChild(delBtn);
+      bodyDiv.appendChild(actionsDiv);
+
+      card.appendChild(bodyDiv);
       grid.appendChild(card);
     });
 

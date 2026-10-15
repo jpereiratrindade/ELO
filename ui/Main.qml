@@ -76,13 +76,13 @@ Window {
 
             Text {
                 text: !cameraAvailable || !kioskModel.visionOperational
-                      ? "● CÂMERA INDISPONÍVEL"
-                      : (kioskModel.recognitionResolved
-                         ? "● IDENTIDADE RECONHECIDA"
-                         : (kioskModel.faceDetected ? "● RECONHECENDO" : "● VISÃO ATIVA"))
+                      ? "● SENSOR INDISPONÍVEL"
+                      : (kioskModel.faceDetected
+                         ? "● PRESENÇA DETECTADA"
+                         : "● AGUARDANDO VISITANTE")
                 font.pixelSize: 12
                 font.bold: true
-                color: kioskModel.visionOperational ? "#34d399" : "#f87171"
+                color: kioskModel.visionOperational ? (kioskModel.faceDetected ? "#38bdf8" : "#94a3b8") : "#f87171"
             }
         }
     }
@@ -108,7 +108,7 @@ Window {
             height: 92
             radius: 8
             color: "#020617"
-            border.color: kioskModel.recognitionResolved ? "#10b981" : "#334155"
+            border.color: kioskModel.faceDetected ? "#38bdf8" : "#334155"
             border.width: 1
             clip: true
             opacity: 0.82
@@ -135,101 +135,74 @@ Window {
                 Text {
                     anchors.centerIn: parent
                     text: !cameraAvailable || !kioskModel.visionOperational
-                          ? "sem visão"
-                          : (kioskModel.recognitionResolved
-                             ? "identificado"
-                             : (kioskModel.faceDetected ? "reconhecendo" : "aguardando"))
+                          ? "sensor inativo"
+                          : (kioskModel.faceDetected ? "presença ativa" : "aguardando")
                     font.pixelSize: 10
                     font.bold: true
-                    color: kioskModel.recognitionResolved ? "#34d399" : "#94a3b8"
+                    color: kioskModel.faceDetected ? "#38bdf8" : "#94a3b8"
                 }
             }
         }
 
-        // Estado de Presença e Reconhecimento Facial (Acolhimento transitório)
-        ColumnLayout {
-            anchors.centerIn: parent
-            width: Math.min(contentArea.width * 0.90, 1100)
-            spacing: 24
-            z: 15
-            visible: kioskModel.currentState === "PRESENCE_DETECTED" ||
-                     kioskModel.currentState === "BIOMETRIC_SESSION" ||
-                     kioskModel.currentState === "IDENTITY_UNKNOWN" ||
-                     kioskModel.currentState === "IDENTITY_CANDIDATE" ||
-                     kioskModel.currentState === "IDENTITY_UNCERTAIN" ||
-                     kioskModel.currentState === "IDENTITY_SUPPORTED"
-
-            BusyIndicator {
-                running: !kioskModel.recognitionResolved
-                visible: running
-                Layout.preferredWidth: 64
-                Layout.preferredHeight: 64
-                Layout.alignment: Qt.AlignHCenter
-            }
-
-            Text {
-                text: kioskModel.greetingTitle
-                font.pixelSize: Math.max(36, Math.min(contentArea.width * 0.028, 46))
-                font.bold: true
-                color: kioskModel.recognitionResolved ? "#f8fafc" : "#cbd5e1"
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
-
-            Text {
-                text: kioskModel.greetingMessage
-                font.pixelSize: Math.max(18, Math.min(contentArea.width * 0.015, 22))
-                color: kioskModel.recognitionResolved ? "#34d399" : "#94a3b8"
-                horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
-
-            // Barra de ritmo comportamental de acolhimento
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 380
-                Layout.preferredHeight: 5
-                radius: 3
-                color: "#1e293b"
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: parent.width * kioskModel.behaviorProgress
-                    radius: 3
-                    color: "#38bdf8"
-                }
-            }
+        // Componente discreto de acolhimento e estado da interação
+        Rectangle {
+            id: interactionStatePill
+            anchors.top: parent.top
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(contentArea.width * 0.55, 520)
+            height: 42
+            radius: 21
+            color: "#1e293b"
+            border.color: "#38bdf8"
+            border.width: 1
+            z: 25
+            visible: kioskModel.currentState === "PRESENCE_DETECTED"
 
             RowLayout {
-                Layout.alignment: Qt.AlignHCenter
-                spacing: 8
-                visible: kioskModel.recognitionResolved
+                anchors.fill: parent
+                anchors.leftMargin: 16
+                anchors.rightMargin: 16
+                spacing: 10
 
                 Rectangle {
                     width: 8
                     height: 8
                     radius: 4
-                    color: "#10b981"
+                    color: "#38bdf8"
                 }
 
                 Text {
-                    text: "Continuidade de Presença Ativa • Identidade Soberana Local"
-                    font.pixelSize: 13
+                    text: kioskModel.greetingTitle + " • " + kioskModel.greetingMessage
+                    font.pixelSize: 12
                     font.bold: true
-                    color: "#34d399"
+                    color: "#f8fafc"
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: 4
+                    radius: 2
+                    color: "#0f172a"
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: parent.width * kioskModel.behaviorProgress
+                        radius: 2
+                        color: "#38bdf8"
+                    }
                 }
             }
         }
 
-        // Conteúdo Dinâmico (Modo IDLE Ambient Attract & Modo CONTENT_ACTIVE Interativo)
+        // Conteúdo Dinâmico (Modo IDLE Ambient Attract, PRESENCE_DETECTED & Modo CONTENT_ACTIVE Interativo)
         ColumnLayout {
             anchors.fill: parent
             spacing: 12
-            visible: kioskModel.currentState === "CONTENT_ACTIVE" || kioskModel.currentState === "IDLE"
+            visible: kioskModel.currentState === "CONTENT_ACTIVE" || kioskModel.currentState === "IDLE" || kioskModel.currentState === "PRESENCE_DETECTED"
 
             // Cabeçalho do Conteúdo Ativo
             ColumnLayout {
