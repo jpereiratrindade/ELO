@@ -207,9 +207,30 @@ void AdminHttpServer::onClientReadyRead() {
         return;
     }
 
-    qsizetype contentLength = 0;
     QByteArray headerBytes = buf.left(headerEnd);
+    if (headerBytes.contains('\0')) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Cabeçalhos contêm caracteres nulos ou inválidos\"}");
+        client_buffers_.erase(socket);
+        return;
+    }
+
     QByteArray lowerHeader = headerBytes.toLower();
+
+    // RFC 7230 / RFC 9112: Rejeição de Transfer-Encoding não suportado
+    if (lowerHeader.contains("transfer-encoding:")) {
+        sendJsonResponse(socket, 501, "{\"error\":\"Transfer-Encoding não suportado\"}");
+        client_buffers_.erase(socket);
+        return;
+    }
+
+    // RFC 7230 §5.4: Rejeição de Host duplicado
+    if (lowerHeader.count("host:") > 1) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Cabeçalho Host duplicado\"}");
+        client_buffers_.erase(socket);
+        return;
+    }
+
+    qsizetype contentLength = 0;
     int clIdx = lowerHeader.indexOf("content-length:");
     if (clIdx != -1) {
         int secondClIdx = lowerHeader.indexOf("content-length:", clIdx + 15);
@@ -823,14 +844,27 @@ void AdminHttpServer::handleRecipesRoute(QTcpSocket* socket, const QString& meth
 void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& requestData) {
     int lineEnd = requestData.indexOf("\r\n");
     if (lineEnd == -1) lineEnd = requestData.indexOf('\n');
-    if (lineEnd == -1) return;
+    if (lineEnd == -1) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Linha de requisição inválida\"}");
+        return;
+    }
 
-    QString requestLine = QString::fromUtf8(requestData.left(lineEnd));
+    QString requestLine = QString::fromUtf8(requestData.left(lineEnd)).trimmed();
     auto parts = requestLine.split(' ');
-    if (parts.size() < 2) return;
+    if (parts.size() < 2 || parts.size() > 3) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Linha de requisição malformada\"}");
+        return;
+    }
 
-    QString method = parts[0];
-    QString path = parts[1];
+    QString method = parts[0].trimmed();
+    QString path = parts[1].trimmed();
+
+    if (method != QStringLiteral("GET") && method != QStringLiteral("POST") &&
+        method != QStringLiteral("PUT") && method != QStringLiteral("DELETE") &&
+        method != QStringLiteral("OPTIONS")) {
+        sendJsonResponse(socket, 405, "{\"error\":\"Método HTTP não permitido\"}");
+        return;
+    }
 
     if (path.startsWith(QStringLiteral("/api/")) && !isAuthorized(requestData)) {
         sendJsonResponse(socket, 401, "{\"error\":\"Autenticação administrativa obrigatória\"}");

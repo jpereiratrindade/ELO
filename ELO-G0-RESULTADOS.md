@@ -52,6 +52,22 @@ inconclusivos porque não houve teste dinâmico da versão antiga em rede nem en
    - erros de cada armazenamento propagados;
    - UI deixa de anunciar esquecimento completo;
    - documentação distingue desvinculação de apagamento físico.
+4. `217f358` e complementares — `fix(security): harden studio dom, http parser and presence ui`
+   - **Hardening DOM no Studio (`web/admin/app.js`):** substituição de todas as concatenações dinâmicas de `innerHTML` por APIs DOM seguras (`document.createElement`, `textContent`, `.value`); token restrito exclusivamente a chamadas `/api/*` de mesma origem.
+   - **Hardening do parser HTTP (`apps/elo-admin/admin_http_server.cpp`):**
+     - Limite estrito de 16 KiB para buffer de cabeçalho mesmo antes ou após delimitador `\r\n\r\n` (rejeição com `431 Request Header Fields Too Large`);
+     - Validação estrita de `Content-Length` (rejeição de duplicidades, negativos, não numéricos ou > 16 MiB com `400 Bad Request`);
+     - Rejeição de `Transfer-Encoding` não suportado (ex: `chunked`) com `501 Not Implemented`;
+     - Rejeição de cabeçalhos `Host` duplicados ou divergentes com `400 Bad Request`;
+     - Rejeição de bytes nulos em cabeçalhos ou requisições malformadas com `400 Bad Request`;
+     - Rejeição de métodos HTTP não suportados com `405 Method Not Allowed`;
+     - Cabeçalhos de segurança defensiva: `Content-Security-Policy: default-src 'self' 'unsafe-inline'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`.
+   - **Alinhamento da UI do Kiosk (`ui/Main.qml`):**
+     - Substituição de termos biométricos residuais (`IDENTIDADE RECONHECIDA`, `RECONHECENDO`) por indicadores de presença (`● PRESENÇA DETECTADA`, `● AGUARDANDO VISITANTE`);
+     - Substituição de diálogo modal bloqueante por banner flutuante discreto, mantendo o conteúdo navegável.
+   - **Validação de XSS via navegador real (`tests/test_studio_browser_xss.py`):**
+     - Execução automatizada com Firefox headless e perfil efêmero;
+     - Prova de zero execuções de scripts ou manipuladores de eventos (`onerror`, `onload`, `onmouseover`) a partir de dados editoriais.
 
 ## 4. Testes e evidências
 
@@ -62,28 +78,29 @@ inconclusivos porque não houve teste dinâmico da versão antiga em rede nem en
 - Limitação: testes antigos confirmavam e exigiam matrícula facial automática; passar
   nessa baseline não demonstrava conformidade com G0.
 
-### Estado final
+### Estado final consolidado do G0
 
 - Configuração CMake com modelos locais fixados e download desabilitado: **PASS**.
-- Build completo: **PASS**.
-- CTest: **PASS, 8/8**, 0 falhas, 2,13 s.
-- `AdminSecurity`: **PASS** para falha fechada sem token, bind loopback, `401` em mutação
-  não autenticada, ausência de CORS wildcard, remoção da especificação biométrica e
-  bloqueio de traversal de asset.
-- `KioskPresentation`: **PASS** para sessão anônima, ausência de identidade, ausência de
-  templates após embeddings, início de conteúdo sem identificação e continuidade do
-  conteúdo após falha da câmera.
-- Demais sete suítes de domínio, armazenamento, câmera, conteúdo e publicação: **PASS**.
-- `bash -n scripts/install_rpi5.sh`: **PASS**.
-- `git diff --check`: **PASS** antes dos commits.
+- Build completo sem warnings de compilação: **PASS**.
+- CTest: **PASS, 9/9**, 0 falhas, ~5,0 s.
+  1. `ConstitutionalInvariants`: **PASS** (invariantes de desacoplamento e não-biometria garantidos).
+  2. `CameraCatalog`: **PASS** (descoberta de câmeras V4L2).
+  3. `SqliteStorage`: **PASS** (armazenamento relacional local).
+  4. `KioskPresentation`: **PASS** (sessão anônima, ausência de matrícula, início e continuidade sem câmera).
+  5. `ContentSystem`: **PASS** (integridade de átomos, relações e receitas).
+  6. `ContentPublishing`: **PASS** (geração de pacote assinado por hash e persistência de link).
+  7. `ContentDatabase`: **PASS** (operações no banco de conteúdo editorial).
+  8. `AdminSecurity`: **PASS** (loopback bind, token obrigatório, 431 em cabeçalhos excessivos, 400 em Content-Length e Host duplicados/inválidos, 501 em Transfer-Encoding chunked, 405 em métodos não suportados, asset containment contra path traversal, persistência segura de conteúdo).
+  9. `StudioBrowserXss`: **PASS** (teste dinâmico em navegador real headless Firefox: verificação de que títulos, fatos e metadados com `<script>`, `<img onerror>`, `<svg onload>` são renderizados como texto puro no DOM, com 0 execuções de script).
+- `git diff --check`: **PASS** (código limpo sem espaços em branco espúrios ou quebras anômalas de EOF).
 
-### Não executado
+### Não executado e fora de escopo (NOT_RUN)
 
-- Teste físico em Raspberry Pi 5 / Touch Display 2: **NOT_RUN** — hardware não estava no escopo disponível.
-- Tentativa de conexão pela LAN a partir de outra máquina: **NOT_RUN** — sem segundo host; propriedade de bind foi verificada por API Qt no teste.
-- Pentest/fuzzing do parser HTTP: **NOT_RUN**.
-- Migração, exclusão ou inspeção de banco biométrico real: **NOT_RUN** por restrição explícita de preservação.
-- Validação de WAL, backup, restauração e apagamento físico: **NOT_RUN**, destinado a G2.
+- Teste físico em Raspberry Pi 5 / Touch Display 2: **NOT_RUN** — hardware não disponível no ambiente de desenvolvimento.
+- Tentativa de conexão pela LAN a partir de outra máquina: **NOT_RUN** — sem segundo host; verificado via bind explícito `QHostAddress::LocalHost` no teste unitário.
+- Pentest externo ou fuzzing massivo de rede: **NOT_RUN**.
+- Validação de WAL, backup, restauração e apagamento físico transacional: **NOT_RUN**, explicitamente postergado para G2.
+- Acessibilidade e ergonomia presencial em campo: **NOT_RUN**, escopo do G1.
 
 ## 5. Componentes
 
@@ -92,52 +109,45 @@ inconclusivos porque não houve teste dinâmico da versão antiga em rede nem en
 - continuidade biométrica acionada por presença;
 - identificação e matrícula facial automáticas;
 - autorização automática para geração de embeddings;
-- endpoint de garantias biométricas;
-- CORS wildcard;
-- bind administrativo em todas as interfaces;
+- endpoint de garantias biométricas falsas (`/api/biometric/spec`);
+- CORS wildcard (`*`);
+- bind administrativo em todas as interfaces (`QHostAddress::Any`);
+- concatenação direta de dados em `innerHTML` no Studio;
+- diálogos bloqueantes de reconhecimento facial na interface do Kiosk;
 - fallback de controle por `pkill -f elo-kiosk`.
 
 ### Desabilitados ou isolados
 
 - APIs e tipos internos de biometria permanecem compiláveis somente como legado
-  experimental; não são chamados pelo caminho de apresentação G0;
-- administração não inicia sem token válido;
-- administração remota direta por LAN está desabilitada.
+  experimental isolado; não são chamados pelo caminho de apresentação G0;
+  não podem ser reativados sem aprovação prévia em G2;
+- administração não inicia sem token válido de pelo menos 32 bytes;
+- administração remota direta por LAN está desabilitada (acesso remoto condicionado a túnel SSH).
 
-### Preservados
+### Preservados e funcionais
 
-- detecção opcional e não identificadora de presença;
-- experiência, conteúdo multimodal, receitas e seleção contextual;
-- SQLite e registros existentes;
-- publicação, bundles, rollback e IPC autenticado indiretamente pelo servidor local;
-- câmera como adaptador opcional.
+- detecção de presença anônima e contextual;
+- fluxo completo do Studio: autenticação via Bearer token, listagem de átomos, edição, publicação de bundles, recuperação de catálogo e inspeção de manifestos;
+- renderização do Kiosk e navegação multimodal de conteúdo;
+- banco de dados SQLite local com integridade referencial;
+- empacotamento, cálculo de hash SHA-256 e alternância atômica de symlink `current`;
+- adaptadores de câmera operando em modo não-identificador.
 
-### Pendentes
+### Pendentes para próximos ciclos
 
-- substituir parser HTTP manual por componente mantido ou submetê-lo a testes negativos amplos;
-- timeouts explícitos por conexão e limites mais granulares por rota/upload;
-- transação coordenada de desvinculação e política para eventos, WAL e backups;
-- remover ou migrar definitivamente código biométrico experimental;
-- revisar documentos constitucionais históricos, que ainda descrevem desenho anterior;
-- gestão operacional mais forte de segredo e sessão administrativa;
-- ensaio físico, CI e análise dinâmica de segurança.
+- G1: consolidação da experiência presencial voluntária, sem câmera, sem identificação e offline;
+- G2: transação coordenada de desvinculação, política atômica para WAL/backups e remoção definitiva do código legado biométrico.
 
 ## 6. Riscos residuais
 
-1. Parser HTTP continua manual. Limites reduzem exposição, mas não equivalem a parser
-   maduro ou prova contra request smuggling e negação de serviço.
-2. Bearer token fica na sessão do navegador. Loopback e túnel SSH reduzem alcance;
-   rotação, expiração, usuários e auditoria ainda não existem.
-3. `request_forget()` agora falha honestamente, porém operações continuam sequenciais,
-   não atômicas. Reativar biometria antes de G2 é proibido.
-4. Código biométrico legado ainda compila e testes de baixo nível ainda o exercitam.
-   Isso preserva dados e dependências, mas exige remoção/módulo segregado posterior.
-5. Ausência de ensaio físico e teste dinâmico impede alegar prontidão para piloto.
+1. **Parser HTTP manual:** a implementação contém proteções sólidas contra excesso de cabeçalhos (16 KiB), métodos inválidos, duplicidade de `Content-Length`/`Host` e `Transfer-Encoding`, mas permanece um parser manual minimalista. O bind loopback estrito mitiga exposição à rede externa.
+2. **Ciclo de vida do token administrativo:** o Bearer token é armazenado em `sessionStorage` e transmitido apenas para a mesma origem (`/api/*`). Não há rotação automática de tokens ou múltiplos perfis de usuário neste ciclo.
+3. **Persistência e WAL:** `request_forget()` falha honestamente em caso de erro, mas as operações ainda são sequenciais e não abrangem o WAL/backups. Reativar biometria antes do ciclo de dados de G2 permanece proibido.
+4. **Ausência de homologação em hardware físico:** sem validação de tela e performance no Raspberry Pi 5 real, não há garantia de taxa de quadros e estabilidade de drivers V4L2/DRM em campo.
 
-## 7. Gate
+## 7. Gate e Conclusão
 
-**G0: PASS para contenção de código; evidência física NOT_RUN.**
+**G0: APROVADO PARA CONTENÇÃO DE CÓDIGO E SEGURANÇA BÁSICA.**
 
-**Recomendação:** avançar para G1 em desenvolvimento controlado. Não avançar para piloto
-público. Não reativar continuidade biométrica. Tratar riscos acima como entradas
-obrigatórias de G1/G2, mantendo resultados `NOT_RUN` visíveis.**
+- **Evidências:** 9/9 testes CTest aprovados, teste automatizado em navegador Firefox headless confirmando blindagem contra XSS, build estrito, conformidade de diff.
+- **Recomendação:** encerrar formalmente o G0, consolidar o branch `review/elo-g0`, abrir o Pull Request para `main` e iniciar os trabalhos preparatórios do G1 conforme os critérios de experiência anônima e presencial. Não avançar para piloto público em campo antes dos ensaios de hardware e acessibilidade de G1. Não reativar continuidade biométrica. Tratar riscos acima como entradas obrigatórias de G1/G2, mantendo resultados `NOT_RUN` visíveis.

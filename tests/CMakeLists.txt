@@ -98,3 +98,8 @@ target_include_directories(test_admin_security PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../apps/elo-admin
 )
 add_test(NAME AdminSecurity COMMAND test_admin_security)
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_FOUND)
+    add_test(NAME StudioBrowserXss COMMAND Python3::Interpreter ${CMAKE_CURRENT_SOURCE_DIR}/test_studio_browser_xss.py)
+endif()

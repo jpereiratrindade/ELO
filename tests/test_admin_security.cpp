@@ -130,6 +130,31 @@ int main(int argc, char** argv) {
     TEST_ASSERT(excessiveCL.startsWith("HTTP/1.1 413"),
                 "Content-Length exceeding 16 MiB is rejected with 413 Payload Too Large");
 
+    // 8b. Unsupported Transfer-Encoding (RFC 7230 chunked smuggling mitigation)
+    const auto transferEncodingReq = request(server.port(),
+        "POST /api/publish HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
+    TEST_ASSERT(transferEncodingReq.startsWith("HTTP/1.1 501"),
+                "Unsupported Transfer-Encoding is rejected with 501 Not Implemented");
+
+    // 8c. Duplicate Host header rejection (RFC 7230 §5.4)
+    const auto duplicateHostReq = request(server.port(),
+        "GET /api/status HTTP/1.1\r\nHost: localhost\r\nHost: evil.com\r\n\r\n");
+    TEST_ASSERT(duplicateHostReq.startsWith("HTTP/1.1 400"),
+                "Duplicate Host header is rejected with 400 Bad Request");
+
+    // 8d. Malformed request line
+    const auto malformedLineReq = request(server.port(),
+        "MALFORMED_LINE_WITHOUT_PATH\r\nHost: localhost\r\n\r\n");
+    TEST_ASSERT(malformedLineReq.startsWith("HTTP/1.1 400"),
+                "Malformed request line is rejected with 400 Bad Request");
+
+    // 8e. Unsupported HTTP method
+    const auto unsupportedMethodReq = request(server.port(),
+        "TRACE /api/status HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    TEST_ASSERT(unsupportedMethodReq.startsWith("HTTP/1.1 405"),
+                "Unsupported HTTP method TRACE is rejected with 405 Method Not Allowed");
+
     // 9. Incomplete connection handling (early client disconnection without terminator)
     {
         QTcpSocket socket;
