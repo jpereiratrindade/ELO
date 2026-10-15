@@ -19,6 +19,9 @@ namespace elo::admin {
 
 namespace {
 
+constexpr qsizetype kMaxHeaderBytes = 16 * 1024;
+constexpr qsizetype kMaxBodyBytes = 16 * 1024 * 1024;
+
 QString sanitize_filename(const QString& name) {
     QFileInfo fi(name);
     QString base = fi.fileName();
@@ -55,11 +58,13 @@ QString canonical_content_id(QString id) {
 AdminHttpServer::AdminHttpServer(
     std::filesystem::path content_root,
     std::filesystem::path web_root,
+    QByteArray admin_token,
     quint16 port,
     QObject* parent)
     : QObject(parent),
       content_root_(std::move(content_root)),
       web_root_(std::move(web_root)),
+      admin_token_(std::move(admin_token)),
       port_(port),
       tcp_server_(std::make_unique<QTcpServer>(this)),
       publisher_(content_root_) {
@@ -148,12 +153,17 @@ AdminHttpServer::~AdminHttpServer() {
 
 bool AdminHttpServer::start() {
     stop();
-    if (!tcp_server_->listen(QHostAddress::Any, port_)) {
+    if (admin_token_.size() < 32) {
+        std::cerr << "[ELO][admin] Refusing to start: ELO_ADMIN_TOKEN must contain at least 32 bytes.\n";
+        return false;
+    }
+    if (!tcp_server_->listen(QHostAddress::LocalHost, port_)) {
         std::cerr << "[ELO][admin] Failed to bind HTTP server to port " << port_ << ": "
                   << tcp_server_->errorString().toStdString() << '\n';
         return false;
     }
-    std::cout << "[ELO][admin] Sovereign Content Studio HTTP server running at http://0.0.0.0:" << port_ << '\n';
+    port_ = tcp_server_->serverPort();
+    std::cout << "[ELO][admin] Content Studio listening on loopback at http://127.0.0.1:" << port_ << '\n';
     return true;
 }
 
@@ -181,12 +191,18 @@ void AdminHttpServer::onClientReadyRead() {
     auto& buf = client_buffers_[socket];
     buf.append(socket->readAll());
 
+    if (buf.size() > kMaxHeaderBytes && buf.indexOf("\r\n\r\n") == -1) {
+        sendJsonResponse(socket, 413, "{\"error\":\"Cabeçalhos excedem o limite\"}");
+        client_buffers_.erase(socket);
+        return;
+    }
+
     int headerEnd = buf.indexOf("\r\n\r\n");
     if (headerEnd == -1) {
         return; // Wait for full HTTP headers
     }
 
-    int contentLength = 0;
+    qsizetype contentLength = 0;
     QByteArray headerBytes = buf.left(headerEnd);
     QByteArray lowerHeader = headerBytes.toLower();
     int clIdx = lowerHeader.indexOf("content-length:");
@@ -194,10 +210,17 @@ void AdminHttpServer::onClientReadyRead() {
         int clEnd = headerBytes.indexOf("\r\n", clIdx);
         if (clEnd == -1) clEnd = headerBytes.size();
         QByteArray clVal = headerBytes.mid(clIdx + 15, clEnd - (clIdx + 15)).trimmed();
-        contentLength = clVal.toInt();
+        bool validLength = false;
+        contentLength = clVal.toLongLong(&validLength);
+        if (!validLength || contentLength < 0 || contentLength > kMaxBodyBytes) {
+            sendJsonResponse(socket, contentLength > kMaxBodyBytes ? 413 : 400,
+                             "{\"error\":\"Content-Length inválido ou excessivo\"}");
+            client_buffers_.erase(socket);
+            return;
+        }
     }
 
-    int totalExpected = headerEnd + 4 + contentLength;
+    const qsizetype totalExpected = headerEnd + 4 + contentLength;
     if (buf.size() < totalExpected) {
         return; // Wait for the remaining body chunks
     }
@@ -212,6 +235,10 @@ void AdminHttpServer::sendResponse(QTcpSocket* socket, int statusCode, const QSt
                        : (statusCode == 201) ? QStringLiteral("Created")
                        : (statusCode == 409) ? QStringLiteral("Conflict")
                        : (statusCode == 404) ? QStringLiteral("Not Found")
+                       : (statusCode == 401) ? QStringLiteral("Unauthorized")
+                       : (statusCode == 403) ? QStringLiteral("Forbidden")
+                       : (statusCode == 413) ? QStringLiteral("Payload Too Large")
+                       : (statusCode == 503) ? QStringLiteral("Service Unavailable")
                        : (statusCode == 400) ? QStringLiteral("Bad Request")
                                              : QStringLiteral("Internal Server Error");
 
@@ -219,15 +246,33 @@ void AdminHttpServer::sendResponse(QTcpSocket* socket, int statusCode, const QSt
     response.append(QString("HTTP/1.1 %1 %2\r\n").arg(statusCode).arg(statusText).toUtf8());
     response.append(QString("Content-Type: %1\r\n").arg(contentType).toUtf8());
     response.append(QString("Content-Length: %1\r\n").arg(body.size()).toUtf8());
-    response.append("Access-Control-Allow-Origin: *\r\n");
-    response.append("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS\r\n");
-    response.append("Access-Control-Allow-Headers: Content-Type\r\n");
+    if (statusCode == 401) {
+        response.append("WWW-Authenticate: Bearer realm=\"ELO Content Studio\"\r\n");
+    }
+    response.append("Cache-Control: no-store\r\n");
+    response.append("X-Content-Type-Options: nosniff\r\n");
     response.append("Connection: close\r\n\r\n");
     response.append(body);
 
     socket->write(response);
     socket->flush();
     socket->disconnectFromHost();
+}
+
+bool AdminHttpServer::isAuthorized(const QByteArray& requestData) const {
+    const int headerEnd = requestData.indexOf("\r\n\r\n");
+    if (headerEnd < 0) return false;
+    const auto lines = requestData.left(headerEnd).split('\n');
+    for (QByteArray line : lines) {
+        line = line.trimmed();
+        const int separator = line.indexOf(':');
+        if (separator < 0) continue;
+        if (line.left(separator).trimmed().compare("Authorization", Qt::CaseInsensitive) != 0) continue;
+        const QByteArray value = line.mid(separator + 1).trimmed();
+        constexpr auto prefix = "Bearer ";
+        return value.startsWith(prefix) && value.mid(sizeof(prefix) - 1) == admin_token_;
+    }
+    return false;
 }
 
 void AdminHttpServer::sendJsonResponse(QTcpSocket* socket, int statusCode, const QByteArray& jsonBytes) {
@@ -503,13 +548,11 @@ void AdminHttpServer::handleMediaRoute(QTcpSocket* socket, const QString& method
             return;
         }
 
-        std::filesystem::path assetsRoot = content_root_ / "assets";
-        std::filesystem::path targetFile = (assetsRoot / requestedPath.toStdString()).lexically_normal();
-
-        // Assegurar que o arquivo resolvido está estritamente dentro da raiz de assets
-        std::string assetsNorm = assetsRoot.lexically_normal().string();
-        std::string targetNorm = targetFile.string();
-        if (targetNorm.find(assetsNorm) != 0) {
+        const std::filesystem::path assetsRoot = std::filesystem::weakly_canonical(content_root_ / "assets");
+        const std::filesystem::path targetFile =
+            std::filesystem::weakly_canonical(assetsRoot / requestedPath.toStdString());
+        const auto relativeTarget = targetFile.lexically_relative(assetsRoot);
+        if (relativeTarget.empty() || *relativeTarget.begin() == "..") {
             sendJsonResponse(socket, 403, "{\"error\":\"Acesso negado fora do repositório soberano de assets\"}");
             return;
         }
@@ -769,6 +812,11 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
 
     QString method = parts[0];
     QString path = parts[1];
+
+    if (path.startsWith(QStringLiteral("/api/")) && !isAuthorized(requestData)) {
+        sendJsonResponse(socket, 401, "{\"error\":\"Autenticação administrativa obrigatória\"}");
+        return;
+    }
 
     if (method == QStringLiteral("OPTIONS")) {
         sendResponse(socket, 200, QStringLiteral("text/plain"), "");
@@ -1320,14 +1368,12 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     if (method == QStringLiteral("POST") && (path == QStringLiteral("/api/kiosk/stop") || path == QStringLiteral("/api/kiosk/shutdown"))) {
         system::ControlClient client;
         bool ok = client.shutdown_kiosk();
-        if (!ok) {
-            QProcess::execute(QStringLiteral("pkill"), {QStringLiteral("-f"), QStringLiteral("elo-kiosk")});
-            ok = true;
-        }
         QJsonObject resp;
         resp[QStringLiteral("success")] = ok;
-        resp[QStringLiteral("message")] = QStringLiteral("Comando de encerramento enviado ao totem.");
-        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
+        resp[QStringLiteral("message")] = ok
+            ? QStringLiteral("Comando de encerramento enviado ao totem.")
+            : QStringLiteral("Totem offline ou canal de controle indisponível.");
+        sendJsonResponse(socket, ok ? 200 : 503, QJsonDocument(resp).toJson(QJsonDocument::Compact));
         return;
     }
 
@@ -1358,8 +1404,10 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     // API: POST /api/kiosk/restart (Restart Kiosk Process)
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/restart")) {
         system::ControlClient client;
-        (void)client.shutdown_kiosk();
-        QProcess::execute(QStringLiteral("pkill"), {QStringLiteral("-f"), QStringLiteral("elo-kiosk")});
+        if (!client.shutdown_kiosk()) {
+            sendJsonResponse(socket, 503, "{\"error\":\"Totem offline ou canal de controle indisponível\"}");
+            return;
+        }
         QThread::msleep(500);
 
         QString bin = resolve_kiosk_bin();
@@ -1579,19 +1627,6 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         return;
     }
 
-    // API: GET /api/biometric/spec
-    if (method == QStringLiteral("GET") && path == QStringLiteral("/api/biometric/spec")) {
-        QJsonObject resp;
-        resp[QStringLiteral("architecture")] = QStringLiteral("elo-arcface-512-v1");
-        resp[QStringLiteral("dimension")] = 512;
-        resp[QStringLiteral("key_format")] = QStringLiteral("elo://bio/v1/{salt_hmac_sha256}");
-        resp[QStringLiteral("privacy_guarantee")] = QStringLiteral("Zero-PII Sovereign Ephemeral Key Derivation (Invariants E12 & E13)");
-        resp[QStringLiteral("hardware_isolated")] = true;
-        resp[QStringLiteral("non_reversible")] = true;
-        sendJsonResponse(socket, 200, QJsonDocument(resp).toJson(QJsonDocument::Compact));
-        return;
-    }
-
     // Static Web Assets
     QString filePath;
     QString contentType = QStringLiteral("text/html; charset=utf-8");
@@ -1606,9 +1641,11 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         contentType = QStringLiteral("application/javascript; charset=utf-8");
     } else if (path.startsWith(QStringLiteral("/assets/"))) {
         QString assetSub = path.mid(8);
-        filePath = QString::fromStdString((content_root_ / "assets" / assetSub.toStdString()).string());
-        if (!QFile::exists(filePath)) {
-            filePath = QString::fromStdString((content_root_ / assetSub.toStdString()).string());
+        const auto assetsRoot = std::filesystem::weakly_canonical(content_root_ / "assets");
+        const auto candidate = std::filesystem::weakly_canonical(assetsRoot / assetSub.toStdString());
+        const auto relative = candidate.lexically_relative(assetsRoot);
+        if (!relative.empty() && *relative.begin() != "..") {
+            filePath = QString::fromStdString(candidate.string());
         }
         if (filePath.endsWith(QStringLiteral(".png"))) contentType = QStringLiteral("image/png");
         else if (filePath.endsWith(QStringLiteral(".jpg")) || filePath.endsWith(QStringLiteral(".jpeg"))) contentType = QStringLiteral("image/jpeg");

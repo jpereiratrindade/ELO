@@ -1,4 +1,19 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init = {}) => {
+    let token = sessionStorage.getItem('eloAdminToken');
+    if (!token) {
+      token = window.prompt('Token administrativo ELO:') || '';
+      if (token) sessionStorage.setItem('eloAdminToken', token);
+    }
+    const headers = new Headers(init.headers || {});
+    if (token) headers.set('Authorization', `Bearer ${token}`);
+    return nativeFetch(input, { ...init, headers }).then(response => {
+      if (response.status === 401) sessionStorage.removeItem('eloAdminToken');
+      return response;
+    });
+  };
+
   let catalogData = { atoms: [], relations: [], recipes: [] };
   let currentStatus = null;
   let packageAtomIds = new Set();

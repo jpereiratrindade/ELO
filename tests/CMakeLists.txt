@@ -86,3 +86,15 @@ add_executable(test_content_database test_content_database.cpp)
 target_link_libraries(test_content_database PRIVATE elo_core)
 target_include_directories(test_content_database PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 add_test(NAME ContentDatabase COMMAND test_content_database)
+
+add_executable(test_admin_security
+    test_admin_security.cpp
+    ../apps/elo-admin/admin_http_server.cpp
+    ../apps/elo-admin/admin_http_server.hpp
+)
+target_link_libraries(test_admin_security PRIVATE elo_core Qt6::Core Qt6::Network)
+target_include_directories(test_admin_security PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../apps/elo-admin
+)
+add_test(NAME AdminSecurity COMMAND test_admin_security)

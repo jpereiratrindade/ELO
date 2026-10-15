@@ -63,6 +63,11 @@ int main(int argc, char* argv[]) {
 
     auto content_root = elo::content::resolve_system_content_dir(true);
     auto web_root = resolve_web_root();
+    const QByteArray admin_token = qgetenv("ELO_ADMIN_TOKEN");
+    if (admin_token.size() < 32) {
+        std::cerr << "[ELO][admin] ELO_ADMIN_TOKEN ausente ou menor que 32 bytes; administração desabilitada.\n";
+        return 1;
+    }
 
     std::cout << "========================================================\n"
               << "  ELO Content Studio — Local Sovereign Administration\n"
@@ -74,7 +79,7 @@ int main(int argc, char* argv[]) {
               << "  Studio URL:   http://localhost:" << port << '\n'
               << "========================================================\n";
 
-    elo::admin::AdminHttpServer server(content_root, web_root, port);
+    elo::admin::AdminHttpServer server(content_root, web_root, admin_token, port);
     if (!server.start()) {
         std::cerr << "[ELO][admin] Fatal error: failed to launch studio server.\n";
         return 1;

@@ -8,6 +8,7 @@ Type=simple
 User=%I
 Environment=ELO_ADMIN_PORT=8080
 Environment=QT_QPA_PLATFORM=minimal
+EnvironmentFile=/etc/elo/admin.env
 WorkingDirectory=/home/%I
 ExecStart=/usr/local/bin/elo-admin
 Restart=always
