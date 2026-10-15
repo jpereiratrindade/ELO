@@ -1,8 +1,10 @@
 # ELO-G0-RESULTADOS — Contenção e Segurança
 
-**Data:** 15/10/2026  
-**Base examinada:** `main` em `933457597c3ff315cdd3499ccf757c8ac5d41dcd`  
-**Estado inicial:** worktree limpo; branch alinhada a `origin/main`  
+**Data:** 15/10/2026
+
+**Base examinada:** `main` em `933457597c3ff315cdd3499ccf757c8ac5d41dcd`
+
+**Estado inicial:** worktree limpo; branch alinhada a `origin/main`
 **Referência:** ELO-DEV-001 e ELO-RECONCEPCAO-001 v0.1.0
 
 ## 1. Decisão
@@ -134,7 +136,8 @@ inconclusivos porque não houve teste dinâmico da versão antiga em rede nem en
 
 ## 7. Gate
 
-**G0: PASS para contenção de código; evidência física NOT_RUN.**  
+**G0: PASS para contenção de código; evidência física NOT_RUN.**
+
 **Recomendação:** avançar para G1 em desenvolvimento controlado. Não avançar para piloto
 público. Não reativar continuidade biométrica. Tratar riscos acima como entradas
 obrigatórias de G1/G2, mantendo resultados `NOT_RUN` visíveis.**
