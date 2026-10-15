@@ -498,9 +498,12 @@ core::Result<void> ExperienceEngine::submit_survey_response(
 }
 
 core::Result<bool> ExperienceEngine::request_forget(const identity::PersonLocalId& person_id) {
-    (void)biometric_store_->forget_person(person_id);
-    (void)experience_store_->forget_person(person_id);
-    (void)survey_store_->forget_person(person_id);
+    const auto biometric_result = biometric_store_->forget_person(person_id);
+    if (!biometric_result) return std::unexpected(biometric_result.error());
+    const auto experience_result = experience_store_->forget_person(person_id);
+    if (!experience_result) return std::unexpected(experience_result.error());
+    const auto survey_result = survey_store_->forget_person(person_id);
+    if (!survey_result) return std::unexpected(survey_result.error());
 
     if (active_person_ && *active_person_ == person_id) {
         active_person_ = std::nullopt;
@@ -508,7 +511,7 @@ core::Result<bool> ExperienceEngine::request_forget(const identity::PersonLocalI
     } else {
         transition_to(state_, EventType::PERSON_FORGOTTEN);
     }
-    return true;
+    return *biometric_result || *experience_result || *survey_result;
 }
 
 void ExperienceEngine::finish_session() {

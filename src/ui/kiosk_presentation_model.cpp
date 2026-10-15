@@ -435,7 +435,13 @@ void KioskPresentationModel::submitSurveyResponse(
 
 void KioskPresentationModel::requestForgetMe() {
     if (engine_ && engine_->active_person()) {
-        (void)engine_->request_forget(*engine_->active_person());
+        const auto result = engine_->request_forget(*engine_->active_person());
+        if (!result) {
+            greeting_title_ = QStringLiteral("Não foi possível concluir a desvinculação");
+            greeting_message_ = QString::fromStdString(result.error().to_string());
+            emit recognitionChanged();
+            return;
+        }
         emit biometricAuthorizationChanged(false);
         emit recognitionVisualStateChanged(false);
         engine_->finish_session();
@@ -443,8 +449,8 @@ void KioskPresentationModel::requestForgetMe() {
         recognition_resolved_ = false;
         pending_embeddings_.clear();
         pending_quality_sum_ = 0.0;
-        greeting_title_ = QStringLiteral("Identidade local esquecida");
-        greeting_message_ = QStringLiteral("A continuidade anterior foi removida deste totem.");
+        greeting_title_ = QStringLiteral("Desvinculação local concluída");
+        greeting_message_ = QStringLiteral("Os vínculos ativos conhecidos foram removidos. Isso não garante apagamento físico imediato de cópias ou WAL.");
         resetBehaviorTimer();
         emit contentChanged();
         emit recognitionChanged();

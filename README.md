@@ -25,7 +25,7 @@ ELO ≠ QT
 - **Invariante E7 (PRESENTATION_DOMAIN_SEPARATION)**: QML restringe-se à apresentação através de `KioskPresentationModel`. Lógica de domínio, biometria e SQLite nunca entram no QML.
 - **Invariantes E8, E9 & E10 (PERSON_AUTONOMY, VISIBLE_LOCAL_ENROLLMENT & RAW_IMAGE_EPHEMERALITY)**: no G0, presença inicia somente sessão anônima. Continuidade biométrica experimental está desabilitada no fluxo principal e não há matrícula automática.
 - **Invariante E12 & E13 (BIOMETRIC_IS_EVIDENCE & UNKNOWN_IS_VALID)**: Correspondência facial é evidência probabilística. Estados: `UNKNOWN`, `CANDIDATE`, `SUPPORTED`, `UNCERTAIN`.
-- **Invariante E14 (LOCAL_FORGETTING)**: Direito local ao esquecimento instantâneo (`FORGET(Pxx)`) sem necessidade de conexão externa.
+- **Invariante E14 (LOCAL_FORGETTING)**: A operação local remove vínculos conhecidos e propaga falhas. Não garante apagamento físico instantâneo de WAL, backups ou cópias.
 - **Invariante E15 (IDENTITY_SPACE_SEPARATION)**: Separação forte de tipos:
   `EloId` (`elo://...`) $\neq$ `KernelId` $\neq$ `DeviceId` (`device://...`) $\neq$ `PersonLocalId` (`person-local://...`).
 - **Invariante E17 (RANDOMIZATION_INDEPENDENCE)**: Sorteios locais são estatisticamente independentes da aparência ou qualidade facial.
