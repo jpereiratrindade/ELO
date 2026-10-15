@@ -496,12 +496,11 @@ void KioskPresentationModel::onFacePresenceChanged(bool present) {
             pending_quality_sum_ = 0.0;
             state_duration_ = 0.0;
             behavior_progress_ = 0.0;
-            greeting_title_ = QStringLiteral("Reconhecendo presença");
-            greeting_message_ = QStringLiteral("Comparando somente a identidade facial local");
+            greeting_title_ = QStringLiteral("Presença detectada");
+            greeting_message_ = QStringLiteral("Sessão anônima iniciada");
             engine_->on_presence_detected();
-            engine_->begin_automatic_continuity();
             emit recognitionVisualStateChanged(false);
-            emit biometricAuthorizationChanged(true);
+            emit biometricAuthorizationChanged(false);
             emit recognitionChanged();
             emit stateChanged();
             emit behaviorProgressChanged();
@@ -523,7 +522,7 @@ void KioskPresentationModel::tick(double delta_seconds) {
     const auto state = engine_->current_state();
 
     // 1. Ausência do visitante diante da câmera
-    if (!face_detected_) {
+    if (vision_operational_ && !face_detected_) {
         if (state != experience::SessionState::IDLE) {
             absence_duration_ += delta_seconds;
             // Se o visitante se afastou por 1.5s, conclui a sessão soberanamente
@@ -648,71 +647,10 @@ void KioskPresentationModel::tick(double delta_seconds) {
 
 void KioskPresentationModel::onFaceEmbeddingReady(
     const QVector<float>& embedding, double quality) {
-    if (!engine_ || !isBiometricSession()) {
-        return;
-    }
-
-    const std::vector<float> values(embedding.begin(), embedding.end());
-    if (values.empty()) {
-        return;
-    }
-    if (!pending_embeddings_.empty() && pending_embeddings_.front().size() != values.size()) {
-        pending_embeddings_.clear();
-        pending_quality_sum_ = 0.0;
-    }
-    pending_embeddings_.push_back(values);
-    pending_quality_sum_ += quality;
-
-    constexpr std::size_t samples_required = 3;
-    if (pending_embeddings_.size() < samples_required) {
-        greeting_message_ = QStringLiteral("Construindo identidade facial local • amostra %1 de %2")
-            .arg(pending_embeddings_.size())
-            .arg(samples_required);
-        emit recognitionChanged();
-        return;
-    }
-
-    std::vector<float> aggregate(values.size(), 0.0F);
-    for (const auto& sample : pending_embeddings_) {
-        for (std::size_t index = 0; index < sample.size(); ++index) {
-            aggregate[index] += sample[index];
-        }
-    }
-    for (auto& component : aggregate) {
-        component /= static_cast<float>(pending_embeddings_.size());
-    }
-    const double aggregate_quality = pending_quality_sum_ /
-        static_cast<double>(pending_embeddings_.size());
-    pending_embeddings_.clear();
-    pending_quality_sum_ = 0.0;
-
-    auto resolution = engine_->identify_or_enroll_local_face(aggregate, aggregate_quality);
-    if (!resolution) {
-        vision_status_ = QString::fromStdString(resolution.error().to_string());
-        emit visionChanged();
-        return;
-    }
-
-    vision_status_ = QString::fromUtf8(biometric::to_string(resolution->state).data());
-    emit visionChanged();
-    emit stateChanged();
-
-    if (resolution->state == biometric::IdentityState::SUPPORTED) {
-        emit biometricAuthorizationChanged(false);
-        emit recognitionVisualStateChanged(true);
-        recognition_resolved_ = true;
-        resetBehaviorTimer();
-        if (resolution->newly_enrolled) {
-            greeting_title_ = QStringLiteral("Bem-vindo ao ELO");
-            greeting_message_ = QStringLiteral(
-                "Sua continuidade local foi criada. Guardamos somente uma representação facial vetorial, nunca a fotografia.");
-        } else {
-            greeting_title_ = QStringLiteral("Que bom ver você novamente");
-            greeting_message_ = QStringLiteral(
-                "Continuidade local reconhecida. Vamos seguir de onde você parou.");
-        }
-        emit recognitionChanged();
-    }
+    Q_UNUSED(embedding)
+    Q_UNUSED(quality)
+    // G0: embeddings may still be emitted by the optional vision adapter, but the
+    // production presentation flow never authorizes, evaluates, or persists them.
 }
 
 void KioskPresentationModel::onVisionStatusChanged(const QString& status) {
@@ -727,16 +665,7 @@ void KioskPresentationModel::onVisionFailure(const QString& message) {
     vision_status_ = QStringLiteral("Falha de visão: ") + message;
     emit biometricAuthorizationChanged(false);
     emit recognitionVisualStateChanged(false);
-    if (engine_ && engine_->current_state() != experience::SessionState::IDLE) {
-        engine_->finish_session();
-        current_content_.clear();
-        recognition_resolved_ = false;
-        pending_embeddings_.clear();
-        pending_quality_sum_ = 0.0;
-        emit contentChanged();
-        emit recognitionChanged();
-        emit stateChanged();
-    }
+    // Camera is optional. Failure must not terminate an anonymous experience.
     emit visionChanged();
 }
 

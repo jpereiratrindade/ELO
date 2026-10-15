@@ -17,7 +17,7 @@ struct FaceTemplate {
     std::vector<float> representation; // Derived feature embedding vector
     double quality{0.0};               // Quality score [0.0, 1.0]
     std::uint64_t created_at{0};       // Epoch timestamp
-    std::string integrity_digest;      // SHA-256 or similar integrity check
+    std::string integrity_digest;      // Experimental metadata; not a verified digest in G0
 };
 
 } // namespace elo::biometric
