@@ -179,6 +179,7 @@ int main(int argc, char* argv[]) {
     };
 
     auto content_dir = QString::fromStdString(resolve_active_catalog(system_content).string());
+    bool startup_loaded = false;
     if (!content_dir.isEmpty()) {
         auto load_res = content_catalog->load_from_directory(content_dir.toStdString());
         if (load_res) {
@@ -186,8 +187,21 @@ int main(int argc, char* argv[]) {
                       << content_catalog->atom_count() << " atoms, "
                       << content_catalog->relation_count() << " relations, "
                       << content_catalog->recipe_count() << " recipes.\n";
+            startup_loaded = true;
         } else {
             std::cerr << "[ELO][content] Failed to load content: " << load_res.error().to_string() << '\n';
+        }
+    }
+    // Startup Fail-Safe: attempt fallback to base catalog if active bundle failed or was corrupted
+    if (!startup_loaded) {
+        auto fallback_dir = system_content / "catalog";
+        if (std::filesystem::exists(fallback_dir)) {
+            std::cout << "[ELO][content] Startup fail-safe: attempting fallback to base catalog at " << fallback_dir << '\n';
+            auto fb_res = content_catalog->load_from_directory(fallback_dir.string());
+            if (fb_res) {
+                std::cout << "[ELO][content] Startup fail-safe loaded: "
+                          << content_catalog->atom_count() << " atoms.\n";
+            }
         }
     }
 
@@ -288,6 +302,10 @@ int main(int argc, char* argv[]) {
                 std::cout << "[ELO][kiosk] Hot reload signal received from control plane. Reloading catalog...\n";
                 auto reload_path = resolve_active_catalog(system_content);
                 if (reload_path.empty()) {
+                    if (content_catalog->atom_count() > 0) {
+                        std::cerr << "[ELO][kiosk] Active application path unavailable; keeping current running catalog.\n";
+                        return;
+                    }
                     presentation_model->deactivateContent();
                     content_catalog->clear();
                     std::cout << "[ELO][kiosk] No active application; content unloaded.\n";
@@ -303,6 +321,22 @@ int main(int argc, char* argv[]) {
                     presentation_model->selectContextualContent();
                 } else {
                     std::cerr << "[ELO][kiosk] Hot reload failed: " << reload_res.error().to_string() << '\n';
+                    // Fail-safe: if current catalog has atoms, keep displaying it rather than blacking out the screen
+                    if (content_catalog->atom_count() > 0) {
+                        std::cerr << "[ELO][kiosk] Fail-safe engaged: preserving current healthy catalog ("
+                                  << content_catalog->atom_count() << " atoms).\n";
+                    } else {
+                        auto fallback_dir = system_content / "catalog";
+                        if (std::filesystem::exists(fallback_dir)) {
+                            std::cerr << "[ELO][kiosk] Fail-safe engaged: attempting fallback to base catalog.\n";
+                            auto fb_res = content_catalog->load_from_directory(fallback_dir.string());
+                            if (fb_res) {
+                                std::cout << "[ELO][kiosk] Fallback catalog loaded successfully ("
+                                          << content_catalog->atom_count() << " atoms).\n";
+                                presentation_model->selectContextualContent();
+                            }
+                        }
+                    }
                 }
             });
 

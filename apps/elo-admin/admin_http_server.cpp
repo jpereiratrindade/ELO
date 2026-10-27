@@ -1805,12 +1805,15 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         if (!relative.empty() && *relative.begin() != "..") {
             filePath = QString::fromStdString(candidate.string());
         }
-        if (filePath.endsWith(QStringLiteral(".png"))) contentType = QStringLiteral("image/png");
-        else if (filePath.endsWith(QStringLiteral(".jpg")) || filePath.endsWith(QStringLiteral(".jpeg"))) contentType = QStringLiteral("image/jpeg");
-        else if (filePath.endsWith(QStringLiteral(".webp"))) contentType = QStringLiteral("image/webp");
-        else if (filePath.endsWith(QStringLiteral(".wav"))) contentType = QStringLiteral("audio/wav");
-        else if (filePath.endsWith(QStringLiteral(".ogg"))) contentType = QStringLiteral("audio/ogg");
-        else contentType = QStringLiteral("application/octet-stream");
+        if (filePath.endsWith(QStringLiteral(".png"), Qt::CaseInsensitive)) contentType = QStringLiteral("image/png");
+        else if (filePath.endsWith(QStringLiteral(".jpg"), Qt::CaseInsensitive) || filePath.endsWith(QStringLiteral(".jpeg"), Qt::CaseInsensitive)) contentType = QStringLiteral("image/jpeg");
+        else if (filePath.endsWith(QStringLiteral(".webp"), Qt::CaseInsensitive)) contentType = QStringLiteral("image/webp");
+        else if (filePath.endsWith(QStringLiteral(".wav"), Qt::CaseInsensitive)) contentType = QStringLiteral("audio/wav");
+        else if (filePath.endsWith(QStringLiteral(".ogg"), Qt::CaseInsensitive)) contentType = QStringLiteral("audio/ogg");
+        else if (filePath.endsWith(QStringLiteral(".mp3"), Qt::CaseInsensitive)) contentType = QStringLiteral("audio/mpeg");
+        else {
+            filePath.clear(); // Reject non-whitelisted extensions with 404
+        }
     }
 
     if (!filePath.isEmpty() && QFile::exists(filePath)) {

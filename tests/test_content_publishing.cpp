@@ -207,11 +207,48 @@ void test_control_plane_ipc(int argc, char* argv[]) {
     server.stop();
 }
 
+void test_catalog_hash_verification() {
+    std::cout << "[TEST] ContentCatalog cryptographic hash verification and tamper rejection...\n";
+    auto source_content = resolve_content_dir();
+
+    auto temp_root = std::filesystem::temp_directory_path() /
+                     ("elo_integrity_test_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directories(temp_root);
+
+    elo::content::BundlePublisher publisher(temp_root);
+    auto pub_res = publisher.publish_and_activate(source_content, "curator_integrity");
+    TEST_ASSERT(pub_res.success, "Publishing bundle with sealed hash succeeds");
+
+    // 1. Loading untampered bundle into catalog succeeds
+    elo::content::ContentCatalog catalog;
+    auto load_res = catalog.load_from_directory(pub_res.bundle_path / "catalog");
+    TEST_ASSERT(load_res.has_value(), "Untampered bundle catalog loads successfully with verified hash");
+    TEST_ASSERT(!catalog.manifest().content_hash.empty(), "Catalog has sealed hash in manifest");
+
+    // 2. Tampering with an atom in the catalog causes hash mismatch rejection
+    auto atom_path = pub_res.bundle_path / "catalog" / "atoms" / "species_cardeal_001.json";
+    TEST_ASSERT(std::filesystem::exists(atom_path), "Target atom file exists for tamper test");
+    {
+        std::ofstream f(atom_path, std::ios::app);
+        f << "\n/* tampered */\n";
+    }
+
+    elo::content::ContentCatalog tampered_catalog;
+    auto tampered_res = tampered_catalog.load_from_directory(pub_res.bundle_path / "catalog");
+    TEST_ASSERT(!tampered_res.has_value(), "Tampered bundle must fail integrity hash check");
+    TEST_ASSERT(tampered_res.error().to_string().find("integrity check failed") != std::string::npos,
+                "Error message explicitly identifies integrity check failure");
+    std::cout << "  -> PASSED: Cryptographic integrity verification and tamper rejection validated.\n";
+
+    std::filesystem::remove_all(temp_root);
+}
+
 int main(int argc, char* argv[]) {
     test_content_bundle_and_hash();
     test_bundle_publisher_and_atomic_swap();
     test_package_atom_selection();
     test_control_plane_ipc(argc, argv);
+    test_catalog_hash_verification();
     std::cout << "\nAll Content Publishing & Control Plane tests PASSED successfully!\n";
     return 0;
 }

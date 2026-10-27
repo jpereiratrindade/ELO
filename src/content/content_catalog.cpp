@@ -1,4 +1,5 @@
 #include "elo/content/content_catalog.hpp"
+#include "elo/content/content_bundle.hpp"
 
 #include <QDir>
 #include <QFile>
@@ -204,13 +205,36 @@ core::Result<void> ContentCatalog::load_from_directory(const std::filesystem::pa
 
     // 0. Load manifest.json if present (in catalog dir or parent bundle dir)
     QString manifest_path = dir.filePath(QStringLiteral("manifest.json"));
-    if (!QFile::exists(manifest_path)) {
+    std::filesystem::path bundle_root;
+    if (QFile::exists(manifest_path)) {
+        if (std::filesystem::exists(catalog_dir / "catalog")) {
+            bundle_root = catalog_dir;
+        }
+    } else {
         manifest_path = QDir(dir.filePath(QStringLiteral(".."))).filePath(QStringLiteral("manifest.json"));
+        if (QFile::exists(manifest_path) && std::filesystem::exists(catalog_dir.parent_path() / "catalog")) {
+            bundle_root = catalog_dir.parent_path();
+        }
     }
+
     if (QFile::exists(manifest_path)) {
         auto doc = read_json_file(manifest_path);
         if (doc && doc->isObject()) {
             manifest_ = parse_manifest_json(doc->object());
+        }
+    }
+
+    // Cryptographic integrity check: verify files against sealed hash
+    if (!bundle_root.empty() && !manifest_.content_hash.empty() &&
+        manifest_.content_hash.rfind("sha256:", 0) == 0) {
+        ContentBundle bundle(bundle_root);
+        auto hash_res = bundle.compute_content_hash();
+        if (hash_res && *hash_res != manifest_.content_hash) {
+            clear();
+            return std::unexpected(core::make_error(
+                core::ErrorCode::ContentError,
+                "Content bundle integrity check failed: expected " + manifest_.content_hash +
+                ", but calculated " + *hash_res));
         }
     }
 

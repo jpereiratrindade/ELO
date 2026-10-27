@@ -304,6 +304,27 @@ int main(int argc, char** argv) {
     TEST_ASSERT(manifestDoc.object().value("bundle_id").toString() == "bundle_atomic_test",
                 "Manifest file content contains updated bundle_id");
 
+    // 18. Strict MIME serving for /assets/* (disallowed extensions return 404, not octet-stream)
+    const auto disallowedFile = std::filesystem::path(root.path().toStdString()) / "assets" / "images" / "secret.db";
+    {
+        std::ofstream f(disallowedFile);
+        f << "secret_data";
+    }
+    const auto disallowedMimeResp = request(server.port(),
+        "GET /assets/images/secret.db HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    TEST_ASSERT(disallowedMimeResp.startsWith("HTTP/1.1 404"),
+                "Static asset request with disallowed extension (.db) is rejected with 404");
+    TEST_ASSERT(!disallowedMimeResp.contains("application/octet-stream"),
+                "Disallowed file is not served as application/octet-stream");
+
+    // Allowed static asset request succeeds with proper Content-Type
+    const auto allowedMimeResp = request(server.port(),
+        "GET /assets/images/photosafe.png HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    TEST_ASSERT(allowedMimeResp.startsWith("HTTP/1.1 200 OK"),
+                "Static asset request with allowed extension (.png) returns 200 OK");
+    TEST_ASSERT(allowedMimeResp.contains("Content-Type: image/png"),
+                "Response Content-Type is image/png");
+
     std::cout << "Admin containment G0 tests passed successfully with full security hardening.\n";
     return 0;
 }
