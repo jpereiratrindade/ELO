@@ -258,7 +258,59 @@ void test_catalog_hash_verification() {
     auto tampered_skip_res = tampered_catalog.load_from_directory(pub_res.bundle_path / "catalog", elo::content::IntegrityPolicy::Skip);
     TEST_ASSERT(tampered_skip_res.has_value(), "Tampered bundle check is bypassed when policy is Skip");
 
-    std::cout << "  -> PASSED: All IntegrityPolicy modes (Require, VerifyIfPresent, Skip) validated.\n";
+    // 7. Case-insensitive hash comparison (accepts uppercase hex in manifest)
+    auto uppercase_bundle = temp_root / "bundles" / "uppercase_test";
+    std::filesystem::copy(pub_res.bundle_path, uppercase_bundle, std::filesystem::copy_options::recursive);
+    {
+        // Revert tampered file in uppercase_bundle
+        std::ofstream f(uppercase_bundle / "catalog" / "atoms" / "species_cardeal_001.json");
+        std::ifstream src(source_content / "catalog" / "atoms" / "species_cardeal_001.json");
+        f << src.rdbuf();
+    }
+    // Read manifest and convert hash to uppercase
+    QFile manFile(QString::fromStdString((uppercase_bundle / "manifest.json").string()));
+    TEST_ASSERT(manFile.open(QIODevice::ReadOnly), "Manifest file opens for uppercase test");
+    auto manDoc = QJsonDocument::fromJson(manFile.readAll());
+    manFile.close();
+    auto manObj = manDoc.object();
+    QString upperHash = manObj.value("content_hash").toString().toUpper();
+    manObj["content_hash"] = upperHash;
+    TEST_ASSERT(manFile.open(QIODevice::WriteOnly | QIODevice::Truncate), "Manifest opens for write");
+    manFile.write(QJsonDocument(manObj).toJson());
+    manFile.close();
+
+    elo::content::ContentCatalog uppercase_catalog;
+    auto upper_res = uppercase_catalog.load_from_directory(uppercase_bundle / "catalog", elo::content::IntegrityPolicy::Require);
+    TEST_ASSERT(upper_res.has_value(), "Uppercase SHA-256 hash in manifest is accepted via case-insensitive comparison");
+
+    // 8. Corrupted manifest.json (invalid JSON syntax) is rejected explicitly
+    auto corrupt_bundle = temp_root / "bundles" / "corrupt_manifest_test";
+    std::filesystem::copy(pub_res.bundle_path, corrupt_bundle, std::filesystem::copy_options::recursive);
+    {
+        std::ofstream f(corrupt_bundle / "manifest.json");
+        f << "{ this is NOT valid JSON ::: ";
+    }
+    elo::content::ContentCatalog corrupt_catalog;
+    auto corrupt_res = corrupt_catalog.load_from_directory(corrupt_bundle / "catalog", elo::content::IntegrityPolicy::VerifyIfPresent);
+    TEST_ASSERT(!corrupt_res.has_value(), "Corrupted manifest.json must be rejected");
+    TEST_ASSERT(corrupt_res.error().to_string().find("Corrupted or invalid JSON") != std::string::npos,
+                "Error message explicitly identifies corrupted manifest JSON");
+
+    // 9. Insecure symlink escaping bundle root is rejected
+    auto symlink_bundle = temp_root / "bundles" / "symlink_escape_test";
+    std::filesystem::copy(pub_res.bundle_path, symlink_bundle, std::filesystem::copy_options::recursive);
+    std::error_code ec;
+    std::filesystem::create_directories(symlink_bundle / "assets" / "images", ec);
+    std::filesystem::create_symlink("/etc/passwd", symlink_bundle / "assets" / "images" / "escape.png", ec);
+    if (!ec) {
+        elo::content::ContentBundle bundle_with_symlink(symlink_bundle);
+        auto sym_res = bundle_with_symlink.compute_content_hash();
+        TEST_ASSERT(!sym_res.has_value(), "Symlink pointing outside bundle must fail hash computation");
+        TEST_ASSERT(sym_res.error().to_string().find("Insecure symlink") != std::string::npos,
+                    "Error explicitly detects escaping symlink");
+    }
+
+    std::cout << "  -> PASSED: All IntegrityPolicy modes, uppercase hex, corrupted manifest, and symlink defenses validated.\n";
 
     std::filesystem::remove_all(temp_root);
 }

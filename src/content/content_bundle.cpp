@@ -176,8 +176,18 @@ core::Result<std::string> ContentBundle::compute_content_hash() const {
 
     for (const auto& sub : {catalog_path(), assets_path()}) {
         if (!std::filesystem::exists(sub, ec)) continue;
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(sub, ec)) {
-            if (entry.is_regular_file(ec)) {
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(sub, std::filesystem::directory_options::none, ec)) {
+            if (entry.is_symlink(ec)) {
+                // Reject symlinks that escape the bundle root directory
+                const auto target = std::filesystem::weakly_canonical(entry.path(), ec);
+                const auto canonical_root = std::filesystem::weakly_canonical(root_dir_, ec);
+                const auto rel = target.lexically_relative(canonical_root);
+                if (rel.empty() || *rel.begin() == "..") {
+                    return std::unexpected(core::make_error(
+                        core::ErrorCode::ContentError,
+                        "Insecure symlink in bundle escaping root: " + entry.path().string()));
+                }
+            } else if (entry.is_regular_file(ec)) {
                 all_files.push_back(entry.path());
             }
         }

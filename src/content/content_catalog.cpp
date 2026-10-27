@@ -223,12 +223,19 @@ core::Result<void> ContentCatalog::load_from_directory(
         auto doc = read_json_file(manifest_path);
         if (doc && doc->isObject()) {
             manifest_ = parse_manifest_json(doc->object());
+        } else {
+            clear();
+            return std::unexpected(core::make_error(
+                core::ErrorCode::ContentError,
+                "Corrupted or invalid JSON in manifest file: " + manifest_path.toStdString()));
         }
     }
 
     // Integrity Policy Enforcement
     if (policy == IntegrityPolicy::Require) {
-        if (manifest_.content_hash.empty() || manifest_.content_hash.rfind("sha256:", 0) != 0) {
+        if (manifest_.content_hash.empty() ||
+            manifest_.content_hash.size() < 7 ||
+            QString::fromStdString(manifest_.content_hash).left(7).compare(QStringLiteral("sha256:"), Qt::CaseInsensitive) != 0) {
             clear();
             return std::unexpected(core::make_error(
                 core::ErrorCode::ContentError,
@@ -237,10 +244,16 @@ core::Result<void> ContentCatalog::load_from_directory(
     }
 
     if (policy != IntegrityPolicy::Skip && !bundle_root.empty() && !manifest_.content_hash.empty() &&
-        manifest_.content_hash.rfind("sha256:", 0) == 0) {
+        QString::fromStdString(manifest_.content_hash).left(7).compare(QStringLiteral("sha256:"), Qt::CaseInsensitive) == 0) {
         ContentBundle bundle(bundle_root);
         auto hash_res = bundle.compute_content_hash();
-        if (hash_res && *hash_res != manifest_.content_hash) {
+        if (!hash_res) {
+            clear();
+            return std::unexpected(hash_res.error());
+        }
+        const QString expected = QString::fromStdString(manifest_.content_hash).toLower();
+        const QString calculated = QString::fromStdString(*hash_res).toLower();
+        if (expected != calculated) {
             clear();
             return std::unexpected(core::make_error(
                 core::ErrorCode::ContentError,
