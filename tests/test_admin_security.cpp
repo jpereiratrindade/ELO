@@ -223,6 +223,87 @@ int main(int argc, char** argv) {
     const std::filesystem::path current_link = std::filesystem::path(root.path().toStdString()) / "current";
     TEST_ASSERT(std::filesystem::exists(current_link), "Published 'current' bundle link exists on filesystem");
 
+    // 13. Media upload extension restriction (blocking .html or executables)
+    const QJsonObject badUpload{
+        {QStringLiteral("folder"), QStringLiteral("images")},
+        {QStringLiteral("filename"), QStringLiteral("evil.html")},
+        {QStringLiteral("base64_data"), QStringLiteral("PGh0bWw+ZXZpbDwvaHRtbD4=")}
+    };
+    const QByteArray badUploadPayload = QJsonDocument(badUpload).toJson(QJsonDocument::Compact);
+    const auto badUploadResp = request(server.port(),
+        "POST /api/upload HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(badUploadPayload.size()) +
+        "\r\n\r\n" + badUploadPayload);
+    TEST_ASSERT(badUploadResp.startsWith("HTTP/1.1 400"),
+                "Upload with disallowed extension (.html) is rejected with 400 Bad Request");
+
+    // 14. Media upload with allowed extension and filename sanitization (colons and control chars removed)
+    const QJsonObject validUpload{
+        {QStringLiteral("folder"), QStringLiteral("images")},
+        {QStringLiteral("filename"), QStringLiteral("photo:safe.png")},
+        {QStringLiteral("base64_data"), QStringLiteral("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")}
+    };
+    const QByteArray validUploadPayload = QJsonDocument(validUpload).toJson(QJsonDocument::Compact);
+    const auto validUploadResp = request(server.port(),
+        "POST /api/upload HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(validUploadPayload.size()) +
+        "\r\n\r\n" + validUploadPayload);
+    TEST_ASSERT(validUploadResp.startsWith("HTTP/1.1 200 OK"),
+                "Valid PNG media upload succeeds with 200 OK");
+    TEST_ASSERT(validUploadResp.contains("assets/images/photosafe.png"),
+                "Uploaded filename is sanitized removing colons");
+    const auto savedAsset = std::filesystem::path(root.path().toStdString()) / "assets" / "images" / "photosafe.png";
+    TEST_ASSERT(std::filesystem::exists(savedAsset), "Sanitized media file was written atomically to assets/images");
+
+    // 15. Media upload with excessive payload rejection (fast fail before allocation)
+    const QByteArray hugeB64(14 * 1024 * 1024, 'A');
+    const QJsonObject hugeUpload{
+        {QStringLiteral("folder"), QStringLiteral("images")},
+        {QStringLiteral("filename"), QStringLiteral("huge.png")},
+        {QStringLiteral("base64_data"), QString::fromLatin1(hugeB64)}
+    };
+    const QByteArray hugeUploadPayload = QJsonDocument(hugeUpload).toJson(QJsonDocument::Compact);
+    const auto hugeUploadResp = request(server.port(),
+        "POST /api/upload HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(hugeUploadPayload.size()) +
+        "\r\n\r\n" + hugeUploadPayload);
+    TEST_ASSERT(hugeUploadResp.startsWith("HTTP/1.1 413"),
+                "Oversized media upload base64 is rejected with 413 Payload Too Large");
+
+    // 16. Kiosk show command injection prevention (newline splitting)
+    const QJsonObject injectionShow{
+        {QStringLiteral("content_id"), QStringLiteral("atom_test\nSHUTDOWN\n")}
+    };
+    const QByteArray injectionShowPayload = QJsonDocument(injectionShow).toJson(QJsonDocument::Compact);
+    const auto injectionShowResp = request(server.port(),
+        "POST /api/kiosk/show HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(injectionShowPayload.size()) +
+        "\r\n\r\n" + injectionShowPayload);
+    TEST_ASSERT(injectionShowResp.startsWith("HTTP/1.1 400"),
+                "IPC command injection attempt with newline in content_id is rejected with 400 Bad Request");
+
+    // 17. Atomic manifest update via POST /api/manifest
+    const QJsonObject manifestPayload{
+        {QStringLiteral("bundle_id"), QStringLiteral("bundle_atomic_test")},
+        {QStringLiteral("title"), QStringLiteral("Pacote de Teste Atômico")},
+        {QStringLiteral("version"), QStringLiteral("1.0.0")},
+        {QStringLiteral("atom_ids"), QJsonArray{QStringLiteral("atom_untrusted_html_test")}}
+    };
+    const QByteArray manifestBytes = QJsonDocument(manifestPayload).toJson(QJsonDocument::Compact);
+    const auto manifestResp = request(server.port(),
+        "POST /api/manifest HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(manifestBytes.size()) +
+        "\r\n\r\n" + manifestBytes);
+    TEST_ASSERT(manifestResp.startsWith("HTTP/1.1 200 OK"),
+                "Manifest update succeeds with 200 OK");
+    const auto manifestOnDisk = std::filesystem::path(root.path().toStdString()) / "manifest.json";
+    TEST_ASSERT(std::filesystem::exists(manifestOnDisk), "Manifest file exists on disk");
+    QFile manifestFile(QString::fromStdString(manifestOnDisk.string()));
+    TEST_ASSERT(manifestFile.open(QIODevice::ReadOnly), "Manifest file can be read");
+    const auto manifestDoc = QJsonDocument::fromJson(manifestFile.readAll());
+    TEST_ASSERT(manifestDoc.object().value("bundle_id").toString() == "bundle_atomic_test",
+                "Manifest file content contains updated bundle_id");
+
     std::cout << "Admin containment G0 tests passed successfully with full security hardening.\n";
     return 0;
 }

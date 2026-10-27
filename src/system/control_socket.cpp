@@ -5,6 +5,7 @@
 #include <QProcessEnvironment>
 #include <iostream>
 #ifdef __linux__
+#include <sys/socket.h>
 #include <unistd.h>
 #endif
 
@@ -66,6 +67,9 @@ bool ControlServer::start() {
     // Remove stale socket if it exists
     QLocalServer::removeServer(socket_path_);
 
+    // Restrict socket file permissions to current user only (0600)
+    server_->setSocketOptions(QLocalServer::UserAccessOption);
+
     if (!server_->listen(socket_path_)) {
         std::cerr << "[ELO][ipc] Failed to listen on control socket "
                   << socket_path_.toStdString() << ": "
@@ -92,6 +96,21 @@ bool ControlServer::isListening() const noexcept {
 void ControlServer::onNewConnection() {
     while (server_->hasPendingConnections()) {
         auto* socket = server_->nextPendingConnection();
+#ifdef __linux__
+        qintptr fd = socket->socketDescriptor();
+        if (fd >= 0) {
+            struct ucred cr{};
+            socklen_t len = sizeof(cr);
+            if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cr, &len) == 0) {
+                if (cr.uid != getuid()) {
+                    std::cerr << "[ELO][ipc] Rejected connection from unauthorized UID " << cr.uid << '\n';
+                    socket->close();
+                    socket->deleteLater();
+                    continue;
+                }
+            }
+        }
+#endif
         connect(socket, &QLocalSocket::readyRead, this, &ControlServer::onReadyRead);
         connect(socket, &QLocalSocket::disconnected, socket, &QLocalSocket::deleteLater);
     }
@@ -101,10 +120,18 @@ void ControlServer::onReadyRead() {
     auto* socket = qobject_cast<QLocalSocket*>(sender());
     if (!socket) return;
 
+    constexpr qint64 kMaxCommandLineBytes = 4096;
+
     while (socket->canReadLine() || socket->bytesAvailable() > 0) {
-        QString line = QString::fromUtf8(socket->readLine()).trimmed();
+        if (socket->bytesAvailable() > kMaxCommandLineBytes && !socket->canReadLine()) {
+            std::cerr << "[ELO][ipc] IPC command line exceeds limit; dropping client\n";
+            socket->close();
+            return;
+        }
+
+        QString line = QString::fromUtf8(socket->readLine(kMaxCommandLineBytes)).trimmed();
         if (line.isEmpty() && socket->bytesAvailable() > 0) {
-            line = QString::fromUtf8(socket->readAll()).trimmed();
+            line = QString::fromUtf8(socket->read(kMaxCommandLineBytes)).trimmed();
         }
         if (line.isEmpty()) break;
         emit commandReceived(line);
@@ -164,6 +191,10 @@ bool ControlClient::send_reload(int timeout_ms) {
 }
 
 bool ControlClient::notify_published(const QString& bundle_id, const QString& hash, int timeout_ms) {
+    if (bundle_id.contains('\n') || bundle_id.contains('\r') || bundle_id.contains(' ') ||
+        hash.contains('\n') || hash.contains('\r') || hash.contains(' ')) {
+        return false;
+    }
     auto reply = send_command(QString("CONTENT_PUBLISHED %1 %2").arg(bundle_id, hash), timeout_ms);
     return reply.contains(QStringLiteral("OK"));
 }
@@ -174,7 +205,10 @@ bool ControlClient::notify_deactivated(int timeout_ms) {
 }
 
 bool ControlClient::show_atom(const QString& atom_id, int timeout_ms) {
-    auto reply = send_command(QStringLiteral("SHOW_ATOM %1").arg(atom_id), timeout_ms);
+    if (atom_id.contains('\n') || atom_id.contains('\r') || atom_id.contains('\0')) {
+        return false;
+    }
+    auto reply = send_command(QStringLiteral("SHOW_ATOM %1").arg(atom_id.trimmed()), timeout_ms);
     return reply.contains(QStringLiteral("OK"));
 }
 

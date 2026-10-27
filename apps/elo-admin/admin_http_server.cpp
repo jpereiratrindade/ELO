@@ -11,6 +11,7 @@
 #include <QProcessEnvironment>
 #include <QSaveFile>
 #include <QThread>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
 #include <iostream>
@@ -21,6 +22,10 @@ namespace {
 
 constexpr qsizetype kMaxHeaderBytes = 16 * 1024;
 constexpr qsizetype kMaxBodyBytes = 16 * 1024 * 1024;
+constexpr qsizetype kMaxMediaUploadBytes = 10 * 1024 * 1024; // 10 MiB
+constexpr qsizetype kMaxUploadBase64Chars = (kMaxMediaUploadBytes * 4 / 3) + 128;
+constexpr size_t kMaxConcurrentClients = 16;
+constexpr int kClientInactivityTimeoutMs = 15000;
 
 QString sanitize_filename(const QString& name) {
     QFileInfo fi(name);
@@ -28,7 +33,35 @@ QString sanitize_filename(const QString& name) {
     base.replace(QStringLiteral(".."), QStringLiteral(""));
     base.replace(QStringLiteral("/"), QStringLiteral(""));
     base.replace(QStringLiteral("\\"), QStringLiteral(""));
-    return base;
+    base.replace(QStringLiteral(":"), QStringLiteral(""));
+    base.replace(QStringLiteral("\r"), QStringLiteral(""));
+    base.replace(QStringLiteral("\n"), QStringLiteral(""));
+    base.replace(QStringLiteral("\0"), QStringLiteral(""));
+
+    QString clean;
+    clean.reserve(base.size());
+    for (QChar c : base) {
+        if (c.isLetterOrNumber() || c == '_' || c == '-' || c == '.') {
+            clean.append(c);
+        }
+    }
+    return clean.trimmed();
+}
+
+bool is_allowed_media_extension(const QString& filename, const QString& folder) {
+    const QString lower = filename.toLower();
+    if (folder == QStringLiteral("images")) {
+        return lower.endsWith(QStringLiteral(".png")) ||
+               lower.endsWith(QStringLiteral(".jpg")) ||
+               lower.endsWith(QStringLiteral(".jpeg")) ||
+               lower.endsWith(QStringLiteral(".webp"));
+    }
+    if (folder == QStringLiteral("audio")) {
+        return lower.endsWith(QStringLiteral(".wav")) ||
+               lower.endsWith(QStringLiteral(".ogg")) ||
+               lower.endsWith(QStringLiteral(".mp3"));
+    }
+    return false;
 }
 
 QString slugify(const QString& text) {
@@ -50,7 +83,16 @@ QString canonical_content_id(QString id) {
         if (decoded == id) break;
         id = decoded;
     }
-    return id.trimmed();
+    id = id.trimmed();
+    QString clean;
+    clean.reserve(std::min<qsizetype>(id.size(), 128));
+    for (QChar c : id) {
+        if (clean.size() >= 128) break;
+        if (c.isLetterOrNumber() || c == '_' || c == '-' || c == '.') {
+            clean.append(c);
+        }
+    }
+    return clean;
 }
 
 } // namespace
@@ -176,6 +218,23 @@ void AdminHttpServer::stop() {
 void AdminHttpServer::onNewConnection() {
     while (tcp_server_->hasPendingConnections()) {
         auto* socket = tcp_server_->nextPendingConnection();
+        if (client_buffers_.size() >= kMaxConcurrentClients) {
+            socket->close();
+            socket->deleteLater();
+            continue;
+        }
+
+        auto* timer = new QTimer(socket);
+        timer->setObjectName(QStringLiteral("inactivityTimer"));
+        timer->setSingleShot(true);
+        timer->setInterval(kClientInactivityTimeoutMs);
+        connect(timer, &QTimer::timeout, socket, [this, socket]() {
+            client_buffers_.erase(socket);
+            socket->close();
+            socket->deleteLater();
+        });
+        timer->start();
+
         connect(socket, &QTcpSocket::readyRead, this, &AdminHttpServer::onClientReadyRead);
         connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
             client_buffers_.erase(socket);
@@ -187,6 +246,10 @@ void AdminHttpServer::onNewConnection() {
 void AdminHttpServer::onClientReadyRead() {
     auto* socket = qobject_cast<QTcpSocket*>(sender());
     if (!socket) return;
+
+    if (auto* timer = socket->findChild<QTimer*>(QStringLiteral("inactivityTimer"))) {
+        timer->start();
+    }
 
     auto& buf = client_buffers_[socket];
     buf.append(socket->readAll());
@@ -350,6 +413,17 @@ void AdminHttpServer::handleAtomsRoute(QTcpSocket* socket, const QString& method
         contentId = canonical_content_id(contentId);
         obj[QStringLiteral("content_id")] = contentId;
 
+        if (contentId.isEmpty()) {
+            sendJsonResponse(socket, 400, "{\"error\":\"content_id ausente ou inválido\"}");
+            return;
+        }
+
+        if (obj.value(QStringLiteral("title")).toString().size() > 512 ||
+            obj.value(QStringLiteral("canonical_name")).toString().size() > 512) {
+            sendJsonResponse(socket, 400, "{\"error\":\"Título ou nome canônico excede o limite permitido (512 caracteres)\"}");
+            return;
+        }
+
         if (!obj.contains(QStringLiteral("schema_version"))) {
             obj[QStringLiteral("schema_version")] = QStringLiteral("0.1");
         }
@@ -430,7 +504,12 @@ void AdminHttpServer::handleUploadRoute(QTcpSocket* socket, const QByteArray& bo
 
     QString filename = sanitize_filename(obj.value(QStringLiteral("filename")).toString());
     if (filename.isEmpty()) {
-        sendJsonResponse(socket, 400, "{\"error\":\"Nome de arquivo ausente\"}");
+        sendJsonResponse(socket, 400, "{\"error\":\"Nome de arquivo ausente ou inválido\"}");
+        return;
+    }
+
+    if (!is_allowed_media_extension(filename, folder)) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Extensão de arquivo não permitida para esta categoria de mídia\"}");
         return;
     }
 
@@ -440,9 +519,21 @@ void AdminHttpServer::handleUploadRoute(QTcpSocket* socket, const QByteArray& bo
         b64 = b64.mid(comma + 1);
     }
 
-    QByteArray rawData = QByteArray::fromBase64(b64.toUtf8());
-    if (rawData.isEmpty()) {
-        sendJsonResponse(socket, 400, "{\"error\":\"Dados de mídia em base64 vazios ou corrompidos\"}");
+    if (b64.isEmpty()) {
+        sendJsonResponse(socket, 400, "{\"error\":\"Dados de mídia em base64 vazios\"}");
+        return;
+    }
+
+    // Fast-fail before large allocations to preserve memory on embedded systems
+    if (b64.size() > kMaxUploadBase64Chars) {
+        sendJsonResponse(socket, 413, "{\"error\":\"Arquivo de mídia excede o limite máximo permitido (10 MiB)\"}");
+        return;
+    }
+
+    QByteArray rawData = QByteArray::fromBase64(b64.toLatin1());
+    if (rawData.isEmpty() || rawData.size() > kMaxMediaUploadBytes) {
+        sendJsonResponse(socket, rawData.size() > kMaxMediaUploadBytes ? 413 : 400,
+                         "{\"error\":\"Dados de mídia inválidos ou tamanho excessivo\"}");
         return;
     }
 
@@ -450,13 +541,18 @@ void AdminHttpServer::handleUploadRoute(QTcpSocket* socket, const QByteArray& bo
     QDir().mkpath(destDir);
 
     QString destPath = QDir(destDir).filePath(filename);
-    QFile f(destPath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        sendJsonResponse(socket, 500, "{\"error\":\"Falha ao gravar arquivo em assets\"}");
+    QSaveFile f(destPath);
+    if (!f.open(QIODevice::WriteOnly)) {
+        sendJsonResponse(socket, 500, "{\"error\":\"Falha ao abrir arquivo para gravação em assets\"}");
         return;
     }
 
     f.write(rawData);
+    if (!f.commit()) {
+        sendJsonResponse(socket, 500, "{\"error\":\"Falha ao persistir arquivo atomicamente em assets\"}");
+        return;
+    }
+
     draft_modified_ = true;
 
     QJsonObject resp;
@@ -985,9 +1081,15 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     // API: POST /api/kiosk/show (Force Totem to display specific atom)
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/kiosk/show")) {
         auto doc = QJsonDocument::fromJson(body);
-        QString contentId = doc.object().value(QStringLiteral("content_id")).toString().trimmed();
+        QString rawId = doc.object().value(QStringLiteral("content_id")).toString();
+        if (rawId.contains('\n') || rawId.contains('\r') || rawId.contains('\0')) {
+            sendJsonResponse(socket, 400, "{\"error\":\"content_id contém caracteres inválidos\"}");
+            return;
+        }
+
+        QString contentId = canonical_content_id(rawId);
         if (contentId.isEmpty()) {
-            sendJsonResponse(socket, 400, "{\"error\":\"Parâmetro content_id obrigatório\"}");
+            sendJsonResponse(socket, 400, "{\"error\":\"Parâmetro content_id obrigatório ou inválido\"}");
             return;
         }
 
@@ -1273,14 +1375,17 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         }
 
         auto manifest_path = content_root_ / "manifest.json";
-        QFile f(QString::fromStdString(manifest_path.string()));
-        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            sendJsonResponse(socket, 500, "{\"error\":\"Não foi possível gravar manifest.json\"}");
+        QSaveFile f(QString::fromStdString(manifest_path.string()));
+        if (!f.open(QIODevice::WriteOnly)) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Não foi possível abrir manifest.json para gravação\"}");
             return;
         }
 
         f.write(doc.toJson(QJsonDocument::Indented));
-        f.close();
+        if (!f.commit()) {
+            sendJsonResponse(socket, 500, "{\"error\":\"Falha ao persistir manifest.json atomicamente\"}");
+            return;
+        }
 
         content_database_->upsert_package(doc.object());
         draft_modified_ = true;
