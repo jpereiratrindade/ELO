@@ -208,7 +208,7 @@ void test_control_plane_ipc(int argc, char* argv[]) {
 }
 
 void test_catalog_hash_verification() {
-    std::cout << "[TEST] ContentCatalog cryptographic hash verification and tamper rejection...\n";
+    std::cout << "[TEST] ContentCatalog IntegrityPolicy modes (Require, VerifyIfPresent, Skip)...\n";
     auto source_content = resolve_content_dir();
 
     auto temp_root = std::filesystem::temp_directory_path() /
@@ -219,13 +219,28 @@ void test_catalog_hash_verification() {
     auto pub_res = publisher.publish_and_activate(source_content, "curator_integrity");
     TEST_ASSERT(pub_res.success, "Publishing bundle with sealed hash succeeds");
 
-    // 1. Loading untampered bundle into catalog succeeds
+    // 1. Require on untampered sealed bundle succeeds
     elo::content::ContentCatalog catalog;
-    auto load_res = catalog.load_from_directory(pub_res.bundle_path / "catalog");
-    TEST_ASSERT(load_res.has_value(), "Untampered bundle catalog loads successfully with verified hash");
+    auto load_res = catalog.load_from_directory(pub_res.bundle_path / "catalog", elo::content::IntegrityPolicy::Require);
+    TEST_ASSERT(load_res.has_value(), "Untampered bundle catalog loads successfully with IntegrityPolicy::Require");
     TEST_ASSERT(!catalog.manifest().content_hash.empty(), "Catalog has sealed hash in manifest");
 
-    // 2. Tampering with an atom in the catalog causes hash mismatch rejection
+    // 2. Require on unsealed fixture directory fails
+    elo::content::ContentCatalog unsealed_catalog;
+    auto unsealed_res = unsealed_catalog.load_from_directory(source_content / "catalog", elo::content::IntegrityPolicy::Require);
+    TEST_ASSERT(!unsealed_res.has_value(), "Unsealed bundle must be rejected when policy is Require");
+    TEST_ASSERT(unsealed_res.error().to_string().find("not sealed") != std::string::npos,
+                "Error message explicitly identifies lack of seal");
+
+    // 3. Skip on unsealed fixture directory succeeds
+    auto skip_res = unsealed_catalog.load_from_directory(source_content / "catalog", elo::content::IntegrityPolicy::Skip);
+    TEST_ASSERT(skip_res.has_value(), "Unsealed bundle loads successfully when policy is Skip");
+
+    // 4. VerifyIfPresent on unsealed fixture directory succeeds
+    auto vip_res = unsealed_catalog.load_from_directory(source_content / "catalog", elo::content::IntegrityPolicy::VerifyIfPresent);
+    TEST_ASSERT(vip_res.has_value(), "Unsealed bundle loads successfully when policy is VerifyIfPresent");
+
+    // 5. Tampering with an atom in the catalog causes hash mismatch rejection in Require
     auto atom_path = pub_res.bundle_path / "catalog" / "atoms" / "species_cardeal_001.json";
     TEST_ASSERT(std::filesystem::exists(atom_path), "Target atom file exists for tamper test");
     {
@@ -234,11 +249,16 @@ void test_catalog_hash_verification() {
     }
 
     elo::content::ContentCatalog tampered_catalog;
-    auto tampered_res = tampered_catalog.load_from_directory(pub_res.bundle_path / "catalog");
-    TEST_ASSERT(!tampered_res.has_value(), "Tampered bundle must fail integrity hash check");
+    auto tampered_res = tampered_catalog.load_from_directory(pub_res.bundle_path / "catalog", elo::content::IntegrityPolicy::Require);
+    TEST_ASSERT(!tampered_res.has_value(), "Tampered bundle must fail integrity hash check in Require mode");
     TEST_ASSERT(tampered_res.error().to_string().find("integrity check failed") != std::string::npos,
                 "Error message explicitly identifies integrity check failure");
-    std::cout << "  -> PASSED: Cryptographic integrity verification and tamper rejection validated.\n";
+
+    // 6. Skip on tampered bundle bypasses integrity check
+    auto tampered_skip_res = tampered_catalog.load_from_directory(pub_res.bundle_path / "catalog", elo::content::IntegrityPolicy::Skip);
+    TEST_ASSERT(tampered_skip_res.has_value(), "Tampered bundle check is bypassed when policy is Skip");
+
+    std::cout << "  -> PASSED: All IntegrityPolicy modes (Require, VerifyIfPresent, Skip) validated.\n";
 
     std::filesystem::remove_all(temp_root);
 }

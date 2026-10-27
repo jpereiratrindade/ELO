@@ -192,7 +192,9 @@ BundleManifest parse_manifest_json(const QJsonObject& obj) {
 
 } // namespace
 
-core::Result<void> ContentCatalog::load_from_directory(const std::filesystem::path& catalog_dir) {
+core::Result<void> ContentCatalog::load_from_directory(
+    const std::filesystem::path& catalog_dir,
+    IntegrityPolicy policy) {
     const QString base = QString::fromStdString(catalog_dir.string());
     QDir dir(base);
     if (!dir.exists()) {
@@ -224,8 +226,17 @@ core::Result<void> ContentCatalog::load_from_directory(const std::filesystem::pa
         }
     }
 
-    // Cryptographic integrity check: verify files against sealed hash
-    if (!bundle_root.empty() && !manifest_.content_hash.empty() &&
+    // Integrity Policy Enforcement
+    if (policy == IntegrityPolicy::Require) {
+        if (manifest_.content_hash.empty() || manifest_.content_hash.rfind("sha256:", 0) != 0) {
+            clear();
+            return std::unexpected(core::make_error(
+                core::ErrorCode::ContentError,
+                "Content bundle integrity policy violation: bundle is not sealed with a cryptographic hash"));
+        }
+    }
+
+    if (policy != IntegrityPolicy::Skip && !bundle_root.empty() && !manifest_.content_hash.empty() &&
         manifest_.content_hash.rfind("sha256:", 0) == 0) {
         ContentBundle bundle(bundle_root);
         auto hash_res = bundle.compute_content_hash();

@@ -12,6 +12,13 @@
 
 namespace elo::content {
 
+/// @brief Integrity verification policy for catalog loading
+enum class IntegrityPolicy {
+    Skip,            ///< Do not perform integrity check (e.g. curator draft workspace)
+    VerifyIfPresent, ///< Verify cryptographic hash if present in manifest (default / testing)
+    Require          ///< Strict production mode: bundle MUST be sealed with valid content_hash
+};
+
 /// @brief ELO-CONTENT-001 Section 51 & 52: Local Offline Content Catalog
 /// Pure C++26 domain model without Qt coupling in public interfaces.
 class ContentCatalog {
@@ -19,7 +26,9 @@ public:
     ContentCatalog() = default;
 
     /// @brief Loads a decoupled content tree (e.g. content/catalog/)
-    [[nodiscard]] core::Result<void> load_from_directory(const std::filesystem::path& catalog_dir);
+    [[nodiscard]] core::Result<void> load_from_directory(
+        const std::filesystem::path& catalog_dir,
+        IntegrityPolicy policy = IntegrityPolicy::VerifyIfPresent);
 
     // Direct insertion for programmatically configured or tested content
     void add_atom(ContentAtom atom);

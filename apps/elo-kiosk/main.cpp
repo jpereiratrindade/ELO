@@ -181,7 +181,7 @@ int main(int argc, char* argv[]) {
     auto content_dir = QString::fromStdString(resolve_active_catalog(system_content).string());
     bool startup_loaded = false;
     if (!content_dir.isEmpty()) {
-        auto load_res = content_catalog->load_from_directory(content_dir.toStdString());
+        auto load_res = content_catalog->load_from_directory(content_dir.toStdString(), elo::content::IntegrityPolicy::Require);
         if (load_res) {
             std::cout << "[ELO][content] Loaded decoupled content catalog: "
                       << content_catalog->atom_count() << " atoms, "
@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
                       << content_catalog->recipe_count() << " recipes.\n";
             startup_loaded = true;
         } else {
-            std::cerr << "[ELO][content] Failed to load content: " << load_res.error().to_string() << '\n';
+            std::cerr << "[ELO][content] Failed to load active content: " << load_res.error().to_string() << '\n';
         }
     }
     // Startup Fail-Safe: attempt fallback to base catalog if active bundle failed or was corrupted
@@ -197,7 +197,7 @@ int main(int argc, char* argv[]) {
         auto fallback_dir = system_content / "catalog";
         if (std::filesystem::exists(fallback_dir)) {
             std::cout << "[ELO][content] Startup fail-safe: attempting fallback to base catalog at " << fallback_dir << '\n';
-            auto fb_res = content_catalog->load_from_directory(fallback_dir.string());
+            auto fb_res = content_catalog->load_from_directory(fallback_dir.string(), elo::content::IntegrityPolicy::VerifyIfPresent);
             if (fb_res) {
                 std::cout << "[ELO][content] Startup fail-safe loaded: "
                           << content_catalog->atom_count() << " atoms.\n";
@@ -312,7 +312,7 @@ int main(int argc, char* argv[]) {
                     return;
                 }
 
-                auto reload_res = content_catalog->load_from_directory(reload_path.string());
+                auto reload_res = content_catalog->load_from_directory(reload_path.string(), elo::content::IntegrityPolicy::Require);
                 if (reload_res) {
                     std::cout << "[ELO][kiosk] Successfully reloaded content catalog: "
                               << content_catalog->atom_count() << " atoms, "
@@ -329,7 +329,7 @@ int main(int argc, char* argv[]) {
                         auto fallback_dir = system_content / "catalog";
                         if (std::filesystem::exists(fallback_dir)) {
                             std::cerr << "[ELO][kiosk] Fail-safe engaged: attempting fallback to base catalog.\n";
-                            auto fb_res = content_catalog->load_from_directory(fallback_dir.string());
+                            auto fb_res = content_catalog->load_from_directory(fallback_dir.string(), elo::content::IntegrityPolicy::VerifyIfPresent);
                             if (fb_res) {
                                 std::cout << "[ELO][kiosk] Fallback catalog loaded successfully ("
                                           << content_catalog->atom_count() << " atoms).\n";
