@@ -26,6 +26,8 @@ class KioskPresentationModel : public QObject {
     Q_PROPERTY(quint32 kernelGeneration READ kernelGeneration NOTIFY kernelChanged)
     Q_PROPERTY(quint64 cameraFrameRevision READ cameraFrameRevision NOTIFY cameraFrameChanged)
     Q_PROPERTY(bool faceDetected READ faceDetected NOTIFY visionChanged)
+    Q_PROPERTY(bool attentionDetected READ attentionDetected NOTIFY attentionChanged)
+    Q_PROPERTY(double attentionDwellTime READ attentionDwellTime NOTIFY attentionChanged)
     Q_PROPERTY(bool visionOperational READ visionOperational NOTIFY visionChanged)
     Q_PROPERTY(QString visionStatus READ visionStatus NOTIFY visionChanged)
     Q_PROPERTY(QString greetingTitle READ greetingTitle NOTIFY recognitionChanged)
@@ -66,6 +68,8 @@ public:
     [[nodiscard]] quint32 kernelGeneration() const;
     [[nodiscard]] quint64 cameraFrameRevision() const noexcept { return camera_frame_revision_; }
     [[nodiscard]] bool faceDetected() const noexcept { return face_detected_; }
+    [[nodiscard]] bool attentionDetected() const noexcept { return attention_detected_; }
+    [[nodiscard]] double attentionDwellTime() const noexcept { return attention_dwell_time_; }
     [[nodiscard]] bool visionOperational() const noexcept { return vision_operational_; }
     [[nodiscard]] QString visionStatus() const { return vision_status_; }
     [[nodiscard]] QString greetingTitle() const { return greeting_title_; }
@@ -108,6 +112,7 @@ public:
 public slots:
     void onCameraFrameReady();
     void onFacePresenceChanged(bool present);
+    void onAttentionChanged(bool engaged, double dwell_time);
     void onFaceEmbeddingReady(const QVector<float>& embedding, double quality);
     void onVisionStatusChanged(const QString& status);
     void onVisionFailure(const QString& message);
@@ -119,6 +124,7 @@ signals:
     void kernelChanged();
     void cameraFrameChanged();
     void visionChanged();
+    void attentionChanged();
     void recognitionChanged();
     void biometricAuthorizationChanged(bool authorized);
     void recognitionVisualStateChanged(bool confirmed);
@@ -130,7 +136,10 @@ signals:
     [[nodiscard]] std::string currentContent() const;
     [[nodiscard]] bool isBiometricSession() const;
     [[nodiscard]] uint32_t kernelGeneration() const;
+    [[nodiscard]] bool attentionDetected() const noexcept { return attention_detected_; }
+    [[nodiscard]] double attentionDwellTime() const noexcept { return attention_dwell_time_; }
 
+    void onAttentionChanged(bool engaged, double dwell_time);
     void advanceContent();
     void submitSurveyResponse(const std::string& questionId, const std::string& selectedOption, bool anonymous);
     void requestForgetMe();
@@ -145,6 +154,8 @@ private:
     double absence_duration_{0.0};
     double behavior_progress_{0.0};
     bool auto_navigation_enabled_{true};
+    bool attention_detected_{false};
+    double attention_dwell_time_{0.0};
 #ifdef ELO_HAS_QT
     quint64 camera_frame_revision_{0};
     bool face_detected_{false};

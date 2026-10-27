@@ -103,9 +103,17 @@ void ExperienceEngine::on_presence_detected() {
         current_session_id_ = "sess-" + std::to_string(++session_count_);
         session_seen_content_.clear();
         recipe_active_ = false;
+        attention_active_ = false;
+        attention_dwell_time_ = 0.0;
         record_jev_event("presence.enter");
         transition_to(SessionState::PRESENCE_DETECTED, EventType::PRESENCE_DETECTED);
     }
+}
+
+void ExperienceEngine::on_attention_detected(double dwell_time) {
+    attention_active_ = true;
+    attention_dwell_time_ = dwell_time;
+    record_jev_event("attention.detected", std::to_string(dwell_time));
 }
 
 void ExperienceEngine::begin_automatic_continuity() {
@@ -518,6 +526,8 @@ void ExperienceEngine::finish_session() {
     record_jev_event("session.end");
     active_person_ = std::nullopt;
     biometric_continuity_active_ = false;
+    attention_active_ = false;
+    attention_dwell_time_ = 0.0;
     recipe_active_ = false;
     session_seen_content_.clear();
     transition_to(SessionState::IDLE, EventType::SESSION_FINISHED);

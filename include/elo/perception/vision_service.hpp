@@ -37,6 +37,7 @@ public slots:
 signals:
     void frameReady(const QImage& frame);
     void facePresenceChanged(bool present);
+    void attentionChanged(bool engaged, double dwell_time_seconds);
     void faceEmbeddingReady(const QVector<float>& embedding, double quality);
     void statusChanged(const QString& status);
     void failure(const QString& message);

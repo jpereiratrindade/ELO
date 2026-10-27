@@ -380,6 +380,16 @@ int main(int argc, char* argv[]) {
                           << (present ? "detected" : "absent") << '\n';
             });
         QObject::connect(
+            vision.get(), &elo::perception::VisionService::attentionChanged,
+            presentation_model.get(), &elo::ui::KioskPresentationModel::onAttentionChanged);
+        QObject::connect(
+            vision.get(), &elo::perception::VisionService::attentionChanged,
+            &app, [](bool engaged, double dwell) {
+                std::cout << "[ELO][vision] attention: "
+                          << (engaged ? "detected" : "lost")
+                          << " (dwell: " << dwell << "s)\n";
+            });
+        QObject::connect(
             vision.get(), &elo::perception::VisionService::faceEmbeddingReady,
             presentation_model.get(), &elo::ui::KioskPresentationModel::onFaceEmbeddingReady);
         QObject::connect(

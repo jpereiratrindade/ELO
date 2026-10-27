@@ -77,12 +77,18 @@ Window {
             Text {
                 text: !cameraAvailable || !kioskModel.visionOperational
                       ? "● SENSOR INDISPONÍVEL"
-                      : (kioskModel.faceDetected
-                         ? "● PRESENÇA DETECTADA"
-                         : "● AGUARDANDO VISITANTE")
+                      : (kioskModel.attentionDetected
+                         ? "● ATENÇÃO DETECTADA"
+                         : (kioskModel.faceDetected
+                            ? "● PRESENÇA DETECTADA"
+                            : "● AGUARDANDO VISITANTE"))
                 font.pixelSize: 12
                 font.bold: true
-                color: kioskModel.visionOperational ? (kioskModel.faceDetected ? "#38bdf8" : "#94a3b8") : "#f87171"
+                color: kioskModel.visionOperational
+                       ? (kioskModel.attentionDetected
+                          ? "#34d399"
+                          : (kioskModel.faceDetected ? "#38bdf8" : "#94a3b8"))
+                       : "#f87171"
             }
         }
     }
@@ -108,7 +114,9 @@ Window {
             height: 92
             radius: 8
             color: "#020617"
-            border.color: kioskModel.faceDetected ? "#38bdf8" : "#334155"
+            border.color: kioskModel.attentionDetected
+                          ? "#34d399"
+                          : (kioskModel.faceDetected ? "#38bdf8" : "#334155")
             border.width: 1
             clip: true
             opacity: 0.82
@@ -136,10 +144,14 @@ Window {
                     anchors.centerIn: parent
                     text: !cameraAvailable || !kioskModel.visionOperational
                           ? "sensor inativo"
-                          : (kioskModel.faceDetected ? "presença ativa" : "aguardando")
+                          : (kioskModel.attentionDetected
+                             ? "atenção ativa"
+                             : (kioskModel.faceDetected ? "presença ativa" : "aguardando"))
                     font.pixelSize: 10
                     font.bold: true
-                    color: kioskModel.faceDetected ? "#38bdf8" : "#94a3b8"
+                    color: kioskModel.attentionDetected
+                           ? "#34d399"
+                           : (kioskModel.faceDetected ? "#38bdf8" : "#94a3b8")
                 }
             }
         }

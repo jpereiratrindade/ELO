@@ -20,6 +20,8 @@ constexpr int capture_height = 480;
 constexpr int capture_fps = 15;
 constexpr int frames_required_for_presence = 3;
 constexpr int frames_required_for_absence = 10;
+constexpr int frames_required_for_attention = 8;
+constexpr int frames_required_to_drop_attention = 12;
 constexpr auto embedding_interval = std::chrono::milliseconds(400);
 
 bool open_camera(const CameraDevice& camera, cv::VideoCapture& capture) {
@@ -72,11 +74,60 @@ cv::Mat best_face(const cv::Mat& faces) {
     return faces.row(best_index);
 }
 
+bool evaluate_face_attention(const cv::Mat& face) {
+    if (face.empty() || face.cols < 15) {
+        return false;
+    }
+
+    const float box_w = face.at<float>(0, 2);
+    const float box_h = face.at<float>(0, 3);
+    // Proximidade mínima de engajamento (face nítida em ~0.5m-1.8m do totem)
+    if (box_w < 70.0F || box_h < 70.0F) {
+        return false;
+    }
+
+    const float eye1_x = face.at<float>(0, 4);
+    const float eye1_y = face.at<float>(0, 5);
+    const float eye2_x = face.at<float>(0, 6);
+    const float eye2_y = face.at<float>(0, 7);
+    const float nose_x = face.at<float>(0, 8);
+    const float nose_y = face.at<float>(0, 9);
+    const float mouth1_y = face.at<float>(0, 11);
+    const float mouth2_y = face.at<float>(0, 13);
+
+    // 1. Orientação horizontal (Yaw): nariz simétrico entre os dois olhos
+    const float min_eye_x = std::min(eye1_x, eye2_x);
+    const float max_eye_x = std::max(eye1_x, eye2_x);
+    const float eye_span_x = max_eye_x - min_eye_x;
+    if (eye_span_x < 12.0F) {
+        return false;
+    }
+    const float yaw_ratio = (nose_x - min_eye_x) / eye_span_x;
+    if (yaw_ratio < 0.32F || yaw_ratio > 0.68F) {
+        return false;
+    }
+
+    // 2. Orientação vertical (Pitch): nariz proporcional entre olhos e boca
+    const float eye_mid_y = (eye1_y + eye2_y) * 0.5F;
+    const float mouth_mid_y = (mouth1_y + mouth2_y) * 0.5F;
+    const float face_v_span = mouth_mid_y - eye_mid_y;
+    if (face_v_span < 12.0F) {
+        return false;
+    }
+    const float pitch_ratio = (nose_y - eye_mid_y) / face_v_span;
+    if (pitch_ratio < 0.25F || pitch_ratio > 0.75F) {
+        return false;
+    }
+
+    return true;
+}
+
 QImage preview_image(
     const cv::Mat& bgr_frame,
     const cv::Mat& face,
     bool authorized,
-    bool recognition_confirmed) {
+    bool recognition_confirmed,
+    bool attention_active) {
     cv::Mat annotated = bgr_frame.clone();
     if (!face.empty()) {
         const cv::Rect bounds{
@@ -87,11 +138,12 @@ QImage preview_image(
         };
         const auto color = (authorized || recognition_confirmed)
             ? cv::Scalar(52, 211, 153)
-            : cv::Scalar(8, 159, 245);
+            : (attention_active ? cv::Scalar(245, 159, 8) : cv::Scalar(8, 159, 245));
         cv::rectangle(annotated, bounds, color, 2);
         const auto* label = recognition_confirmed
             ? "identidade reconhecida"
-            : (authorized ? "reconhecendo..." : "presenca detectada");
+            : (authorized ? "reconhecendo..."
+                          : (attention_active ? "atencao ativa" : "presenca detectada"));
         cv::putText(
             annotated,
             label,
@@ -170,6 +222,11 @@ struct VisionService::Impl {
             bool presence_reported = false;
             int present_frames = 0;
             int absent_frames = 0;
+            bool attention_reported = false;
+            int focused_frames = 0;
+            int unfocused_frames = 0;
+            auto attention_start_time = std::chrono::steady_clock::now();
+            auto last_dwell_update = std::chrono::steady_clock::now();
             auto last_embedding = std::chrono::steady_clock::now() - embedding_interval;
             int preview_counter = 0;
             bool multiple_faces_reported = false;
@@ -191,9 +248,20 @@ struct VisionService::Impl {
                 if (face_present) {
                     ++present_frames;
                     absent_frames = 0;
+
+                    const bool instant_focused = evaluate_face_attention(face);
+                    if (instant_focused) {
+                        ++focused_frames;
+                        unfocused_frames = 0;
+                    } else {
+                        focused_frames = 0;
+                        ++unfocused_frames;
+                    }
                 } else {
                     present_frames = 0;
                     ++absent_frames;
+                    focused_frames = 0;
+                    ++unfocused_frames;
                 }
 
                 if (!presence_reported && present_frames >= frames_required_for_presence) {
@@ -202,13 +270,42 @@ struct VisionService::Impl {
                     emit owner->statusChanged(QStringLiteral("Rosto detectado"));
                 } else if (presence_reported && absent_frames >= frames_required_for_absence) {
                     presence_reported = false;
+                    if (attention_reported) {
+                        attention_reported = false;
+                        emit owner->attentionChanged(false, 0.0);
+                    }
                     emit owner->facePresenceChanged(false);
                     emit owner->statusChanged(QStringLiteral("Aguardando rosto"));
                 }
 
+                // Avaliação de Atenção (permanência e orientação com presença confirmada)
+                const auto now = std::chrono::steady_clock::now();
+                if (presence_reported) {
+                    if (!attention_reported && focused_frames >= frames_required_for_attention) {
+                        attention_reported = true;
+                        attention_start_time = now;
+                        last_dwell_update = now;
+                        emit owner->attentionChanged(true, 0.5);
+                        emit owner->statusChanged(QStringLiteral("Atenção detectada"));
+                    } else if (attention_reported) {
+                        if (unfocused_frames >= frames_required_to_drop_attention) {
+                            attention_reported = false;
+                            emit owner->attentionChanged(false, 0.0);
+                            emit owner->statusChanged(QStringLiteral("Rosto detectado"));
+                        } else if (now - last_dwell_update >= std::chrono::milliseconds(500)) {
+                            last_dwell_update = now;
+                            const double dwell = std::chrono::duration<double>(
+                                now - attention_start_time).count();
+                            emit owner->attentionChanged(true, dwell);
+                        }
+                    }
+                } else if (attention_reported) {
+                    attention_reported = false;
+                    emit owner->attentionChanged(false, 0.0);
+                }
+
                 const bool authorized = biometric_authorized.load(std::memory_order_relaxed);
                 const bool confirmed = recognition_confirmed.load(std::memory_order_relaxed);
-                const auto now = std::chrono::steady_clock::now();
                 if (authorized && faces.rows > 1 && !multiple_faces_reported) {
                     multiple_faces_reported = true;
                     emit owner->statusChanged(
@@ -231,7 +328,8 @@ struct VisionService::Impl {
 
                 if (++preview_counter >= 2) {
                     preview_counter = 0;
-                    emit owner->frameReady(preview_image(frame, face, authorized, confirmed));
+                    emit owner->frameReady(preview_image(
+                        frame, face, authorized, confirmed, attention_reported));
                 }
 
                 frame.setTo(0);

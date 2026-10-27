@@ -475,6 +475,9 @@ void KioskPresentationModel::finishSession() {
         state_duration_ = 0.0;
         absence_duration_ = 0.0;
         behavior_progress_ = 0.0;
+        attention_detected_ = false;
+        attention_dwell_time_ = 0.0;
+        emit attentionChanged();
         emit contentChanged();
         emit recognitionChanged();
         emit stateChanged();
@@ -513,7 +516,30 @@ void KioskPresentationModel::onFacePresenceChanged(bool present) {
         }
     } else {
         absence_duration_ = 0.0;
+        if (attention_detected_) {
+            onAttentionChanged(false, 0.0);
+        }
     }
+}
+
+void KioskPresentationModel::onAttentionChanged(bool engaged, double dwell_time) {
+    if (attention_detected_ == engaged && std::abs(attention_dwell_time_ - dwell_time) < 0.01) {
+        return;
+    }
+
+    attention_detected_ = engaged;
+    attention_dwell_time_ = dwell_time;
+
+    if (engaged && engine_) {
+        engine_->on_attention_detected(dwell_time);
+        if (engine_->current_state() == experience::SessionState::PRESENCE_DETECTED) {
+            greeting_title_ = QStringLiteral("Atenção detectada");
+            greeting_message_ = QStringLiteral("Visitante engajado diante do totem");
+            emit recognitionChanged();
+        }
+    }
+
+    emit attentionChanged();
 }
 
 void KioskPresentationModel::onBehaviorTick() {

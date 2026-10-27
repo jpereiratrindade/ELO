@@ -130,6 +130,9 @@ public:
 
     // Session flow triggers (ELO-EXPERIENCE-001 Section 24)
     void on_presence_detected();
+    void on_attention_detected(double dwell_time = 0.0);
+    [[nodiscard]] bool is_attention_active() const noexcept { return attention_active_; }
+    [[nodiscard]] double last_attention_dwell_time() const noexcept { return attention_dwell_time_; }
     void begin_automatic_continuity();
 
     // Biometric continuity hypothesis ingestion
@@ -203,6 +206,8 @@ private:
     std::uint64_t session_count_{0};
     std::optional<identity::PersonLocalId> active_person_{std::nullopt};
     bool biometric_continuity_active_{false};
+    bool attention_active_{false};
+    double attention_dwell_time_{0.0};
     std::uint64_t next_event_sequence_{1};
     std::uint64_t session_revision_{0};
     std::optional<Event> last_event_{std::nullopt};

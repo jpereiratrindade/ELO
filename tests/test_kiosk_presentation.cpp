@@ -31,6 +31,21 @@ int main() {
                 "Anonymous session has no identity");
     TEST_ASSERT(model.greetingTitle() == QStringLiteral("Presença detectada"),
                 "Presentation describes presence, not recognition");
+    TEST_ASSERT(!model.attentionDetected(),
+                "Presence alone does not assume active attention");
+
+    // Test attention engagement (dwell time, orientation)
+    model.onAttentionChanged(true, 1.5);
+    TEST_ASSERT(model.attentionDetected(),
+                "Attention is detected upon focused gaze and proximity");
+    TEST_ASSERT(model.attentionDwellTime() == 1.5,
+                "Dwell time is accurately reported to model");
+    TEST_ASSERT(model.greetingTitle() == QStringLiteral("Atenção detectada"),
+                "Greeting updates to acknowledge focused engagement");
+    TEST_ASSERT(engine->is_attention_active(),
+                "Experience engine tracks active attention");
+    TEST_ASSERT(engine->last_attention_dwell_time() == 1.5,
+                "Experience engine tracks attention dwell duration");
 
     const QVector<float> embedding{0.2F, 0.4F, 0.6F, 0.8F};
     model.onFaceEmbeddingReady(embedding, 0.96);
@@ -55,6 +70,10 @@ int main() {
     model.finishSession();
     TEST_ASSERT(model.currentState() == QStringLiteral("IDLE"),
                 "Anonymous session finishes normally");
+    TEST_ASSERT(!model.attentionDetected(),
+                "Session finish resets attention state");
+    TEST_ASSERT(!engine->is_attention_active(),
+                "Session finish resets engine attention");
 
     std::cout << "Anonymous kiosk presentation G0 tests passed.\n";
     return 0;
