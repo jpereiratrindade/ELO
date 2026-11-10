@@ -257,7 +257,7 @@ core::Result<void> ContentCatalog::load_from_directory(
             clear();
             return std::unexpected(core::make_error(
                 core::ErrorCode::ContentError,
-                "Content bundle integrity check failed: expected " + manifest_.content_hash +
+                "Content bundle integrity check failed: expected " + expected.toStdString() +
                 ", but calculated " + *hash_res));
         }
     }

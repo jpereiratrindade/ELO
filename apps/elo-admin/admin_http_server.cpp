@@ -1128,7 +1128,8 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         }
 
         content::ContentCatalog catalog;
-        auto cat_res = catalog.load_from_directory(load_path);
+        // Mutable SQLite export is an authoring workspace, not a sealed publication.
+        auto cat_res = catalog.load_from_directory(load_path, content::IntegrityPolicy::Skip);
         if (!cat_res) {
             QJsonObject err;
             err[QStringLiteral("error")] = QString::fromStdString(cat_res.error().to_string());
@@ -1401,7 +1402,8 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
     if (method == QStringLiteral("POST") && path == QStringLiteral("/api/validate")) {
         content_database_->export_workspace(content_root_);
         content::ContentBundle bundle(content_root_);
-        auto report = bundle.validate();
+        // Validate draft structure/assets without applying a previous publication seal.
+        auto report = bundle.validate(content::IntegrityPolicy::Skip);
 
         QJsonObject resp;
         resp[QStringLiteral("valid")] = report.valid;

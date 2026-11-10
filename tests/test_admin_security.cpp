@@ -325,6 +325,28 @@ int main(int argc, char** argv) {
     TEST_ASSERT(allowedMimeResp.contains("Content-Type: image/png"),
                 "Response Content-Type is image/png");
 
+    // A saved editorial plan can retain a seal while its mutable workspace changes.
+    // Catalog/validation endpoints must still show the draft; published bundles
+    // keep their normal integrity policy (covered by ContentPublishing).
+    QFile draftManifest(root.filePath(QStringLiteral("manifest.json")));
+    TEST_ASSERT(draftManifest.open(QIODevice::ReadOnly), "Draft manifest readable");
+    auto draftObject = QJsonDocument::fromJson(draftManifest.readAll()).object();
+    draftManifest.close();
+    draftObject[QStringLiteral("content_hash")] = QStringLiteral("sha256:") + QString(64, QLatin1Char('0'));
+    TEST_ASSERT(draftManifest.open(QIODevice::WriteOnly | QIODevice::Truncate), "Draft manifest writable");
+    draftManifest.write(QJsonDocument(draftObject).toJson());
+    draftManifest.close();
+    const auto draftCatalog = request(server.port(),
+        "GET /api/catalog HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token + "\r\n\r\n");
+    TEST_ASSERT(draftCatalog.startsWith("HTTP/1.1 200"), "Stale draft seal does not hide editable catalog");
+    const auto draftBody = QJsonDocument::fromJson(draftCatalog.mid(draftCatalog.indexOf("\r\n\r\n") + 4)).object();
+    TEST_ASSERT(!draftBody.value("atoms").toArray().isEmpty(), "Editable draft atoms remain visible");
+    const auto draftValidation = request(server.port(),
+        "POST /api/validate HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token
+        + "\r\nContent-Length: 0\r\n\r\n");
+    TEST_ASSERT(draftValidation.startsWith("HTTP/1.1 200"), "Draft validation responds");
+    TEST_ASSERT(!draftValidation.contains("integrity check failed"), "Draft validation does not compare prior publication seal");
+
     std::cout << "Admin containment G0 tests passed successfully with full security hardening.\n";
     return 0;
 }

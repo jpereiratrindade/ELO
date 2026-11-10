@@ -54,13 +54,13 @@ public:
     [[nodiscard]] std::filesystem::path assets_path() const { return root_dir_ / "assets"; }
 
     [[nodiscard]] core::Result<BundleManifest> load_manifest() const;
-    [[nodiscard]] core::Result<ContentCatalog> load_catalog() const;
+    [[nodiscard]] core::Result<ContentCatalog> load_catalog(IntegrityPolicy policy = IntegrityPolicy::VerifyIfPresent) const;
 
     /// @brief Computes SHA-256 hash deterministically over catalog and assets
     [[nodiscard]] core::Result<std::string> compute_content_hash() const;
 
     /// @brief Validates bundle using native ContentValidator and asset integrity
-    [[nodiscard]] ValidationReport validate() const;
+    [[nodiscard]] ValidationReport validate(IntegrityPolicy policy = IntegrityPolicy::VerifyIfPresent) const;
 
 private:
     std::filesystem::path root_dir_;

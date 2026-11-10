@@ -139,6 +139,9 @@ void test_package_atom_selection() {
     auto document = QJsonDocument::fromJson(manifest.readAll());
     manifest.close();
     auto object = document.object();
+    // Saved application plans can retain the seal of an earlier publication.
+    // The selected staging catalog must receive its own new seal before validation.
+    object[QStringLiteral("content_hash")] = QString::fromStdString("sha256:" + std::string(64, '0'));
     object[QStringLiteral("application_id")] = QStringLiteral("app.elo.test");
     object[QStringLiteral("atom_ids")] = QJsonArray{QStringLiteral("species_cardeal_001")};
     TEST_ASSERT(manifest.open(QIODevice::WriteOnly | QIODevice::Truncate), "Candidate manifest is writable");
@@ -253,6 +256,9 @@ void test_catalog_hash_verification() {
     TEST_ASSERT(!tampered_res.has_value(), "Tampered bundle must fail integrity hash check in Require mode");
     TEST_ASSERT(tampered_res.error().to_string().find("integrity check failed") != std::string::npos,
                 "Error message explicitly identifies integrity check failure");
+
+    TEST_ASSERT(tampered_res.error().to_string().find(pub_res.content_hash) != std::string::npos,
+                "Failure preserves expected seal in diagnostics after clearing invalid catalog");
 
     // 6. Skip on tampered bundle bypasses integrity check
     auto tampered_skip_res = tampered_catalog.load_from_directory(pub_res.bundle_path / "catalog", elo::content::IntegrityPolicy::Skip);

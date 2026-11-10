@@ -157,13 +157,13 @@ core::Result<BundleManifest> ContentBundle::load_manifest() const {
     return read_manifest(manifest_path());
 }
 
-core::Result<ContentCatalog> ContentBundle::load_catalog() const {
+core::Result<ContentCatalog> ContentBundle::load_catalog(IntegrityPolicy policy) const {
     ContentCatalog catalog;
     auto target_dir = catalog_path();
     if (!std::filesystem::exists(target_dir)) {
         target_dir = root_dir_;
     }
-    auto res = catalog.load_from_directory(target_dir);
+    auto res = catalog.load_from_directory(target_dir, policy);
     if (!res) return std::unexpected(res.error());
     return catalog;
 }
@@ -211,8 +211,8 @@ core::Result<std::string> ContentBundle::compute_content_hash() const {
     return "sha256:" + hash.result().toHex().toStdString();
 }
 
-ValidationReport ContentBundle::validate() const {
-    auto cat_res = load_catalog();
+ValidationReport ContentBundle::validate(IntegrityPolicy policy) const {
+    auto cat_res = load_catalog(policy);
     if (!cat_res) {
         ValidationReport report;
         report.valid = false;
@@ -406,6 +406,17 @@ BundlePublishResult BundlePublisher::publish_and_activate(
         return res;
     }
 
+    // An editorial plan may carry a seal from an earlier publication. Atom
+    // pruning changes bytes, so seal this staging snapshot before validating it.
+    ContentBundle stagedCandidate(build_dir);
+    auto hash_res = stagedCandidate.compute_content_hash();
+    if (!hash_res) {
+        std::filesystem::remove_all(build_dir, ec);
+        res.error_message = hash_res.error().to_string();
+        return res;
+    }
+    manifest.content_hash = *hash_res;
+
     // Validate the actual selected package, not only the full authoring catalog.
     if (!write_manifest(build_dir / "manifest.json", manifest)) {
         res.success = false;
@@ -423,13 +434,6 @@ BundlePublishResult BundlePublisher::publish_and_activate(
         }
         return res;
     }
-    auto hash_res = sealedCandidate.compute_content_hash();
-    if (!hash_res) {
-        res.success = false;
-        res.error_message = hash_res.error().to_string();
-        return res;
-    }
-    manifest.content_hash = *hash_res;
 
     // Published versions are immutable. Re-activating identical content is safe;
     // changing an existing version requires an explicit version increment.
