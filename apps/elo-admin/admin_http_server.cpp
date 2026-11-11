@@ -61,6 +61,9 @@ bool is_allowed_media_extension(const QString& filename, const QString& folder) 
                lower.endsWith(QStringLiteral(".ogg")) ||
                lower.endsWith(QStringLiteral(".mp3"));
     }
+    if (folder == QStringLiteral("video")) {
+        return lower.endsWith(QStringLiteral(".mp4")) || lower.endsWith(QStringLiteral(".webm"));
+    }
     return false;
 }
 
@@ -500,7 +503,7 @@ void AdminHttpServer::handleUploadRoute(QTcpSocket* socket, const QByteArray& bo
 
     auto obj = doc.object();
     QString folder = obj.value(QStringLiteral("folder")).toString(QStringLiteral("images"));
-    if (folder != QStringLiteral("audio")) folder = QStringLiteral("images");
+    if (folder != QStringLiteral("audio") && folder != QStringLiteral("video")) folder = QStringLiteral("images");
 
     QString filename = sanitize_filename(obj.value(QStringLiteral("filename")).toString());
     if (filename.isEmpty()) {
@@ -595,12 +598,17 @@ void AdminHttpServer::handleMediaRoute(QTcpSocket* socket, const QString& method
                         mediaUsage[audFi.fileName()].append(atomTitle);
                         mediaUsage[p].append(atomTitle);
                     }
+                    for (const auto& video : modalities.value(QStringLiteral("video")).toArray()) {
+                        const QString path = video.toString();
+                        mediaUsage[QFileInfo(path).fileName()].append(atomTitle);
+                        mediaUsage[path].append(atomTitle);
+                    }
                 }
             }
         }
 
         // Varrer subpastas de assets: images e audio
-        QStringList folders = { QStringLiteral("images"), QStringLiteral("audio") };
+        QStringList folders = { QStringLiteral("images"), QStringLiteral("audio"), QStringLiteral("video") };
         for (const auto& folder : folders) {
             QDir dir(QString::fromStdString((content_root_ / "assets" / folder.toStdString()).string()));
             if (!dir.exists()) continue;
@@ -611,7 +619,7 @@ void AdminHttpServer::handleMediaRoute(QTcpSocket* socket, const QString& method
                 item[QStringLiteral("filename")] = fi.fileName();
                 item[QStringLiteral("path")] = relPath;
                 item[QStringLiteral("folder")] = folder;
-                item[QStringLiteral("type")] = (folder == QStringLiteral("images")) ? QStringLiteral("image") : QStringLiteral("audio");
+                item[QStringLiteral("type")] = (folder == QStringLiteral("images")) ? QStringLiteral("image") : folder;
                 item[QStringLiteral("size_bytes")] = fi.size();
                 item[QStringLiteral("modified")] = fi.lastModified().toString(Qt::ISODate);
 
@@ -749,6 +757,15 @@ void AdminHttpServer::handleMediaRoute(QTcpSocket* socket, const QString& method
                         modalities[QStringLiteral("audio")] = newAudArr;
                         obj[QStringLiteral("modalities")] = modalities;
                     }
+
+                    QJsonArray retainedVideos;
+                    for (const auto& value : modalities.value(QStringLiteral("video")).toArray()) {
+                        const QString path = value.toString();
+                        if (path == relAssetPath || path == requestedPath || path.endsWith(filenameOnly)) atomModified = true;
+                        else retainedVideos.append(value);
+                    }
+                    modalities[QStringLiteral("video")] = retainedVideos;
+                    if (atomModified) obj[QStringLiteral("modalities")] = modalities;
 
                     if (atomModified) {
                         if (af.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -1210,6 +1227,9 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
             QJsonArray audsArr;
             for (const auto& aud : atom->assets.audios) audsArr.append(QString::fromStdString(aud));
             aObj[QStringLiteral("audios")] = audsArr;
+            QJsonArray videos;
+            for (const auto& video : atom->assets.videos) videos.append(QString::fromStdString(video));
+            aObj[QStringLiteral("videos")] = videos;
 
             atomsArr.append(aObj);
         }
@@ -1813,6 +1833,8 @@ void AdminHttpServer::handleHttpRequest(QTcpSocket* socket, const QByteArray& re
         else if (filePath.endsWith(QStringLiteral(".wav"), Qt::CaseInsensitive)) contentType = QStringLiteral("audio/wav");
         else if (filePath.endsWith(QStringLiteral(".ogg"), Qt::CaseInsensitive)) contentType = QStringLiteral("audio/ogg");
         else if (filePath.endsWith(QStringLiteral(".mp3"), Qt::CaseInsensitive)) contentType = QStringLiteral("audio/mpeg");
+        else if (filePath.endsWith(QStringLiteral(".mp4"), Qt::CaseInsensitive)) contentType = QStringLiteral("video/mp4");
+        else if (filePath.endsWith(QStringLiteral(".webm"), Qt::CaseInsensitive)) contentType = QStringLiteral("video/webm");
         else {
             filePath.clear(); // Reject non-whitelisted extensions with 404
         }

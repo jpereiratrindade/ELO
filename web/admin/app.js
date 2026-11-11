@@ -1005,6 +1005,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('atom-id').disabled = false;
     document.getElementById('preview-image-box').classList.add('hidden');
     document.getElementById('preview-audio-box').classList.add('hidden');
+    document.getElementById('preview-video-box').classList.add('hidden');
+    document.getElementById('preview-video').removeAttribute('src');
     factsContainer.innerHTML = '';
     addFactRow('', 'source_curadoria_local');
     if (metaPairsContainer) {
@@ -1058,6 +1060,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       document.getElementById('preview-audio-box').classList.add('hidden');
     }
+
+    const videoPath = atom.videos?.[0] || atom.modalities?.video?.[0] || '';
+    document.getElementById('atom-video-path').value = videoPath;
+    document.getElementById('preview-video').src = videoPath ? '/' + videoPath : '';
+    document.getElementById('preview-video-box').classList.toggle('hidden', !videoPath);
 
     factsContainer.innerHTML = '';
     if (atom.canonical_facts && atom.canonical_facts.length > 0) {
@@ -1204,6 +1211,17 @@ document.addEventListener('DOMContentLoaded', () => {
     handleFileUpload(e.target, 'audio', 'atom-audio-path', 'preview-audio-box', 'preview-audio');
   });
 
+  document.getElementById('upload-video-file').addEventListener('change', e => {
+    handleFileUpload(e.target, 'video', 'atom-video-path', 'preview-video-box', 'preview-video');
+  });
+  document.getElementById('btn-unlink-atom-video').addEventListener('click', () => {
+    document.getElementById('preview-video').pause();
+    document.getElementById('preview-video').removeAttribute('src');
+    document.getElementById('preview-video-box').classList.add('hidden');
+    document.getElementById('atom-video-path').value = '';
+    document.getElementById('upload-video-file').value = '';
+  });
+
   const btnDeleteAtomImage = document.getElementById('btn-delete-atom-image');
   if (btnDeleteAtomImage) {
     btnDeleteAtomImage.addEventListener('click', async () => {
@@ -1344,7 +1362,8 @@ document.addEventListener('DOMContentLoaded', () => {
       canonical_facts: facts,
       modalities: {
         image: imgPath ? [imgPath] : [],
-        audio: audPath ? [audPath] : []
+        audio: audPath ? [audPath] : [],
+        video: document.getElementById('atom-video-path').value.trim() ? [document.getElementById('atom-video-path').value.trim()] : []
       },
       supported_roles: ['ambient', 'attract', 'engage', 'deepen'],
       provenance: {
@@ -1573,6 +1592,11 @@ document.addEventListener('DOMContentLoaded', () => {
         img.alt = item.filename;
         img.loading = 'lazy';
         thumbContainer.appendChild(img);
+      } else if (item.type === 'video') {
+        const video = document.createElement('video');
+        video.className = 'media-thumb'; video.controls = true; video.preload = 'metadata';
+        video.src = '/' + encodeURI(item.path); video.setAttribute('aria-label', item.filename);
+        thumbContainer.appendChild(video);
       } else {
         const audioBox = document.createElement('div');
         audioBox.className = 'media-audio-box';
@@ -1608,7 +1632,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const sizeSpan = document.createElement('span');
       sizeSpan.textContent = formatBytes(item.size_bytes);
       const typeSpan = document.createElement('span');
-      typeSpan.textContent = item.type === 'image' ? '🖼️ Imagem' : '🎵 Áudio';
+      typeSpan.textContent = item.type === 'video' ? 'Vídeo' : item.type === 'image' ? 'Imagem' : 'Áudio';
       metaRow.appendChild(sizeSpan);
       metaRow.appendChild(typeSpan);
       bodyDiv.appendChild(metaRow);
@@ -1701,7 +1725,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const file = e.target.files[0];
       if (!file) return;
 
-      const folder = file.type.startsWith('audio') ? 'audio' : 'images';
+      const folder = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'images';
       const reader = new FileReader();
       reader.onload = async (evt) => {
         const base64Data = evt.target.result;

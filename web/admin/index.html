@@ -333,12 +333,12 @@ aside .sister-principles-list{display:grid;gap:8px}
       <div class="pane-header-row">
         <div>
           <h3 class="pane-title">Repositório Soberano de Mídias e Assets</h3>
-          <p class="pane-subtitle">Gerenciamento visual, desvinculação e exclusão permanente de imagens e áudios armazenados no totem</p>
+          <p class="pane-subtitle">Gerenciamento visual, desvinculação e exclusão permanente de imagens, áudios e vídeos armazenados no totem</p>
         </div>
         <div class="media-header-actions">
           <label for="direct-media-upload" class="btn btn-primary btn-sm-action" style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
             <span>📤 Upload de Nova Mídia</span>
-            <input type="file" id="direct-media-upload" accept="image/*,audio/*" style="display: none;">
+            <input type="file" id="direct-media-upload" accept="image/*,audio/*,video/mp4,video/webm" style="display: none;">
           </label>
         </div>
       </div>
@@ -346,6 +346,7 @@ aside .sister-principles-list{display:grid;gap:8px}
         <button class="filter-chip active" data-filter="all">Todas as Mídias</button>
         <button class="filter-chip" data-filter="image">🖼️ Apenas Imagens</button>
         <button class="filter-chip" data-filter="audio">🎵 Apenas Áudio</button>
+        <button class="filter-chip" data-filter="video">Apenas Vídeo</button>
       </div>
       <div id="media-grid" class="media-grid">
         <!-- Rendered by app.js -->
@@ -584,7 +585,7 @@ aside .sister-principles-list{display:grid;gap:8px}
         <!-- Seção 6: Mídias & Ativos Multimodais -->
         <div class="form-section-header" style="margin-top: 20px;">
           <span class="form-section-num">06</span>
-          <span class="form-section-label">Ativos Multimodais (Imagens & Áudio)</span>
+          <span class="form-section-label">Ativos Multimodais (Imagem, áudio e vídeo)</span>
         </div>
 
         <div class="form-row-2">
@@ -610,6 +611,15 @@ aside .sister-principles-list{display:grid;gap:8px}
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="form-group asset-upload-box">
+          <label for="upload-video-file">Vídeo (MP4 ou WebM)</label>
+          <input type="file" id="upload-video-file" accept="video/mp4,video/webm" class="input-file">
+          <input type="text" id="atom-video-path" class="input-text" placeholder="assets/video/experiencia.webm">
+          <small>Cliente ELO-OS: um vídeo ou uma imagem com áudio por página; áudio/vídeo até 8 MiB.</small>
+          <div id="preview-video-box" class="preview-box hidden"><video id="preview-video" controls preload="metadata" style="width:100%"></video></div>
+          <button type="button" id="btn-unlink-atom-video" class="btn btn-secondary">Desvincular vídeo</button>
         </div>
 
         <div class="modal-footer" style="margin-top: 24px;">

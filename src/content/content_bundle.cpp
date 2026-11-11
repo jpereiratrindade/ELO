@@ -241,6 +241,11 @@ ValidationReport ContentBundle::validate(IntegrityPolicy policy) const {
                 report.warnings.push_back("Referenced audio missing: " + aud + " in atom " + atom->content_id);
             }
         }
+        for (const auto& video : atom->assets.videos) {
+            if (!std::filesystem::exists(assets_dir / video) && !std::filesystem::exists(root_dir_ / video)) {
+                report.warnings.push_back("Referenced video missing: " + video + " in atom " + atom->content_id);
+            }
+        }
     }
 
     return report;
@@ -560,6 +565,7 @@ std::filesystem::path resolve_system_content_dir(bool bootstrap_from_seed) {
         std::filesystem::create_directories(target_dir / "catalog" / "variants", ec);
         std::filesystem::create_directories(target_dir / "assets" / "images", ec);
         std::filesystem::create_directories(target_dir / "assets" / "audio", ec);
+        std::filesystem::create_directories(target_dir / "assets" / "video", ec);
         std::filesystem::create_directories(target_dir / "sources", ec);
 
         std::ofstream mf(target_dir / "manifest.json");

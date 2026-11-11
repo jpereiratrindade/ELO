@@ -152,3 +152,7 @@ permaneça e não deve cadastrar um template até o enquadramento ficar inequív
 **Simples, leve. Sempre pronto. Sempre incompleto!**
 
 [Significado e símbolos das premissas](docs/sister-principles/README.md).
+
+O Estúdio aceita vídeos MP4/WebM no catálogo multimodal, com upload, prévia,
+listagem e vinculação ao átomo. O cliente ELO-OS pode distribuir e apresentar
+clipes offline; limites e configuração estão documentados no projeto ELO-OS.

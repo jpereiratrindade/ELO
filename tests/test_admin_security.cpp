@@ -255,6 +255,17 @@ int main(int argc, char** argv) {
     const auto savedAsset = std::filesystem::path(root.path().toStdString()) / "assets" / "images" / "photosafe.png";
     TEST_ASSERT(std::filesystem::exists(savedAsset), "Sanitized media file was written atomically to assets/images");
 
+    // Published video assets follow the same authenticated upload and extension allowlist.
+    const QByteArray videoBytes = QByteArray::fromHex("1a45dfa3") + "video-fixture";
+    const QJsonObject videoUpload{{"folder", "video"}, {"filename", "clip.webm"}, {"base64_data", QString::fromLatin1(videoBytes.toBase64())}};
+    const auto videoPayload = QJsonDocument(videoUpload).toJson(QJsonDocument::Compact);
+    const auto videoResponse = request(server.port(),
+        "POST /api/upload HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer " + token +
+        "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(videoPayload.size()) + "\r\n\r\n" + videoPayload);
+    TEST_ASSERT(videoResponse.startsWith("HTTP/1.1 200 OK") && videoResponse.contains("assets/video/clip.webm"), "Authenticated video upload is supported");
+    const auto videoRead = request(server.port(), "GET /assets/video/clip.webm HTTP/1.1\r\nHost: localhost\r\n\r\n");
+    TEST_ASSERT(videoRead.startsWith("HTTP/1.1 200 OK") && videoRead.contains("video/webm") && videoRead.endsWith(videoBytes), "Video asset round-trips with correct MIME");
+
     // 15. Media upload with excessive payload rejection (fast fail before allocation)
     const QByteArray hugeB64(14 * 1024 * 1024, 'A');
     const QJsonObject hugeUpload{
