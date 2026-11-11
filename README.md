@@ -146,3 +146,9 @@ pré-instalados e configure `ELO_DOWNLOAD_VISION_MODELS=OFF`.
 Para um ensaio descartável, aponte `ELO_DATA_DIR` para um diretório temporário dedicado.
 Se mais de uma pessoa estiver no enquadramento, o sistema deve pedir que apenas uma
 permaneça e não deve cadastrar um template até o enquadramento ficar inequívoco.
+
+## Premissas de desenvolvimento
+
+**Simples, leve. Sempre pronto. Sempre incompleto!**
+
+[Significado e símbolos das premissas](docs/sister-principles/README.md).
